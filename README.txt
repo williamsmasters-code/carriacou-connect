@@ -151,3 +151,38 @@ Note: the 6 SAMPLE vendors have no owner account, so orders placed with them can
   Test with a real vendor account's products. Delivery fees are not calculated yet (always EC$0.00).
 Testing done (outside the repo, /workspace/cconnect/test): orders.sql run twice against a local Postgres with
   the full permission matrix checked; headless Chrome flows at 390 and 1280 against a mocked Supabase.
+
+
+=====================================================================
+v0.5: TWO-WAY ORDER NOTES (VENDOR <-> CUSTOMER)
+=====================================================================
+NEW SQL STEP (required once, after orders.sql)
+  13. Dashboard > SQL Editor > New query. Paste the whole of supabase/order_notes.sql and Run. Expect "Success".
+      Safe to run again. It creates:
+        order_notes        id, order_id, author_id, author_role (consumer|vendor), author_name, body (1-1000 chars), created_at
+        order_note_reads   who last read the notes of which order (drives the "New note" badge)
+        functions          is_order_party(), mark_order_notes_read(order), order_note_summary()
+      Without it, the Notes box shows "Notes are not switched on yet" (nothing else breaks).
+
+How it works
+  - Vendor dashboard > Orders tab: each order has a "Notes" section (click to open). Customer order page: a
+    "Notes with <vendor>" section. Chat style, oldest first / newest at the bottom, shows name, role and time.
+  - The note the customer typed at checkout is shown as the first message, marked "with the order".
+  - Text box with a 0/1000 counter; Ctrl+Enter sends. The open thread refreshes every ~20 seconds and the
+    badges refresh on the same timer. All text is HTML-escaped, so pasted markup shows as plain text.
+  - A coral "New note" badge appears on an order (and a gold badge on the vendor's Orders tab) when the OTHER side
+    wrote something you have not opened yet. Opening the thread marks it read.
+  - Notes are allowed on every order status, including cancelled and completed.
+
+Rules enforced in the database (not just the browser)
+  - Only the order's customer and the owner of the order's vendor business can read or write its notes.
+  - author_id must be you and author_role must match your side of that order. Name and time are set by the server.
+  - Notes cannot be edited or deleted (no UPDATE / DELETE grant or policy).
+  - Limits: 30 notes per order in total, and 10 notes per person per minute.
+  - pg-safeupdate (Supabase): every UPDATE / DELETE in order_notes.sql has a WHERE clause.
+
+Changed files: supabase/order_notes.sql (new), cc.js (notes widget, version text v0.5), auth.js (vendor + customer
+  UI, badges), style.css (v0.5 notes styles), README.txt.
+Testing (outside the repo, /workspace/cconnect/test): order_notes.sql run twice on a local Postgres 17 with a
+  permission/limit test matrix (pgnotes.mjs); lint_safeupdate.js checks every UPDATE/DELETE has a WHERE;
+  notes_flow.js + flows.js headless Chrome at 390 and 1280 against a mocked Supabase.

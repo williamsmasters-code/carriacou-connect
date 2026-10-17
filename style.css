@@ -143,3 +143,20 @@ footer{background:var(--abyss);color:#a9cdd3;text-align:center;font-size:.82rem;
 .newtag{background:var(--coral);color:#fff;font-size:.65rem;font-weight:800;padding:.15rem .5rem;border-radius:99px;letter-spacing:.08em}
 .oitems{margin:.6rem 0;padding-left:1.1rem}.oacts{display:flex;gap:.5rem;flex-wrap:wrap}.oacts .btn{width:auto;padding:.55rem 1.1rem;font-size:.9rem}
 @media(max-width:520px){.ocard{flex-direction:column;align-items:flex-start}.dtabs button{padding:.5rem .9rem}}
+/* v0.5 order notes */
+.notes-box{background:#fff;border:1px solid #10252e1a;border-radius:16px;padding:.7rem;margin:.5rem 0}
+.nthread{max-height:340px;overflow-y:auto;display:flex;flex-direction:column;gap:.55rem;padding:.2rem .1rem .5rem;scroll-behavior:smooth}
+.nmsg{max-width:86%;padding:.55rem .8rem;border-radius:16px;background:var(--sand);border:1px solid #10252e12}
+.nmsg.theirs{align-self:flex-start;border-bottom-left-radius:5px}
+.nmsg.mine{align-self:flex-end;background:#d9f1ee;border-bottom-right-radius:5px;border-color:#0b728533}
+.nmsg.first{background:#fff3d6;border-style:dashed}
+.nmeta{font-size:.74rem;color:var(--mut);margin-bottom:.15rem}.nmeta b{color:var(--ink)}
+.nrole{font-size:.62rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;padding:.05rem .4rem;border-radius:99px;background:var(--deep);color:#fff}.nrole.r-consumer{background:var(--spice)}
+.nbody{white-space:pre-wrap;overflow-wrap:anywhere;font-size:.95rem}
+.nform{border-top:1px solid #10252e14;padding-top:.6rem}.nform textarea{width:100%;resize:vertical;min-height:3.2rem;font:inherit}
+.nrow{display:flex;justify-content:space-between;align-items:center;gap:.8rem;margin-top:.4rem}
+.nform .btn[disabled]{opacity:.5;cursor:not-allowed}
+details.notes{margin:.7rem 0;border-top:1px dashed #10252e26;padding-top:.5rem}details.notes>summary{cursor:pointer;font-weight:700;color:var(--deep);padding:.3rem 0;list-style-position:inside}
+.newnote{display:inline-block;margin-left:.5rem;background:var(--coral);color:#fff;font-size:.65rem;font-weight:800;padding:.15rem .55rem;border-radius:99px;letter-spacing:.06em;text-transform:uppercase;vertical-align:middle}
+.vorder.hasnote{box-shadow:0 0 0 2px var(--gold),var(--sh)}.nbadge.note{background:var(--gold);color:var(--abyss)}
+@media(max-width:520px){.nmsg{max-width:94%}.nthread{max-height:300px}}
