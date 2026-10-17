@@ -1,0 +1,308 @@
+{
+ "_note": "SAMPLE DATA ONLY: fictional vendors/products for demonstration.",
+ "tiers": {
+  "Lite": 10,
+  "Standard": 25,
+  "Plus+": 50,
+  "Pro": null,
+  "Enterprise": null
+ },
+ "categories": [
+  {
+   "id": "food",
+   "name": "Food & Spices",
+   "color": "#e8833a"
+  },
+  {
+   "id": "crafts",
+   "name": "Crafts & Art",
+   "color": "#c2410c"
+  },
+  {
+   "id": "fashion",
+   "name": "Fashion & Textiles",
+   "color": "#be185d"
+  },
+  {
+   "id": "beauty",
+   "name": "Beauty & Wellness",
+   "color": "#7c3aed"
+  },
+  {
+   "id": "sea",
+   "name": "Sea & Boating",
+   "color": "#0e7490"
+  },
+  {
+   "id": "home",
+   "name": "Home & Garden",
+   "color": "#15803d"
+  }
+ ],
+ "vendors": [
+  {
+   "id": "v1",
+   "name": "SAMPLE Windward Spice Co.",
+   "tier": "Lite",
+   "location": "Hillsborough",
+   "about": "Small-batch spices and sauces (sample vendor)."
+  },
+  {
+   "id": "v2",
+   "name": "SAMPLE Paradise Bay Crafts",
+   "tier": "Lite",
+   "location": "Paradise Beach",
+   "about": "Handmade gifts and art (sample vendor)."
+  },
+  {
+   "id": "v3",
+   "name": "SAMPLE Tyrrel Bay Chandlery",
+   "tier": "Standard",
+   "location": "Tyrrel Bay",
+   "about": "Supplies for sailors and boaters (sample vendor)."
+  },
+  {
+   "id": "v4",
+   "name": "SAMPLE Island Threads",
+   "tier": "Standard",
+   "location": "L'Esterre",
+   "about": "Island-inspired clothing and textiles (sample vendor)."
+  },
+  {
+   "id": "v5",
+   "name": "SAMPLE Carriacou Fresh Market",
+   "tier": "Plus+",
+   "location": "Hillsborough",
+   "about": "Local produce, pantry and home goods (sample vendor)."
+  },
+  {
+   "id": "v6",
+   "name": "SAMPLE Grand Anse Wellness",
+   "tier": "Pro",
+   "location": "Harvey Vale",
+   "about": "Natural body care and wellness (sample vendor)."
+  }
+ ],
+ "products": [
+  {
+   "id": "p1",
+   "vendorId": "v1",
+   "category": "food",
+   "name": "SAMPLE Nutmeg Hot Sauce",
+   "price": 18,
+   "currency": "XCD",
+   "description": "Medium-heat sauce with island nutmeg. This is a SAMPLE product for demonstration only.",
+   "featured": false,
+   "color": "#e8833a"
+  },
+  {
+   "id": "p2",
+   "vendorId": "v1",
+   "category": "food",
+   "name": "SAMPLE Cinnamon Sticks 100g",
+   "price": 12,
+   "currency": "XCD",
+   "description": "Fragrant whole cinnamon sticks. This is a SAMPLE product for demonstration only.",
+   "featured": false,
+   "color": "#e8833a"
+  },
+  {
+   "id": "p3",
+   "vendorId": "v1",
+   "category": "food",
+   "name": "SAMPLE Spice Sampler Box",
+   "price": 45,
+   "currency": "XCD",
+   "description": "Six jars: nutmeg, mace, clove, cinnamon, ginger, allspice. This is a SAMPLE product for demonstration only.",
+   "featured": true,
+   "color": "#e8833a"
+  },
+  {
+   "id": "p4",
+   "vendorId": "v1",
+   "category": "food",
+   "name": "SAMPLE Cocoa Tea Balls (6)",
+   "price": 20,
+   "currency": "XCD",
+   "description": "Traditional cocoa tea, ready to grate. This is a SAMPLE product for demonstration only.",
+   "featured": false,
+   "color": "#e8833a"
+  },
+  {
+   "id": "p5",
+   "vendorId": "v2",
+   "category": "crafts",
+   "name": "SAMPLE Driftwood Wall Art",
+   "price": 85,
+   "currency": "XCD",
+   "description": "Hand-assembled driftwood piece. This is a SAMPLE product for demonstration only.",
+   "featured": true,
+   "color": "#c2410c"
+  },
+  {
+   "id": "p6",
+   "vendorId": "v2",
+   "category": "crafts",
+   "name": "SAMPLE Shell Wind Chime",
+   "price": 40,
+   "currency": "XCD",
+   "description": "Chime made from beach-collected shells. This is a SAMPLE product for demonstration only.",
+   "featured": false,
+   "color": "#c2410c"
+  },
+  {
+   "id": "p7",
+   "vendorId": "v2",
+   "category": "crafts",
+   "name": "SAMPLE Woven Palm Basket",
+   "price": 55,
+   "currency": "XCD",
+   "description": "Palm-leaf basket, sturdy and light. This is a SAMPLE product for demonstration only.",
+   "featured": false,
+   "color": "#c2410c"
+  },
+  {
+   "id": "p8",
+   "vendorId": "v3",
+   "category": "sea",
+   "name": "SAMPLE Braided Dock Line 10m",
+   "price": 65,
+   "currency": "XCD",
+   "description": "Marine-grade line for small boats. This is a SAMPLE product for demonstration only.",
+   "featured": false,
+   "color": "#0e7490"
+  },
+  {
+   "id": "p9",
+   "vendorId": "v3",
+   "category": "sea",
+   "name": "SAMPLE Reef-Safe Sunscreen",
+   "price": 38,
+   "currency": "XCD",
+   "description": "SPF 50, reef-friendly formula. This is a SAMPLE product for demonstration only.",
+   "featured": false,
+   "color": "#0e7490"
+  },
+  {
+   "id": "p10",
+   "vendorId": "v3",
+   "category": "sea",
+   "name": "SAMPLE Dry Bag 20L",
+   "price": 70,
+   "currency": "XCD",
+   "description": "Waterproof roll-top bag. This is a SAMPLE product for demonstration only.",
+   "featured": false,
+   "color": "#0e7490"
+  },
+  {
+   "id": "p11",
+   "vendorId": "v3",
+   "category": "sea",
+   "name": "SAMPLE Snorkel Set",
+   "price": 120,
+   "currency": "XCD",
+   "description": "Mask, snorkel and travel bag. This is a SAMPLE product for demonstration only.",
+   "featured": true,
+   "color": "#0e7490"
+  },
+  {
+   "id": "p12",
+   "vendorId": "v4",
+   "category": "fashion",
+   "name": "SAMPLE Madras Print Shirt",
+   "price": 95,
+   "currency": "XCD",
+   "description": "Light cotton shirt, madras-inspired print. This is a SAMPLE product for demonstration only.",
+   "featured": true,
+   "color": "#be185d"
+  },
+  {
+   "id": "p13",
+   "vendorId": "v4",
+   "category": "fashion",
+   "name": "SAMPLE Beach Sarong",
+   "price": 50,
+   "currency": "XCD",
+   "description": "Quick-dry sarong in bold colours. This is a SAMPLE product for demonstration only.",
+   "featured": false,
+   "color": "#be185d"
+  },
+  {
+   "id": "p14",
+   "vendorId": "v4",
+   "category": "fashion",
+   "name": "SAMPLE Straw Sun Hat",
+   "price": 45,
+   "currency": "XCD",
+   "description": "Wide-brim hat for sunny days. This is a SAMPLE product for demonstration only.",
+   "featured": false,
+   "color": "#be185d"
+  },
+  {
+   "id": "p15",
+   "vendorId": "v5",
+   "category": "food",
+   "name": "SAMPLE Fresh Mango Box 2kg",
+   "price": 30,
+   "currency": "XCD",
+   "description": "Seasonal local mangoes. This is a SAMPLE product for demonstration only.",
+   "featured": true,
+   "color": "#e8833a"
+  },
+  {
+   "id": "p16",
+   "vendorId": "v5",
+   "category": "home",
+   "name": "SAMPLE Aloe Plant in Pot",
+   "price": 25,
+   "currency": "XCD",
+   "description": "Hardy potted aloe vera. This is a SAMPLE product for demonstration only.",
+   "featured": false,
+   "color": "#15803d"
+  },
+  {
+   "id": "p17",
+   "vendorId": "v5",
+   "category": "food",
+   "name": "SAMPLE Local Honey 350ml",
+   "price": 35,
+   "currency": "XCD",
+   "description": "Raw island honey. This is a SAMPLE product for demonstration only.",
+   "featured": false,
+   "color": "#e8833a"
+  },
+  {
+   "id": "p18",
+   "vendorId": "v5",
+   "category": "home",
+   "name": "SAMPLE Coconut Bowl Set (4)",
+   "price": 48,
+   "currency": "XCD",
+   "description": "Polished coconut-shell bowls. This is a SAMPLE product for demonstration only.",
+   "featured": false,
+   "color": "#15803d"
+  },
+  {
+   "id": "p19",
+   "vendorId": "v6",
+   "category": "beauty",
+   "name": "SAMPLE Coconut Body Butter",
+   "price": 42,
+   "currency": "XCD",
+   "description": "Rich, hand-whipped body butter. This is a SAMPLE product for demonstration only.",
+   "featured": true,
+   "color": "#7c3aed"
+  },
+  {
+   "id": "p20",
+   "vendorId": "v6",
+   "category": "beauty",
+   "name": "SAMPLE Sea Moss Gel 8oz",
+   "price": 55,
+   "currency": "XCD",
+   "description": "Prepared sea moss gel. This is a SAMPLE product for demonstration only.",
+   "featured": false,
+   "color": "#7c3aed"
+  }
+ ]
+}
