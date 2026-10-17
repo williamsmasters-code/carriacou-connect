@@ -1,4 +1,4 @@
-CARRIACOU CONNECT MARKETPLACE v0.3 (static preview + optional Supabase accounts)
+CARRIACOU CONNECT MARKETPLACE v0.4 (static preview + optional Supabase accounts)
 ===================================================
 ALL VENDORS AND PRODUCTS ARE SAMPLE DATA. NO REAL PAYMENTS.
 
@@ -107,3 +107,47 @@ STORAGE SETUP (required once for image uploads)
   Fonts: Google Fonts (Fraunces, Plus Jakarta Sans) with Georgia/system fallbacks.
   Design: dark-sea and warm-sand palette, wave dividers, glass header, category tiles with inline SVG.
   Nav: "Log in" text link and "Sign up" pill button.
+
+
+=====================================================================
+v0.4: CONSUMER DASHBOARD + ORDERS / CHECKOUT (NO ONLINE PAYMENT)
+=====================================================================
+ORDERS SETUP (required once, after schema.sql)
+  12. Dashboard > SQL Editor > New query. Paste the whole of supabase/orders.sql and Run. Expect "Success".
+      Safe to run again. It: adds order columns (order_number CC-001001..., fulfilment, payment_method,
+      contact + delivery details, subtotal/total in XCD), replaces the old status list with
+      placed / confirmed / ready / out_for_delivery / completed / cancelled, creates order_status_history,
+      locks down Row Level Security, and creates the place_order() function.
+  Without orders.sql, checkout shows an error and the dashboards say orders.sql has not been run.
+
+How ordering works
+  - cart.html > Checkout (live mode only) > checkout.html. Not logged in? You are sent to login and brought back.
+  - Choose Pickup (pay on pickup) or Delivery (pay on delivery, address required), phone, notes, then Place order.
+    NO online payment. Carriacou Connect Pay comes later.
+  - The browser calls the database function place_order(). It re-reads every price from the products table
+    (the browser never sends prices), rejects the whole cart if any item is missing/inactive, and creates ONE
+    order per vendor, each with an item snapshot (name, unit price, qty, line total) and a history row.
+  - Consumers cannot insert orders directly; only place_order() creates them.
+
+Security / rules (all enforced in the database, not just the browser)
+  - Consumers read only their own orders; vendors read only orders for their own business; nobody can delete.
+  - Clients can update ONLY the status column. A trigger enforces who may move where:
+      consumer:  placed -> cancelled
+      vendor:    placed -> confirmed | cancelled;  confirmed -> ready | cancelled;
+                 ready -> completed (pickup) or out_for_delivery (delivery) | cancelled;
+                 out_for_delivery -> completed | cancelled.  completed / cancelled are final.
+  - Every status change is recorded in order_status_history (who, when) and updates status_updated_at.
+  - Vendors cannot change totals, items, customer details.  Admin / SQL editor changes are unrestricted.
+
+New / changed files
+  checkout.html      new checkout page + confirmation (logic in app.js)
+  dashboard-consumer.html (auth.js)  Orders tab (list, detail, timeline, cancel while placed), Profile tab
+  dashboard-vendor.html   (auth.js)  Products tab + Orders tab (filter by status, NEW badge, status buttons)
+  account.html       profile now includes delivery address
+  cc.js              order helpers (status pills, timeline, safe "next" redirect); version text v0.4
+  supabase/orders.sql  see above;  style.css  v0.4 additions (same look)
+Sample mode (no Supabase): checkout / dashboards show a "not switched on" notice; nothing breaks.
+Note: the 6 SAMPLE vendors have no owner account, so orders placed with them cannot be processed by anyone.
+  Test with a real vendor account's products. Delivery fees are not calculated yet (always EC$0.00).
+Testing done (outside the repo, /workspace/cconnect/test): orders.sql run twice against a local Postgres with
+  the full permission matrix checked; headless Chrome flows at 390 and 1280 against a mocked Supabase.

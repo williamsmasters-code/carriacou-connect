@@ -13,6 +13,7 @@ async function ctx(){ // {sb,user,profile}
  if(user){const r=await sb.from('profiles').select('*').eq('id',user.id).maybeSingle();profile=r.data}
  return {sb,user,profile};
 }
+const NX=()=>window.CC.safeNext();
 const home=p=>p&&p.role==='vendor'?'dashboard-vendor.html':'dashboard-consumer.html';
 async function createVendor(sb,user,v){
  return sb.from('vendors').insert({owner_id:user.id,name:v.name,description:v.description||'',location:v.location||''}).select().single();
@@ -36,26 +37,27 @@ const pages={
 async signup(){
  if(!configured)return offline();
  const c=await ctx();if(!c)return offline();
- if(c.user){location.href=home(c.profile);return}
+ if(c.user){location.href=NX()||home(c.profile);return}
  const f=$('#f'),msg=$('#msg'),vf=$('#vfields');vf.innerHTML=vendorFields;
  const sync=()=>{const v=f.role.value==='vendor';vf.hidden=!v;$('#bname').required=v};f.addEventListener('change',sync);sync();
  f.onsubmit=async e=>{e.preventDefault();say(msg,'');const btn=f.querySelector('button');btn.disabled=true;
   const role=f.role.value,biz={name:$('#bname').value.trim(),description:$('#bdesc').value.trim(),location:$('#bloc').value.trim()};
-  const {data,error}=await c.sb.auth.signUp({email:f.email.value.trim(),password:f.password.value,options:{data:{role,full_name:f.fullname.value.trim()},emailRedirectTo:location.origin+location.pathname.replace(/[^/]*$/,'')+'login.html'}});
+  const {data,error}=await c.sb.auth.signUp({email:f.email.value.trim(),password:f.password.value,options:{data:{role,full_name:f.fullname.value.trim()},emailRedirectTo:location.origin+location.pathname.replace(/[^/]*$/,'')+'login.html'+(NX()?'?next='+encodeURIComponent(NX()):'')}});
   if(error){say(msg,error.message);btn.disabled=false;return}
   if(role==='vendor')localStorage.setItem(PENDING,JSON.stringify(biz));
-  if(data.session){location.href=home({role})}
-  else{f.hidden=true;say(msg,'Almost done! Check your email and click the confirmation link, then log in. '+(role==='vendor'?'Your business profile will be created on first login.':''),true);msg.insertAdjacentHTML('beforeend',' <a href="login.html">Go to login</a>')}}
+  if(data.session){location.href=NX()||home({role})}
+  else{f.hidden=true;say(msg,'Almost done! Check your email and click the confirmation link, then log in. '+(role==='vendor'?'Your business profile will be created on first login.':''),true);msg.insertAdjacentHTML('beforeend',' <a href="login.html'+(NX()?'?next='+encodeURIComponent(NX()):'')+'">Go to login</a>')}}
 },
 async login(){
  if(!configured)return offline();
  const c=await ctx();if(!c)return offline();
- if(c.user){location.href=home(c.profile);return}
+ if(c.user){location.href=NX()||home(c.profile);return}
  const f=$('#f'),msg=$('#msg');
+ if(NX()){const sl=document.querySelector('a[href="signup.html"]');if(sl)sl.href='signup.html?next='+encodeURIComponent(NX())}
  f.onsubmit=async e=>{e.preventDefault();say(msg,'');const btn=f.querySelector('button');btn.disabled=true;
   const {error}=await c.sb.auth.signInWithPassword({email:f.email.value.trim(),password:f.password.value});
   if(error){say(msg,error.message);btn.disabled=false;return}
-  const c2=await ctx();location.href=home(c2.profile)};
+  const c2=await ctx();location.href=NX()||home(c2.profile)};
  $('#forgot').onclick=async e=>{e.preventDefault();const em=f.email.value.trim();if(!em){say(msg,'Type your email above first.');return}
   const {error}=await c.sb.auth.resetPasswordForEmail(em,{redirectTo:location.origin+location.pathname.replace(/[^/]*$/,'')+'account.html'});
   say(msg,error?error.message:'Password reset email sent (if that address has an account).',!error)};
@@ -66,22 +68,48 @@ async account(){
  if(!c.user){location.href='login.html';return}
  const p=c.profile||{role:'consumer'};
  $('#acct').innerHTML=`<p><strong>Email:</strong> ${esc(c.user.email)}<br><strong>Account type:</strong> ${esc(p.role)}<br><a href="${home(p)}">Go to my dashboard</a></p>
- <h2>Profile</h2><form id="pf"><label>Full name<input id="fn" value="${esc(p.full_name||'')}" maxlength="80"></label><label>Phone<input id="ph" value="${esc(p.phone||'')}" maxlength="30"></label><button class="btn">Save profile</button></form><div id="m1" class="notice" hidden></div>
+ <h2>Profile</h2><form id="pf"><label>Full name<input id="fn" value="${esc(p.full_name||'')}" maxlength="80"></label><label>Phone<input id="ph" value="${esc(p.phone||'')}" maxlength="30"></label><label>Delivery address<textarea id="ad" rows="2" maxlength="300">${esc(p.address||'')}</textarea></label><button class="btn">Save profile</button></form><div id="m1" class="notice" hidden></div>
  <h2>Change password</h2><form id="pw"><label>New password (min 8 characters)<input id="np" type="password" minlength="8" autocomplete="new-password" required></label><button class="btn alt">Update password</button></form><div id="m2" class="notice" hidden></div>
  <p><button class="btn alt" id="lo">Log out</button></p>`;
- $('#pf').onsubmit=async e=>{e.preventDefault();const {error}=await c.sb.from('profiles').update({full_name:$('#fn').value.trim()||null,phone:$('#ph').value.trim()||null}).eq('id',c.user.id);say($('#m1'),error?error.message:'Saved.',!error)};
+ $('#pf').onsubmit=async e=>{e.preventDefault();const {error}=await c.sb.from('profiles').update({full_name:$('#fn').value.trim()||null,phone:$('#ph').value.trim()||null,address:$('#ad').value.trim()||null}).eq('id',c.user.id);say($('#m1'),error?error.message:'Saved.',!error)};
  $('#pw').onsubmit=async e=>{e.preventDefault();const {error}=await c.sb.auth.updateUser({password:$('#np').value});say($('#m2'),error?error.message:'Password updated.',!error);if(!error)$('#np').value=''};
  $('#lo').onclick=async()=>{await c.sb.auth.signOut();location.href='index.html'};
 },
 async consumer(){
  if(!configured)return offline();
  const c=await ctx();if(!c)return offline();
- if(!c.user){location.href='login.html';return}
- const p=c.profile||{};
- const r=await c.sb.from('orders').select('id,status,total_xcd,created_at,vendors(name)').eq('consumer_id',c.user.id).order('created_at',{ascending:false});
- const rows=(r.data||[]);
- $('#dash').innerHTML=`<h2>My profile</h2><p><strong>${esc(p.full_name||'(no name set)')}</strong><br>${esc(c.user.email)}<br>Phone: ${esc(p.phone||'-')}<br><a href="account.html">Edit profile / password</a></p>
- <h2>Order history</h2>${rows.length?`<table><tr><th>Date</th><th>Vendor</th><th>Status</th><th>Total</th></tr>${rows.map(o=>`<tr><td>${esc(new Date(o.created_at).toLocaleDateString())}</td><td>${esc(o.vendors&&o.vendors.name||'')}</td><td>${esc(o.status)}</td><td>${xcd(o.total_xcd)}</td></tr>`).join('')}</table>`:'<div class="notice">No orders yet. Checkout and ordering arrive in a later version (v0.3). <a href="browse.html">Browse products</a></div>'}`;
+ if(!c.user){location.href='login.html?next=dashboard-consumer.html';return}
+ const {sb,user}=c,p=c.profile||{};
+ const {stPill,fdate,fnice,payText,timeline}=window.CC;
+ const SEL='*,vendors(name,location),order_items(*),order_status_history(*)';
+ const oid=new URLSearchParams(location.search).get('order');
+ const D=$('#dash');
+ const detail=async id=>{
+  const r=await sb.from('orders').select(SEL).eq('id',id).eq('consumer_id',user.id).maybeSingle();
+  if(r.error||!r.data){D.innerHTML='<p><a href="dashboard-consumer.html">&larr; All orders</a></p><div class="notice err">We could not find that order.</div>';return}
+  const o=r.data,items=(o.order_items||[]);
+  D.innerHTML=`<p><a href="dashboard-consumer.html">&larr; All orders</a></p>
+  <div class="odetail"><div class="ohead"><div><span class="kicker">Order</span><h2>${esc(o.order_number)}</h2><div class="muted">${esc(o.vendors&&o.vendors.name||'Vendor')} · placed ${esc(fdate(o.created_at))}</div></div>${stPill(o.status)}</div>
+  <h3>Progress</h3>${timeline(o)}
+  <h3>Items</h3><table><tr><th>Item</th><th>Price</th><th>Qty</th><th>Total</th></tr>${items.map(i=>`<tr><td>${esc(i.product_name)}</td><td>${xcd(i.unit_price_xcd)}</td><td>${i.quantity}</td><td>${xcd(i.line_total_xcd!=null?i.line_total_xcd:i.unit_price_xcd*i.quantity)}</td></tr>`).join('')}</table>
+  <p class="otot">Subtotal ${xcd(o.subtotal_xcd)}${Number(o.delivery_fee_xcd)?` · Delivery ${xcd(o.delivery_fee_xcd)}`:''} · <b>Total ${xcd(o.total_xcd)} XCD</b></p>
+  <div class="info-grid"><div><b>${fnice(o)}</b><br>${esc(payText(o))}. No online payment was taken.</div><div><b>Contact</b><br>${esc(o.contact_name||'')} ${esc(o.contact_phone||'')}</div>${o.fulfilment==='delivery'?`<div><b>Deliver to</b><br>${esc(o.delivery_address||'')}</div>`:`<div><b>Collect from</b><br>${esc(o.vendors&&o.vendors.name||'')}${o.vendors&&o.vendors.location?', '+esc(o.vendors.location):''}</div>`}${o.notes?`<div><b>Your notes</b><br>${esc(o.notes)}</div>`:''}</div>
+  ${o.status==='placed'?'<p><button class="btn alt" id="ocancel">Cancel this order</button><br><small class="muted">You can cancel until the vendor confirms it.</small></p>':''}<div id="om" class="notice" hidden></div></div>`;
+  const cb=$('#ocancel');if(cb)cb.onclick=async()=>{if(!confirm('Cancel order '+o.order_number+'?'))return;cb.disabled=true;
+   const u=await sb.from('orders').update({status:'cancelled'}).eq('id',o.id).select('id');
+   if(u.error||!(u.data&&u.data.length)){say($('#om'),u.error?u.error.message:'The vendor has already confirmed this order, so it can no longer be cancelled.');cb.disabled=false;return}
+   detail(o.id)};
+ };
+ if(oid){await detail(oid);return}
+ const r=await sb.from('orders').select('id,order_number,status,total_xcd,created_at,fulfilment,vendors(name),order_items(product_name,quantity)').eq('consumer_id',user.id).order('created_at',{ascending:false});
+ const rows=r.data||[];
+ const act=rows.filter(o=>!['completed','cancelled'].includes(o.status)).length;
+ D.innerHTML=`<div class="dtabs" role="tablist"><button class="on" data-t="orders" role="tab">Orders${act?` <b class="nbadge">${act}</b>`:''}</button><button data-t="profile" role="tab">Profile</button></div>
+ <section id="t-orders"><h2>Order history</h2>${r.error?'<div class="notice err">Could not load orders: '+esc(r.error.message)+'. Has orders.sql been run in Supabase?</div>':rows.length?`<div class="olist">${rows.map(o=>`<a class="ocard" href="dashboard-consumer.html?order=${esc(o.id)}"><div><b>${esc(o.order_number)}</b> ${stPill(o.status)}<div class="muted">${esc(o.vendors&&o.vendors.name||'')} · ${esc(fdate(o.created_at))} · ${fnice(o)}</div><div class="muted">${esc((o.order_items||[]).map(i=>i.quantity+' × '+i.product_name).join(', '))}</div></div><div class="price">${xcd(o.total_xcd)}</div></a>`).join('')}</div>`:'<div class="empty"><div class="empty-ic" aria-hidden="true">🧺</div><h3>No orders yet</h3><p>When you place an order it shows up here, with live progress.</p><a class="btn" href="browse.html">Browse products</a></div>'}</section>
+ <section id="t-profile" hidden><h2>My profile</h2><p class="muted">${esc(user.email)} · <a href="account.html">Change password</a></p>
+ <form id="pf" class="formcard"><label>Full name<input id="fn" value="${esc(p.full_name||'')}" maxlength="80"></label><label>Phone<input id="ph" value="${esc(p.phone||'')}" maxlength="30"></label><label>Delivery address<textarea id="ad" rows="2" maxlength="300">${esc(p.address||'')}</textarea></label><button class="btn">Save profile</button></form><div id="m1" class="notice" hidden></div></section>`;
+ document.querySelectorAll('.dtabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.dtabs button').forEach(x=>x.classList.toggle('on',x===b));$('#t-orders').hidden=b.dataset.t!=='orders';$('#t-profile').hidden=b.dataset.t!=='profile'});
+ $('#pf').onsubmit=async e=>{e.preventDefault();const u=await sb.from('profiles').update({full_name:$('#fn').value.trim()||null,phone:$('#ph').value.trim()||null,address:$('#ad').value.trim()||null}).eq('id',user.id);say($('#m1'),u.error?u.error.message:'Profile saved.',!u.error)};
 },
 async vendordash(){
  if(!configured)return offline();
@@ -96,15 +124,18 @@ async vendordash(){
  if(!vendor){
   $('#dash').innerHTML=`<h2>Create your business profile</h2><form id="bf">${vendorFields}<button class="btn">Create business (Lite plan)</button></form><div id="bm" class="notice" hidden></div>`;
   $('#bf').onsubmit=async e=>{e.preventDefault();const r=await createVendor(sb,user,{name:$('#bname').value.trim(),description:$('#bdesc').value.trim(),location:$('#bloc').value.trim()});if(r.error)say($('#bm'),r.error.message);else location.reload()};return}
+ let tab=location.hash==='#orders'?'orders':'products',ofilter='';
  const draw=async()=>{
   const pr=await sb.from('products').select('*').eq('vendor_id',vendor.id).order('created_at',{ascending:false});
   const prods=pr.data||[],lim=TIER_LIMIT[vendor.tier],used=prods.length,full=lim!=null&&used>=lim;
   const pct=lim?Math.min(100,Math.round(used/lim*100)):0;
-  const ord=await sb.from('orders').select('id,status,total_xcd,created_at').eq('vendor_id',vendor.id).order('created_at',{ascending:false}).limit(20);
+  const ord=await sb.from('orders').select('*,order_items(*)').eq('vendor_id',vendor.id).order('created_at',{ascending:false}).limit(200);
+  const olist=ord.data||[],newN=olist.filter(o=>o.status==='placed').length;
   $('#dash').innerHTML=`<h2>${esc(vendor.name)} <span class="badge t-${esc(TIER_LABEL[vendor.tier].replace('+',''))}">${esc(TIER_LABEL[vendor.tier])}</span></h2>
   <p class="muted">${esc(vendor.location||'')} ${vendor.description?'· '+esc(vendor.description):''}</p>
   <p><strong>Products: ${used} of ${lim==null?'unlimited':lim}</strong>${lim?`<span class="meter"><span style="width:${pct}%"></span></span>`:''}${full?'<br><span class="err-text">Limit reached. Delete a product or upgrade your plan (upgrades coming soon).</span>':''}</p>
-  <h3 id="ftitle">Add a product</h3>
+  <div class="dtabs" role="tablist"><button data-t="products" role="tab">Products</button><button data-t="orders" role="tab">Orders${newN?` <b class="nbadge" title="New orders">${newN}</b>`:''}</button></div>
+  <div id="tab-products"><h3 id="ftitle">Add a product</h3>
   <form id="pf"><input type="hidden" id="pid"><label>Name<input id="pn" maxlength="120" required></label><label>Description<textarea id="pd" rows="3" maxlength="1000"></textarea></label>
   <label>Price (EC$)<input id="pp" type="number" min="0" step="0.01" required></label>
   <label>Category<select id="pc">${Object.entries(CATS).map(([k,v])=>`<option value="${k}">${esc(v)}</option>`).join('')}</select></label>
@@ -116,8 +147,30 @@ async vendordash(){
   <label class="chk"><input type="checkbox" id="pa" checked> Active (visible to shoppers)</label>
   <button class="btn" id="psave">Add product</button> <button type="button" class="btn alt" id="pcancel" hidden>Cancel edit</button></form><div id="pm" class="notice" hidden></div>
   <h3>Your products</h3>${prods.length?`<table><tr><th>Product</th><th>Price</th><th>Status</th><th></th></tr>${prods.map(p=>`<tr><td>${p.image_url?`<img class="thumb" src="${esc(p.image_url)}" alt="">`:''}${esc(p.name)}<div class="muted">${esc(CATS[p.category]||p.category)}</div></td><td>${xcd(p.price_xcd)}</td><td>${p.active?'Active':'Hidden'}</td><td><button class="btn alt" data-e="${p.id}">Edit</button> <button class="btn" data-d="${p.id}">Delete</button></td></tr>`).join('')}</table>`:'<p>No products yet.</p>'}
-  <h3>Orders</h3>${(ord.data||[]).length?`<table><tr><th>Date</th><th>Status</th><th>Total</th></tr>${ord.data.map(o=>`<tr><td>${esc(new Date(o.created_at).toLocaleDateString())}</td><td>${esc(o.status)}</td><td>${xcd(o.total_xcd)}</td></tr>`).join('')}</table>`:'<div class="notice">No orders yet. Order management arrives in v0.3 with checkout.</div>'}`;
+  </div><div id="tab-orders" hidden></div>`;
   const f=$('#pf'),m=$('#pm');
+  const showTab=t=>{tab=t;history.replaceState(null,'',t==='orders'?'#orders':location.pathname+location.search);document.querySelectorAll('.dtabs button').forEach(x=>x.classList.toggle('on',x.dataset.t===t));$('#tab-products').hidden=t!=='products';$('#tab-orders').hidden=t!=='orders'};
+  document.querySelectorAll('.dtabs button').forEach(b=>b.onclick=()=>showTab(b.dataset.t));
+  const {stPill,fdate,fnice,payText,nextSteps}=window.CC;
+  const drawOrders=()=>{const T=$('#tab-orders');
+   const list=olist.filter(o=>!ofilter||o.status===ofilter);
+   const cnt=k=>olist.filter(o=>o.status===k).length;
+   T.innerHTML=`<h3>Incoming orders</h3>${ord.error?'<div class="notice err">Could not load orders: '+esc(ord.error.message)+'. Has orders.sql been run in Supabase?</div>':''}
+   <div class="ofilter" role="group" aria-label="Filter by status"><button data-f="" class="${ofilter===''?'on':''}">All (${olist.length})</button>${Object.keys(window.CC.SLABEL).map(k=>`<button data-f="${k}" class="${ofilter===k?'on':''}">${esc(window.CC.SLABEL[k])} (${cnt(k)})</button>`).join('')}</div>
+   <div id="omsg" class="notice" hidden role="alert"></div>
+   ${list.length?list.map(o=>`<article class="vorder${o.status==='placed'?' isnew':''}"><div class="ohead"><div><b>${esc(o.order_number)}</b> ${stPill(o.status)}${o.status==='placed'?' <span class="newtag">NEW</span>':''}<div class="muted">${esc(fdate(o.created_at))} · ${fnice(o)} · ${esc(payText(o))}</div></div><div class="price">${xcd(o.total_xcd)}</div></div>
+    <ul class="oitems">${(o.order_items||[]).map(i=>`<li>${i.quantity} × ${esc(i.product_name)} <span class="muted">@ ${xcd(i.unit_price_xcd)}</span></li>`).join('')}</ul>
+    <div class="info-grid"><div><b>Customer</b><br>${esc(o.contact_name||'(no name)')}<br><a href="tel:${esc((o.contact_phone||'').replace(/[^0-9+]/g,''))}">${esc(o.contact_phone||'')}</a></div>${o.fulfilment==='delivery'?`<div><b>Deliver to</b><br>${esc(o.delivery_address||'')}</div>`:'<div><b>Pickup</b><br>Customer will collect</div>'}${o.notes?`<div><b>Notes</b><br>${esc(o.notes)}</div>`:''}</div>
+    <div class="oacts">${nextSteps(o).map(([to,lbl])=>`<button class="btn ${to==='cancelled'?'ghost':''}" data-o="${o.id}" data-to="${to}">${esc(lbl)}</button>`).join('')||'<span class="muted">No further actions.</span>'}</div></article>`).join(''):`<div class="empty"><div class="empty-ic" aria-hidden="true">📦</div><h3>${olist.length?'No orders with this status':'No orders yet'}</h3><p>${olist.length?'Try another filter.':'New orders from shoppers will appear here.'}</p></div>`}`;
+   T.querySelectorAll('[data-f]').forEach(b=>b.onclick=()=>{ofilter=b.dataset.f;drawOrders()});
+   T.querySelectorAll('[data-to]').forEach(b=>b.onclick=async()=>{const to=b.dataset.to,o=olist.find(x=>x.id===b.dataset.o);
+    if(to==='cancelled'&&!confirm('Cancel order '+o.order_number+'? The customer will see it as cancelled.'))return;
+    T.querySelectorAll('button').forEach(x=>x.disabled=true);
+    const u=await sb.from('orders').update({status:to}).eq('id',o.id).select('id,status');
+    if(u.error||!(u.data&&u.data.length)){await draw();tab='orders';showTab('orders');say($('#omsg'),u.error?u.error.message:'That change was not allowed (the customer may have cancelled).');return}
+    await draw()});
+  };
+  drawOrders();showTab(tab);
   let pending=null,oldUrl=null; // pending: {blob,url} resized file waiting for save; oldUrl: stored url when editing
   const prev=()=>{const u=pending?pending.url:$('#pi').value;$('#upprev').innerHTML=u?`<img src="${esc(u)}" alt="Product image preview">`:'<span class="muted">No image</span>';$('#upclear').hidden=!u;$('#uppicklbl').textContent=u?'Replace image':'Choose image'};
   $('#uppicklbl').onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();$('#pfile').click()}};

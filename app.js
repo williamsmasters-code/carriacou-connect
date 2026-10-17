@@ -58,10 +58,59 @@ $('#add').onclick=()=>{const q=Math.max(1,Math.min(99,parseInt($('#qty').value)|
 cart(){const draw=()=>{const c=getCart(),ids=Object.keys(c).filter(i=>DATA.products.some(p=>p.id===i));
 if(!ids.length){$('#cart').innerHTML='<p>Your cart is empty. <a href="browse.html">Browse products</a></p>';return}
 let sum=0;const rows=ids.map(i=>{const p=DATA.products.find(x=>x.id===i),t=p.price*c[i];sum+=t;return`<tr><td><a href="product.html?id=${i}">${esc(p.name)}</a><div class="muted">${esc(vendor(p.vendorId).name)}</div></td><td>${xcd(p.price)}</td><td><input type="number" min="1" max="99" value="${c[i]}" data-id="${i}"></td><td>${xcd(t)}</td><td><button class="btn alt" data-rm="${i}" aria-label="Remove">✕</button></td></tr>`}).join('');
-$('#cart').innerHTML=`<table><tr><th>Item</th><th>Price</th><th>Qty</th><th>Total</th><th></th></tr>${rows}</table><h2>Subtotal: ${xcd(sum)} XCD</h2><button class="btn" id="co">Checkout</button><div id="conote"></div>`;
+$('#cart').innerHTML=`<table><tr><th>Item</th><th>Price</th><th>Qty</th><th>Total</th><th></th></tr>${rows}</table><h2>Subtotal: ${xcd(sum)} XCD</h2><p class="muted">No online payment yet: you pay the vendor when you collect or receive your order.</p><button class="btn" id="co">Checkout</button><div id="conote"></div>`;
 document.querySelectorAll('input[data-id]').forEach(e=>e.onchange=()=>{const c=getCart();c[e.dataset.id]=Math.max(1,Math.min(99,parseInt(e.value)||1));saveCart(c);draw()});
 document.querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>{const c=getCart();delete c[b.dataset.rm];saveCart(c);draw()});
-$('#co').onclick=()=>{$('#conote').innerHTML='<div class="notice"><strong>Carriacou Connect Pay is coming soon.</strong><br>Checkout is a placeholder in this preview. No payment is taken and no order is placed.</div>'}};draw()}
+$('#co').onclick=()=>{if(DATA.live){location.href='checkout.html'}else $('#conote').innerHTML='<div class="notice"><strong>Ordering needs accounts, which are not switched on in this preview.</strong><br>In live mode you log in, choose pickup or delivery and place your order. You pay the vendor on pickup or delivery. Online payment (Carriacou Connect Pay) is coming later.</div>'}};draw()},
+async checkout(){
+const root=$('#co');
+const payNote='<div class="notice"><strong>No online payment yet.</strong> You pay the vendor in cash (or however they agree with you) when you collect or receive your order. Carriacou Connect Pay is coming later.</div>';
+if(!window.CC.configured||!DATA.live){root.innerHTML='<div class="notice"><strong>Ordering is not switched on in this sample preview.</strong> Accounts and orders need the live Supabase database. <a href="browse.html">Back to browsing</a></div>'+payNote;return}
+const user=await window.CC.getUser();
+if(!user){location.href='login.html?next=checkout.html';return}
+const sb=await window.CC.client();
+const c=getCart(),ids=Object.keys(c).filter(i=>DATA.products.some(p=>p.id===i));
+if(!ids.length){root.innerHTML='<div class="notice">Your cart is empty. <a href="browse.html">Browse products</a></div>';return}
+const lines=ids.map(i=>({p:DATA.products.find(x=>x.id===i),q:c[i]}));
+const byV={};lines.forEach(l=>{(byV[l.p.vendorId]=byV[l.p.vendorId]||[]).push(l)});
+let total=0;
+const summary=Object.entries(byV).map(([vid,ls])=>{const sub=ls.reduce((a,l)=>a+l.p.price*l.q,0);total+=sub;
+return `<div class="osum"><h3>${esc(vendor(vid).name)}</h3>${ls.map(l=>`<div class="oline"><span>${l.q} × ${esc(l.p.name)}</span><span>${xcd(l.p.price*l.q)}</span></div>`).join('')}<div class="oline sub"><span>Subtotal</span><span>${xcd(sub)}</span></div></div>`}).join('');
+const nv=Object.keys(byV).length;
+let prof={};try{const r=await sb.from('profiles').select('full_name,phone,address').eq('id',user.id).maybeSingle();prof=r.data||{}}catch(e){}
+root.innerHTML=`<div class="co-grid"><form id="cof" class="formcard" novalidate>
+<fieldset><legend>How do you want it?</legend>
+<label class="chk opt"><input type="radio" name="ful" value="pickup" checked> <span><b>Pickup</b><small>Collect from the vendor. Pay on pickup.</small></span></label>
+<label class="chk opt"><input type="radio" name="ful" value="delivery"> <span><b>Delivery</b><small>The vendor brings it to you. Pay on delivery. Any delivery fee is agreed with the vendor.</small></span></label></fieldset>
+<label>Your name<input id="cn" maxlength="80" autocomplete="name" value="${esc(prof.full_name||'')}"></label>
+<label>Contact phone *<input id="cp" type="tel" maxlength="30" autocomplete="tel" required value="${esc(prof.phone||'')}"></label>
+<label id="adl" hidden>Delivery address *<textarea id="ca" rows="3" maxlength="300">${esc(prof.address||'')}</textarea></label>
+<label>Notes for the vendor (optional)<textarea id="cnote" rows="2" maxlength="500"></textarea></label>
+<div id="cm" class="notice" role="alert" hidden></div>
+<button class="btn" id="cgo">Place order</button></form>
+<aside class="ordsum"><h2>Order summary</h2>${summary}<div class="oline total"><span>Total</span><span>${xcd(total)} XCD</span></div>
+${nv>1?`<p class="muted">Your cart has items from ${nv} vendors, so it becomes ${nv} separate orders, one per vendor.</p>`:''}
+<p class="muted">Prices are re-checked by the server when you place the order.</p>${payNote}<p><a href="cart.html">Edit cart</a></p></aside></div>`;
+const f=$('#cof'),m=$('#cm');
+const sync=()=>{$('#adl').hidden=f.ful.value!=='delivery'};f.addEventListener('change',sync);sync();
+const say=t=>{m.className='notice err';m.textContent=t;m.hidden=!t};
+f.onsubmit=async e=>{e.preventDefault();say('');
+ const ful=f.ful.value,ph=$('#cp').value.trim(),ad=$('#ca').value.trim();
+ if(ph.length<7){say('Please enter a contact phone number the vendor can reach.');$('#cp').focus();return}
+ if(ful==='delivery'&&ad.length<5){say('Please enter your delivery address.');$('#ca').focus();return}
+ const btn=$('#cgo');btn.disabled=true;btn.textContent='Placing order…';
+ const r=await sb.rpc('place_order',{p_cart:lines.map(l=>({product_id:l.p.id,quantity:l.q})),p_fulfilment:ful,p_contact_phone:ph,p_delivery_address:ful==='delivery'?ad:null,p_notes:$('#cnote').value.trim()||null,p_contact_name:$('#cn').value.trim()||null});
+ if(r.error){say(r.error.message||'Could not place the order.');btn.disabled=false;btn.textContent='Place order';return}
+ saveCart({});
+ try{const up={};if(!prof.phone)up.phone=ph;if(!prof.full_name&&$('#cn').value.trim())up.full_name=$('#cn').value.trim();if(ful==='delivery'&&!prof.address)up.address=ad;if(Object.keys(up).length)await sb.from('profiles').update(up).eq('id',user.id)}catch(e){}
+ const os=r.data||[];
+ root.innerHTML=`<div class="confirm"><div class="tick" aria-hidden="true">✓</div><h2>Thank you! Your order${os.length>1?'s are':' is'} placed.</h2>
+ <p>${ful==='delivery'?'Pay the vendor when your order is delivered.':'Pay the vendor when you collect your order.'} No online payment is taken.</p>
+ <div class="ordnums">${os.map(o=>`<a class="ordnum" href="dashboard-consumer.html?order=${esc(o.id)}"><b>${esc(o.order_number)}</b><span>${esc(o.vendor_name)} · ${xcd(o.total_xcd)}</span></a>`).join('')}</div>
+ <p>The vendor will confirm your order soon. Follow its progress in your dashboard.</p>
+ <a class="btn" href="dashboard-consumer.html">View my orders</a> <a class="btn ghost" href="browse.html">Keep shopping</a></div>`;
+ window.scrollTo(0,0)};
+}
 };
 badge();
 const jsonP=fetch('products.json').then(r=>r.json());
