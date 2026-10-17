@@ -30,7 +30,7 @@ create unique index if not exists orders_order_number_key on public.orders(order
 update public.orders set status = 'placed' where status = 'pending';
 do $$ declare c record; begin
   for c in select conname from pg_constraint
-           where conrelid = 'public.orders'::regclass and contype = 'c'
+           where conrelid = 'public.orders'::regclass and contype = 'c' and conname not like 'orders_payment_status%'
              and (pg_get_constraintdef(oid) ilike '%status%' or pg_get_constraintdef(oid) ilike '%fulfilment%' or pg_get_constraintdef(oid) ilike '%payment_method%')
   loop execute format('alter table public.orders drop constraint %I', c.conname); end loop;
 end $$;
@@ -38,9 +38,10 @@ alter table public.orders alter column status set default 'placed';
 alter table public.orders add constraint orders_status_check
   check (status in ('placed','confirmed','ready','out_for_delivery','completed','cancelled'));
 alter table public.orders add constraint orders_fulfilment_check check (fulfilment in ('pickup','delivery'));
-alter table public.orders add constraint orders_payment_check check (payment_method in ('pay_on_pickup','pay_on_delivery'));
+alter table public.orders add constraint orders_payment_check check (payment_method in ('pay_on_pickup','pay_on_delivery','pay_with_wallet'));
 alter table public.orders add constraint orders_payment_matches check (
-  (fulfilment = 'pickup' and payment_method = 'pay_on_pickup') or (fulfilment = 'delivery' and payment_method = 'pay_on_delivery'));
+  payment_method = 'pay_with_wallet'   -- v0.6: set by pay_order() in pay.sql (TEST MODE play money)
+  or (fulfilment = 'pickup' and payment_method = 'pay_on_pickup') or (fulfilment = 'delivery' and payment_method = 'pay_on_delivery'));
 alter table public.orders add constraint orders_delivery_address_check check (fulfilment <> 'delivery' or char_length(coalesce(delivery_address,'')) >= 5);
 
 -- items: snapshot of price + line total
@@ -65,7 +66,7 @@ create or replace function public.orders_before_update() returns trigger
 language plpgsql security definer set search_path = public as $$
 declare is_vendor boolean; is_cons boolean; ok boolean := false;
 begin
-  if auth.uid() is not null and not public.is_admin() then
+  if auth.uid() is not null and not public.is_admin() and coalesce(current_setting('cc.pay_internal', true),'') <> '1' then
     if new.id is distinct from old.id or new.order_number is distinct from old.order_number
        or new.consumer_id is distinct from old.consumer_id or new.vendor_id is distinct from old.vendor_id
        or new.fulfilment is distinct from old.fulfilment or new.payment_method is distinct from old.payment_method
@@ -73,7 +74,9 @@ begin
        or new.delivery_fee_xcd is distinct from old.delivery_fee_xcd
        or new.contact_name is distinct from old.contact_name or new.contact_phone is distinct from old.contact_phone
        or new.delivery_address is distinct from old.delivery_address or new.notes is distinct from old.notes
-       or new.created_at is distinct from old.created_at then
+       or new.created_at is distinct from old.created_at
+       or to_jsonb(new)->'payment_status' is distinct from to_jsonb(old)->'payment_status'
+       or to_jsonb(new)->'paid_at' is distinct from to_jsonb(old)->'paid_at' then
       raise exception 'Only the order status can be changed';
     end if;
     if new.status is distinct from old.status then

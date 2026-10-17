@@ -1,4 +1,4 @@
-CARRIACOU CONNECT MARKETPLACE v0.4 (static preview + optional Supabase accounts)
+CARRIACOU CONNECT MARKETPLACE v0.6 (static preview + optional Supabase accounts + TEST-MODE wallets)
 ===================================================
 ALL VENDORS AND PRODUCTS ARE SAMPLE DATA. NO REAL PAYMENTS.
 
@@ -186,3 +186,67 @@ Changed files: supabase/order_notes.sql (new), cc.js (notes widget, version text
 Testing (outside the repo, /workspace/cconnect/test): order_notes.sql run twice on a local Postgres 17 with a
   permission/limit test matrix (pgnotes.mjs); lint_safeupdate.js checks every UPDATE/DELETE has a WHERE;
   notes_flow.js + flows.js headless Chrome at 390 and 1280 against a mocked Supabase.
+
+
+=====================================================================
+v0.6: CARRIACOU CONNECT PAY, *** TEST MODE ONLY (PLAY MONEY) ***
+=====================================================================
+There is NO payment processor, NO card or bank details and NO real money anywhere in this version. Balances are
+fake XCD "play money" created by a Test top-up button. Every Pay screen shows "TEST MODE - play money, not real funds".
+Going live with real funds needs legal advice, licensing and Daniel's explicit approval: read ../Pay_Design_Notes.txt.
+
+NEW SQL STEP (required once, after schema.sql, orders.sql and order_notes.sql)
+  14. Dashboard > SQL Editor > New query. Paste the whole of supabase/pay.sql and Run. Expect "Success". Safe to run again.
+      (orders.sql was also touched in v0.6: it now allows payment_method 'pay_with_wallet' and has the payment guard. You do NOT
+       need to re-run it, pay.sql installs the same pieces. If you ever re-run orders.sql, re-run pay.sql after it.)
+      Without pay.sql: the wallet page says "pay.sql has not been run", checkout hides the wallet option, nothing else breaks.
+  To undo test data in the SQL editor: the ledger is append-only on purpose (see Pay_Design_Notes.txt, "Resetting test data").
+
+What you get
+  wallet.html  (logged-in consumers and vendors; nav "Wallet")  balance, wallet code CC-XXXX-XXXX with Copy, QR code of the code,
+               Add test money (max EC$500 per top-up and per rolling 24h), Send to another wallet (by code or email, with a
+               "send EC$x to <name>?" confirm step), Pay a shop charge (enter a PAY-XXXX-XXXX code), transaction history.
+               Vendors also get a business wallet (tab), separate from their personal wallet.
+  pos.html     (vendors; linked from the vendor dashboard)  pick products and/or a custom amount, create a charge: shows a code and
+               QR that expire after 15 minutes; the screen flips to PAID when the customer pays; cancel anytime; recent charges.
+               v1 flow: customer opens Wallet > "Pay a shop charge", enters the code (or scans the QR, which opens wallet.html?pay=CODE).
+  pay.js       logic for wallet.html and pos.html;  vendor/qrcode.js  QR generator (qrcode-generator 2.0.4, MIT, runs in the browser)
+  checkout     new "How do you want to pay?": pay the vendor yourself (as before) OR "Pay with wallet (test)": places the order(s) and
+               pays them in one all-or-nothing database call. Orders show Paid / Unpaid / Refunded. An unpaid order can be paid later
+               from its order page. Vendors see a Paid badge and a "Refund (test)" button. Cancelling a PAID order refunds it automatically.
+
+Database (supabase/pay.sql)
+  wallets        one per user, one per vendor business, plus one hidden system "test mint". balance_cents integer, never negative.
+  transactions   APPEND-ONLY double-entry ledger (type topup_test | transfer | order_payment | refund | adjustment; from_wallet, to_wallet,
+                 amount_cents > 0, status, order_id, test_mode must be true). Updates, deletes and truncate are blocked for EVERYONE.
+                 Test top-ups are mint -> wallet, so SUM(user+vendor balances) = SUM(test top-ups) always.
+  pay_requests   POS charge requests.   pay_attempts  failed lookups, for rate limiting.
+  orders         + payment_status (unpaid | paid | refunded), paid_at; payment_method may now be pay_with_wallet. place_order() is unchanged.
+  Functions (all SECURITY DEFINER, logged-in only): ensure_wallets, test_topup(cents,key,wallet), transfer_wallet(to,cents,note,key,from),
+    wallet_preview(code), wallet_history(wallet,limit,before), pay_orders(ids,key), pay_order(id,key), refund_order(id),
+    create_charge(cents,note,items), cancel_charge(id), charge_preview(code), pay_charge(code,key,from), pay_limits(), pay_reconcile() (admin).
+  Reconciliation (SQL editor):  select public.pay_reconcile();   or   select * from public.pay_reconciliation;
+    "ok": true means every wallet equals its ledger credits minus debits, none is negative and total balances = total test top-ups.
+
+Rules enforced in the database (not just the browser)
+  - Clients cannot INSERT/UPDATE/DELETE wallets, transactions or charges, and cannot change an order's payment columns. Money moves only inside the functions.
+  - Each move locks both wallets in id order (no deadlocks, no double spend), refuses overdrafts, amounts < EC$0.01, over EC$2,000 per transfer / charge,
+    balances over EC$100,000, and sending to your own wallet. Amounts are integer cents.
+  - Idempotency: pass a key (the web pages do) and a repeated request returns the first result instead of moving money twice. Same key with a different
+    request is refused. An order can only ever be paid once and refunded once (unique indexes), even under concurrent taps.
+  - Privacy: Row Level Security shows you only your own wallets and transactions. Recipients are shown as a masked label ("Bob G." or the business name).
+    Unknown recipient (code or email) always gives the same "not found" answer and is rate limited (10 misses per 10 minutes). Email lookup is accepted
+    for sending but the preview step refuses email probing. 20 transfers per 10 minutes per user.
+  - A refund comes out of the vendor wallet. If the vendor has moved the money away, the refund (and cancelling that paid order) is refused with a clear message.
+  - pg-safeupdate: every UPDATE / DELETE in pay.sql has a WHERE clause.
+
+Testing done (outside the repo, /workspace/cconnect/test)
+  pgpay.mjs  (126 checks): pay.sql run twice on local Postgres 17, then balances/ledger invariants, 30 concurrent transfers, opposing transfers (deadlock),
+             concurrent idempotent requests, concurrent top-up cap, concurrent pay_order and pay_charge, overdraft, zero/negative/null/huge amounts, self transfer,
+             idempotency, RLS leak checks, refunds, auto-refund on cancel, POS charges (expiry, cancel, double pay), ledger immutability, reconciliation + tamper detection,
+             re-running orders.sql then pay.sql.   pgupgrade.mjs: v0.5 database upgraded to v0.6 with an existing order.   lint_safeupdate.js: PASS.
+  pay_flow.js (96 checks) + flows.js + notes_flow.js: headless Chrome at 390 and 1280 against a mocked Supabase, no JS errors. Screenshots in ../shots/.
+  NOT tested against the real Supabase project yet (as with every earlier step): expect small fixes once pay.sql has been run there.
+
+Changed files: supabase/pay.sql (new), supabase/orders.sql (payment constraint + guard), wallet.html, pos.html, pay.js, vendor/qrcode.js (new),
+  cc.js (nav Wallet link, test banner, money helpers, v0.6 text), app.js (checkout), auth.js (order pages, vendor refund + POS link), style.css, README.txt.

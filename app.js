@@ -58,13 +58,13 @@ $('#add').onclick=()=>{const q=Math.max(1,Math.min(99,parseInt($('#qty').value)|
 cart(){const draw=()=>{const c=getCart(),ids=Object.keys(c).filter(i=>DATA.products.some(p=>p.id===i));
 if(!ids.length){$('#cart').innerHTML='<p>Your cart is empty. <a href="browse.html">Browse products</a></p>';return}
 let sum=0;const rows=ids.map(i=>{const p=DATA.products.find(x=>x.id===i),t=p.price*c[i];sum+=t;return`<tr><td><a href="product.html?id=${i}">${esc(p.name)}</a><div class="muted">${esc(vendor(p.vendorId).name)}</div></td><td>${xcd(p.price)}</td><td><input type="number" min="1" max="99" value="${c[i]}" data-id="${i}"></td><td>${xcd(t)}</td><td><button class="btn alt" data-rm="${i}" aria-label="Remove">✕</button></td></tr>`}).join('');
-$('#cart').innerHTML=`<table><tr><th>Item</th><th>Price</th><th>Qty</th><th>Total</th><th></th></tr>${rows}</table><h2>Subtotal: ${xcd(sum)} XCD</h2><p class="muted">No online payment yet: you pay the vendor when you collect or receive your order.</p><button class="btn" id="co">Checkout</button><div id="conote"></div>`;
+$('#cart').innerHTML=`<table><tr><th>Item</th><th>Price</th><th>Qty</th><th>Total</th><th></th></tr>${rows}</table><h2>Subtotal: ${xcd(sum)} XCD</h2><p class="muted">No real payments. At checkout you can pay the vendor yourself on pickup or delivery, or use your TEST wallet (play money only).</p><button class="btn" id="co">Checkout</button><div id="conote"></div>`;
 document.querySelectorAll('input[data-id]').forEach(e=>e.onchange=()=>{const c=getCart();c[e.dataset.id]=Math.max(1,Math.min(99,parseInt(e.value)||1));saveCart(c);draw()});
 document.querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>{const c=getCart();delete c[b.dataset.rm];saveCart(c);draw()});
 $('#co').onclick=()=>{if(DATA.live){location.href='checkout.html'}else $('#conote').innerHTML='<div class="notice"><strong>Ordering needs accounts, which are not switched on in this preview.</strong><br>In live mode you log in, choose pickup or delivery and place your order. You pay the vendor on pickup or delivery. Online payment (Carriacou Connect Pay) is coming later.</div>'}};draw()},
 async checkout(){
 const root=$('#co');
-const payNote='<div class="notice"><strong>No online payment yet.</strong> You pay the vendor in cash (or however they agree with you) when you collect or receive your order. Carriacou Connect Pay is coming later.</div>';
+const payNote='<div class="notice"><strong>No real payments.</strong> Choose to pay the vendor yourself on pickup or delivery, or try Carriacou Connect Pay with your <b>test wallet</b> (play money only).</div>';
 if(!window.CC.configured||!DATA.live){root.innerHTML='<div class="notice"><strong>Ordering is not switched on in this sample preview.</strong> Accounts and orders need the live Supabase database. <a href="browse.html">Back to browsing</a></div>'+payNote;return}
 const user=await window.CC.getUser();
 if(!user){location.href='login.html?next=checkout.html';return}
@@ -77,11 +77,18 @@ let total=0;
 const summary=Object.entries(byV).map(([vid,ls])=>{const sub=ls.reduce((a,l)=>a+l.p.price*l.q,0);total+=sub;
 return `<div class="osum"><h3>${esc(vendor(vid).name)}</h3>${ls.map(l=>`<div class="oline"><span>${l.q} × ${esc(l.p.name)}</span><span>${xcd(l.p.price*l.q)}</span></div>`).join('')}<div class="oline sub"><span>Subtotal</span><span>${xcd(sub)}</span></div></div>`}).join('');
 const nv=Object.keys(byV).length;
+const totalCents=Math.round(total*100);
+let wal=null;try{const wr=await sb.rpc('ensure_wallets');if(!wr.error&&Array.isArray(wr.data))wal=wr.data.find(x=>x.kind==='user')||null}catch(e){}
+const payKey=window.CC.uuid();
 let prof={};try{const r=await sb.from('profiles').select('full_name,phone,address').eq('id',user.id).maybeSingle();prof=r.data||{}}catch(e){}
 root.innerHTML=`<div class="co-grid"><form id="cof" class="formcard" novalidate>
 <fieldset><legend>How do you want it?</legend>
 <label class="chk opt"><input type="radio" name="ful" value="pickup" checked> <span><b>Pickup</b><small>Collect from the vendor. Pay on pickup.</small></span></label>
 <label class="chk opt"><input type="radio" name="ful" value="delivery"> <span><b>Delivery</b><small>The vendor brings it to you. Pay on delivery. Any delivery fee is agreed with the vendor.</small></span></label></fieldset>
+ ${wal?`<fieldset id="payf"><legend>How do you want to pay?</legend>
+<label class="chk opt"><input type="radio" name="pay" value="cash" checked> <span><b>Pay the vendor myself</b><small>Cash or as agreed, when you collect or receive your order.</small></span></label>
+<label class="chk opt"><input type="radio" name="pay" value="wallet"> <span><b>Pay with wallet (test)</b><small>Test balance: <b id="wbal">${window.CC.cents(wal.balance_cents)}</b>. Order total ${window.CC.cents(totalCents)}.</small></span></label>
+<div id="wnote" class="notice" hidden>${window.CC.TESTBANNER}<span id="wnt"></span></div></fieldset>`:''}
 <label>Your name<input id="cn" maxlength="80" autocomplete="name" value="${esc(prof.full_name||'')}"></label>
 <label>Contact phone *<input id="cp" type="tel" maxlength="30" autocomplete="tel" required value="${esc(prof.phone||'')}"></label>
 <label id="adl" hidden>Delivery address *<textarea id="ca" rows="3" maxlength="300">${esc(prof.address||'')}</textarea></label>
@@ -92,20 +99,24 @@ root.innerHTML=`<div class="co-grid"><form id="cof" class="formcard" novalidate>
 ${nv>1?`<p class="muted">Your cart has items from ${nv} vendors, so it becomes ${nv} separate orders, one per vendor.</p>`:''}
 <p class="muted">Prices are re-checked by the server when you place the order.</p>${payNote}<p><a href="cart.html">Edit cart</a></p></aside></div>`;
 const f=$('#cof'),m=$('#cm');
-const sync=()=>{$('#adl').hidden=f.ful.value!=='delivery'};f.addEventListener('change',sync);sync();
+const payWallet=()=>!!wal&&f.pay&&f.pay.value==='wallet';
+const sync=()=>{$('#adl').hidden=f.ful.value!=='delivery';if(wal){const w=$('#wnote');w.hidden=!payWallet();if(payWallet()){const short=Number(wal.balance_cents)<totalCents;$('#wnt').innerHTML=short?' Your test balance is too low for this order. <a href="wallet.html">Add play money in your wallet</a>, then come back.':' Your order is placed and paid straight away from your test wallet. No real money is used.'}$('#cgo').textContent=payWallet()?'Place order and pay with test wallet':'Place order'}};f.addEventListener('change',sync);sync();
 const say=t=>{m.className='notice err';m.textContent=t;m.hidden=!t};
 f.onsubmit=async e=>{e.preventDefault();say('');
  const ful=f.ful.value,ph=$('#cp').value.trim(),ad=$('#ca').value.trim();
  if(ph.length<7){say('Please enter a contact phone number the vendor can reach.');$('#cp').focus();return}
  if(ful==='delivery'&&ad.length<5){say('Please enter your delivery address.');$('#ca').focus();return}
+ if(payWallet()&&Number(wal.balance_cents)<totalCents){say('Your test wallet balance ('+window.CC.cents(wal.balance_cents)+') is lower than the order total ('+window.CC.cents(totalCents)+'). Add play money in your wallet first.');return}
  const btn=$('#cgo');btn.disabled=true;btn.textContent='Placing order…';
  const r=await sb.rpc('place_order',{p_cart:lines.map(l=>({product_id:l.p.id,quantity:l.q})),p_fulfilment:ful,p_contact_phone:ph,p_delivery_address:ful==='delivery'?ad:null,p_notes:$('#cnote').value.trim()||null,p_contact_name:$('#cn').value.trim()||null});
- if(r.error){say(r.error.message||'Could not place the order.');btn.disabled=false;btn.textContent='Place order';return}
+ if(r.error){say(r.error.message||'Could not place the order.');btn.disabled=false;sync();return}
  saveCart({});
  try{const up={};if(!prof.phone)up.phone=ph;if(!prof.full_name&&$('#cn').value.trim())up.full_name=$('#cn').value.trim();if(ful==='delivery'&&!prof.address)up.address=ad;if(Object.keys(up).length)await sb.from('profiles').update(up).eq('id',user.id)}catch(e){}
  const os=r.data||[];
+ let paidMsg='',payErr='';
+ if(payWallet()){const pr=await sb.rpc('pay_orders',{p_order_ids:os.map(o=>o.id),p_idempotency_key:payKey});if(pr.error)payErr=pr.error.message||'The payment did not go through.';else paidMsg='Paid from your test wallet.'}
  root.innerHTML=`<div class="confirm"><div class="tick" aria-hidden="true">✓</div><h2>Thank you! Your order${os.length>1?'s are':' is'} placed.</h2>
- <p>${ful==='delivery'?'Pay the vendor when your order is delivered.':'Pay the vendor when you collect your order.'} No online payment is taken.</p>
+ ${paidMsg?window.CC.TESTBANNER+'<p><b>'+paidMsg+'</b> This was play money, so no real funds moved.</p>':payErr?'<div class="notice err">Your order was placed but the test payment failed: '+esc(payErr)+'. You can pay it from your order page, or pay the vendor on '+(ful==='delivery'?'delivery':'pickup')+'.</div>':'<p>'+(ful==='delivery'?'Pay the vendor when your order is delivered.':'Pay the vendor when you collect your order.')+' No online payment is taken.</p>'}
  <div class="ordnums">${os.map(o=>`<a class="ordnum" href="dashboard-consumer.html?order=${esc(o.id)}"><b>${esc(o.order_number)}</b><span>${esc(o.vendor_name)} · ${xcd(o.total_xcd)}</span></a>`).join('')}</div>
  <p>The vendor will confirm your order soon. Follow its progress in your dashboard.</p>
  <a class="btn" href="dashboard-consumer.html">View my orders</a> <a class="btn ghost" href="browse.html">Keep shopping</a></div>`;

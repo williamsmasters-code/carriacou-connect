@@ -25,7 +25,13 @@ const SLABEL={placed:'Placed',confirmed:'Confirmed',ready:'Ready',out_for_delive
 const stPill=s=>'<span class="st st-'+esc(s)+'">'+esc(SLABEL[s]||s)+'</span>';
 const fdate=d=>{try{return new Date(d).toLocaleString([], {dateStyle:'medium',timeStyle:'short'})}catch(e){return String(d)}};
 const fnice=(o)=>o.fulfilment==='delivery'?'Delivery':'Pickup';
-const payText=o=>o.payment_method==='pay_on_delivery'?'Pay on delivery':'Pay on pickup';
+const payText=o=>o.payment_method==='pay_with_wallet'?'Pay with wallet (TEST, play money)':o.payment_method==='pay_on_delivery'?'Pay on delivery':'Pay on pickup';
+// ---- Connect Pay (v0.6, TEST MODE: play money only) ----
+const TESTBANNER='<div class="testbanner" role="note"><b>TEST MODE</b> - play money, not real funds</div>';
+const cents=n=>{n=Number(n)||0;const neg=n<0;n=Math.abs(Math.round(n));return (neg?'-':'')+'EC$'+Math.floor(n/100).toLocaleString('en-US')+'.'+String(n%100).padStart(2,'0')};
+const toCents=v=>{const m=String(v==null?'':v).trim().replace(/^EC?\$/i,'').replace(/,/g,'').match(/^(\d{1,7})(?:\.(\d{1,2}))?$/);return m?parseInt(m[1],10)*100+parseInt((m[2]||'0').padEnd(2,'0'),10):null};
+const uuid=()=>(window.crypto&&crypto.randomUUID)?crypto.randomUUID():'k'+Date.now().toString(36)+Math.random().toString(36).slice(2,12);
+const payPill=(o,always)=>!o.payment_status?'':o.payment_status==='paid'?'<span class="pp pp-paid">Paid (test)</span>':o.payment_status==='refunded'?'<span class="pp pp-ref">Refunded (test)</span>':always?'<span class="pp pp-unpaid">Unpaid</span>':'';
 // where may a vendor move an order next? (mirrors the database trigger; the database is the real gatekeeper)
 function nextSteps(o){
  const d=o.fulfilment==='delivery';
@@ -99,13 +105,13 @@ function authLinks(){return '<a href="login.html">Log in</a><a class="pill" href
 function layout(){
  const live=configured;
  const out=live?authLinks():'<a href="login.html">Log in</a>';
- const msg=live?'Preview v0.5 – products labeled SAMPLE are fictional. No online payments yet (pay on pickup or delivery).':'Preview v0.5 – all vendors and products are SAMPLE data. Accounts are not switched on yet. No real payments.';
+ const msg=live?'Preview v0.6 – products labeled SAMPLE are fictional. Wallet payments are TEST MODE play money only. No real payments.':'Preview v0.6 – all vendors and products are SAMPLE data. Accounts are not switched on yet. No real payments.';
  if(!document.querySelector('link[data-cc-fonts]')){const l=document.createElement('link');l.rel='stylesheet';l.dataset.ccFonts='1';l.href='https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,600;0,9..144,800;1,9..144,600&family=Plus+Jakarta+Sans:wght@400;500;700;800&display=swap';document.head.appendChild(l)}
  const m=document.querySelector('main');if(m)m.id='main';
  const home=document.body.dataset.page==='home';
  document.body.insertAdjacentHTML('afterbegin','<a class="skip" href="#main">Skip to content</a><div class="banner">'+msg+'</div><header><div class="row"><a class="logo" href="index.html">'+LOGO+'<div>Carriacou <span>Connect</span><small>Marketplace</small></div></a><nav aria-label="Main"><a href="browse.html">Browse</a><a class="cartlink" href="cart.html">Cart<b id="cartCount">0</b></a><span id="authNav">'+out+'</span></nav></div></header>');
  const hasBand=document.querySelector('.band');
- document.body.insertAdjacentHTML('beforeend',(hasBand?'':WAVE('#04202c',false).replace('class="wave-sep"','class="wave-sep foot-wave"'))+'<footer><b>Carriacou Connect®</b><br>by Williams’ Tech · Marketplace v0.5 preview<br>Sea, reef, spice and sail: made on Carriacou.</footer>');
+ document.body.insertAdjacentHTML('beforeend',(hasBand?'':WAVE('#04202c',false).replace('class="wave-sep"','class="wave-sep foot-wave"'))+'<footer><b>Carriacou Connect®</b><br>by Williams’ Tech · Marketplace v0.6 preview<br>Sea, reef, spice and sail: made on Carriacou.</footer>');
  if(live)authNav();
  if(!matchMedia('(prefers-reduced-motion: reduce)').matches&&'IntersectionObserver' in window){const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}}),{threshold:.08});window.CC_REVEAL=()=>document.querySelectorAll('.rv:not(.in)').forEach(x=>io.observe(x))}
  else window.CC_REVEAL=()=>document.querySelectorAll('.rv').forEach(x=>x.classList.add('in'));
@@ -115,12 +121,12 @@ async function authNav(){
  const render=async user=>{const el=document.getElementById('authNav');if(!el)return;
   if(!user){el.innerHTML=authLinks();return}
   let role='consumer';try{const {data}=await sb.from('profiles').select('role').eq('id',user.id).maybeSingle();if(data)role=data.role}catch(e){}
-  el.innerHTML=`<a href="${role==='vendor'?'dashboard-vendor.html':'dashboard-consumer.html'}">Dashboard</a><a href="account.html">Account</a><a class="pill" href="#" id="logoutLink">Log out</a>`;
+  el.innerHTML=`<a href="${role==='vendor'?'dashboard-vendor.html':'dashboard-consumer.html'}">Dashboard</a><a href="wallet.html">Wallet</a><a href="account.html">Account</a><a class="pill" href="#" id="logoutLink">Log out</a>`;
   document.getElementById('logoutLink').onclick=async e=>{e.preventDefault();await sb.auth.signOut();location.href='index.html'}};
  render(await getUser());
  sb.auth.onAuthStateChange((ev)=>{if(ev==='SIGNED_OUT')render(null)});
 }
-window.CC={noteSummary,newBadge,notesWidget,NOTE_POLL,SLABEL,stPill,fdate,fnice,payText,nextSteps,timeline,safeNext,WAVE,configured,client,esc,getUser,layout,TIER_LABEL,TIER_LIMIT,
+window.CC={TESTBANNER,cents,toCents,uuid,payPill,noteSummary,newBadge,notesWidget,NOTE_POLL,SLABEL,stPill,fdate,fnice,payText,nextSteps,timeline,safeNext,WAVE,configured,client,esc,getUser,layout,TIER_LABEL,TIER_LIMIT,
  xcd:n=>'EC$'+Number(n).toFixed(2)};
 layout();
 })();
