@@ -182,7 +182,7 @@ begin
 
   -- normalise the cart into lines (merge duplicates)
   create temp table if not exists _cart_lines(product_id uuid primary key, qty integer not null) on commit drop;
-  delete from _cart_lines;
+  delete from _cart_lines where true;
   if jsonb_typeof(p_cart) = 'array' then
     for el in select * from jsonb_array_elements(p_cart) loop
       begin
