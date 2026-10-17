@@ -19,6 +19,19 @@ async function createVendor(sb,user,v){
 }
 const vendorFields=`<label>Business name<input id="bname" maxlength="80" required></label><label>Location (e.g. Hillsborough)<input id="bloc" maxlength="80"></label><label>About your business<textarea id="bdesc" rows="3" maxlength="500"></textarea></label><p class="muted">New businesses start on the <strong>Lite</strong> plan (up to 10 products).</p>`;
 
+// Resize to max 1200px and re-encode (keeps PNG transparency as PNG, otherwise JPEG ~0.82).
+async function shrink(file){
+ const url=URL.createObjectURL(file);
+ try{const im=await new Promise((ok,no)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=()=>no(new Error('Could not read that image.'));i.src=url});
+  const M=1200,k=Math.min(1,M/Math.max(im.naturalWidth,im.naturalHeight)),w=Math.max(1,Math.round(im.naturalWidth*k)),h=Math.max(1,Math.round(im.naturalHeight*k));
+  const cv=document.createElement('canvas');cv.width=w;cv.height=h;const cx=cv.getContext('2d');
+  const png=file.type==='image/png';if(!png){cx.fillStyle='#fff';cx.fillRect(0,0,w,h)}
+  cx.drawImage(im,0,0,w,h);
+  let type=png?'image/png':'image/jpeg',blob=await new Promise(r=>cv.toBlob(r,type,.82));
+  if(png&&blob&&blob.size>1.8*1024*1024){type='image/jpeg';cx.globalCompositeOperation='destination-over';cx.fillStyle='#fff';cx.fillRect(0,0,w,h);blob=await new Promise(r=>cv.toBlob(r,type,.82))}
+  if(!blob)throw new Error('Could not process that image.');
+  return {blob,type,w,h}}
+ finally{URL.revokeObjectURL(url)}}
 const pages={
 async signup(){
  if(!configured)return offline();
@@ -95,24 +108,48 @@ async vendordash(){
   <form id="pf"><input type="hidden" id="pid"><label>Name<input id="pn" maxlength="120" required></label><label>Description<textarea id="pd" rows="3" maxlength="1000"></textarea></label>
   <label>Price (EC$)<input id="pp" type="number" min="0" step="0.01" required></label>
   <label>Category<select id="pc">${Object.entries(CATS).map(([k,v])=>`<option value="${k}">${esc(v)}</option>`).join('')}</select></label>
-  <label>Image URL (optional, https://…)<input id="pi" type="url" placeholder="https://"></label>
+  <div class="uploader"><span class="lbl">Product image <small>(JPG, PNG or WebP, up to 2 MB)</small></span>
+   <div class="up-row"><div class="up-prev" id="upprev" aria-live="polite"><span class="muted">No image</span></div>
+   <div class="up-btns"><label class="btn alt up-pick" for="pfile" id="uppicklbl" tabindex="0">Choose image</label><input type="file" id="pfile" accept="image/jpeg,image/png,image/webp" class="sr"><button type="button" class="btn ghost" id="upclear" hidden>Remove image</button></div></div>
+   <div id="upmsg" class="muted" role="status"></div>
+   <input type="hidden" id="pi"></div>
   <label class="chk"><input type="checkbox" id="pa" checked> Active (visible to shoppers)</label>
   <button class="btn" id="psave">Add product</button> <button type="button" class="btn alt" id="pcancel" hidden>Cancel edit</button></form><div id="pm" class="notice" hidden></div>
-  <h3>Your products</h3>${prods.length?`<table><tr><th>Product</th><th>Price</th><th>Status</th><th></th></tr>${prods.map(p=>`<tr><td>${esc(p.name)}<div class="muted">${esc(CATS[p.category]||p.category)}</div></td><td>${xcd(p.price_xcd)}</td><td>${p.active?'Active':'Hidden'}</td><td><button class="btn alt" data-e="${p.id}">Edit</button> <button class="btn" data-d="${p.id}">Delete</button></td></tr>`).join('')}</table>`:'<p>No products yet.</p>'}
+  <h3>Your products</h3>${prods.length?`<table><tr><th>Product</th><th>Price</th><th>Status</th><th></th></tr>${prods.map(p=>`<tr><td>${p.image_url?`<img class="thumb" src="${esc(p.image_url)}" alt="">`:''}${esc(p.name)}<div class="muted">${esc(CATS[p.category]||p.category)}</div></td><td>${xcd(p.price_xcd)}</td><td>${p.active?'Active':'Hidden'}</td><td><button class="btn alt" data-e="${p.id}">Edit</button> <button class="btn" data-d="${p.id}">Delete</button></td></tr>`).join('')}</table>`:'<p>No products yet.</p>'}
   <h3>Orders</h3>${(ord.data||[]).length?`<table><tr><th>Date</th><th>Status</th><th>Total</th></tr>${ord.data.map(o=>`<tr><td>${esc(new Date(o.created_at).toLocaleDateString())}</td><td>${esc(o.status)}</td><td>${xcd(o.total_xcd)}</td></tr>`).join('')}</table>`:'<div class="notice">No orders yet. Order management arrives in v0.3 with checkout.</div>'}`;
   const f=$('#pf'),m=$('#pm');
-  const reset=()=>{f.reset();$('#pid').value='';$('#ftitle').textContent='Add a product';$('#psave').textContent='Add product';$('#pcancel').hidden=true;$('#pa').checked=true};
+  let pending=null,oldUrl=null; // pending: {blob,url} resized file waiting for save; oldUrl: stored url when editing
+  const prev=()=>{const u=pending?pending.url:$('#pi').value;$('#upprev').innerHTML=u?`<img src="${esc(u)}" alt="Product image preview">`:'<span class="muted">No image</span>';$('#upclear').hidden=!u;$('#uppicklbl').textContent=u?'Replace image':'Choose image'};
+  $('#uppicklbl').onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();$('#pfile').click()}};
+  $('#pfile').onchange=async e=>{const file=e.target.files[0];e.target.value='';if(!file)return;const um=$('#upmsg');um.className='muted';
+   if(!/^image\/(jpeg|png|webp)$/.test(file.type)){um.className='err-text';um.textContent='Please choose a JPG, PNG or WebP image.';return}
+   if(file.size>12*1024*1024){um.className='err-text';um.textContent='That file is too large. Choose one under 12 MB.';return}
+   try{const r=await shrink(file);if(r.blob.size>2*1024*1024)throw new Error('Image is still over 2 MB after compression. Try a smaller picture.');
+    if(pending)URL.revokeObjectURL(pending.url);pending={blob:r.blob,url:URL.createObjectURL(r.blob),type:r.type};um.textContent='Resized to '+r.w+'x'+r.h+', '+Math.round(r.blob.size/1024)+' KB. It uploads when you save.';prev()}
+   catch(err){um.className='err-text';um.textContent=err.message||'Could not read that image.'}};
+  $('#upclear').onclick=()=>{if(pending){URL.revokeObjectURL(pending.url);pending=null}$('#pi').value='';$('#upmsg').textContent='Image removed. Save to apply.';prev()};
+  async function uploadPending(){const ext=pending.type==='image/png'?'png':pending.type==='image/webp'?'webp':'jpg';
+   const path=user.id+'/'+Date.now()+'-'+Math.random().toString(36).slice(2,8)+'.'+ext;
+   const r=await sb.storage.from('product-images').upload(path,pending.blob,{contentType:pending.type,cacheControl:'31536000',upsert:false});
+   if(r.error)throw r.error;return sb.storage.from('product-images').getPublicUrl(path).data.publicUrl}
+  const ourPath=u=>{const mk='/product-images/';const i=(u||'').indexOf(mk);return i>0&&u.indexOf('/storage/v1/object/public')>0?decodeURIComponent(u.slice(i+mk.length).split('?')[0]):null};
+  async function dropOld(u){const p=ourPath(u);if(p&&p.startsWith(user.id+'/')){try{await sb.storage.from('product-images').remove([p])}catch(e){}}}
+  const reset=()=>{f.reset();if(pending)URL.revokeObjectURL(pending.url);pending=null;oldUrl=null;$('#pi').value='';$('#upmsg').textContent='';prev();$('#pid').value='';$('#ftitle').textContent='Add a product';$('#psave').textContent='Add product';$('#pcancel').hidden=true;$('#pa').checked=true};
+  prev();
   if(full){$('#psave').disabled=true}
   $('#pcancel').onclick=()=>{reset();$('#psave').disabled=full};
-  f.onsubmit=async e=>{e.preventDefault();say(m,'');
-   const row={name:$('#pn').value.trim(),description:$('#pd').value.trim(),price_xcd:parseFloat($('#pp').value),category:$('#pc').value,image_url:$('#pi').value.trim()||null,active:$('#pa').checked};
-   if(row.image_url&&!/^https?:\/\//i.test(row.image_url)){say(m,'Image URL must start with http:// or https://');return}
-   const id=$('#pid').value;
-   const r=id?await sb.from('products').update(row).eq('id',id):await sb.from('products').insert({...row,vendor_id:vendor.id});
-   if(r.error){say(m,r.error.message);return}
-   await draw()};
-  document.querySelectorAll('[data-e]').forEach(b=>b.onclick=()=>{const p=prods.find(x=>x.id===b.dataset.e);$('#pid').value=p.id;$('#pn').value=p.name;$('#pd').value=p.description;$('#pp').value=p.price_xcd;$('#pc').value=p.category;$('#pi').value=p.image_url||'';$('#pa').checked=p.active;$('#ftitle').textContent='Edit product';$('#psave').textContent='Save changes';$('#psave').disabled=false;$('#pcancel').hidden=false;f.scrollIntoView()});
-  document.querySelectorAll('[data-d]').forEach(b=>b.onclick=async()=>{if(!confirm('Delete this product?'))return;const r=await sb.from('products').delete().eq('id',b.dataset.d);if(r.error)say(m,r.error.message);else draw()});
+  f.onsubmit=async e=>{e.preventDefault();say(m,'');const sv=$('#psave');sv.disabled=true;
+   try{let url=$('#pi').value.trim()||null;
+    if(pending){say(m,'Uploading image…',true);url=await uploadPending()}
+    const row={name:$('#pn').value.trim(),description:$('#pd').value.trim(),price_xcd:parseFloat($('#pp').value),category:$('#pc').value,image_url:url,active:$('#pa').checked};
+    const id=$('#pid').value;
+    const r=id?await sb.from('products').update(row).eq('id',id):await sb.from('products').insert({...row,vendor_id:vendor.id});
+    if(r.error){if(pending&&url)await dropOld(url);throw r.error}
+    if(oldUrl&&oldUrl!==url)await dropOld(oldUrl);
+    await draw()}
+   catch(err){say(m,(err&&err.message)||'Could not save.');sv.disabled=false}};
+  document.querySelectorAll('[data-e]').forEach(b=>b.onclick=()=>{const p=prods.find(x=>x.id===b.dataset.e);$('#pid').value=p.id;$('#pn').value=p.name;$('#pd').value=p.description;$('#pp').value=p.price_xcd;$('#pc').value=p.category;$('#pi').value=p.image_url||'';oldUrl=p.image_url||null;if(pending){URL.revokeObjectURL(pending.url);pending=null}$('#upmsg').textContent='';prev();$('#pa').checked=p.active;$('#ftitle').textContent='Edit product';$('#psave').textContent='Save changes';$('#psave').disabled=false;$('#pcancel').hidden=false;f.scrollIntoView()});
+  document.querySelectorAll('[data-d]').forEach(b=>b.onclick=async()=>{if(!confirm('Delete this product?'))return;const r=await sb.from('products').delete().eq('id',b.dataset.d);if(r.error)say(m,r.error.message);else{await dropOld(prods.find(x=>x.id===b.dataset.d).image_url);draw()}});
  };
  await draw();
 }

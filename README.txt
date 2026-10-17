@@ -1,4 +1,4 @@
-CARRIACOU CONNECT MARKETPLACE v0.2 (static preview + optional Supabase accounts)
+CARRIACOU CONNECT MARKETPLACE v0.3 (static preview + optional Supabase accounts)
 ===================================================
 ALL VENDORS AND PRODUCTS ARE SAMPLE DATA. NO REAL PAYMENTS.
 
@@ -86,7 +86,24 @@ Security notes
     and can't change their own tier. The tier product limit is enforced in the database (trigger),
     not just in the browser.
   - Orders/order_items are read-only stubs in v0.2 (checkout and Carriacou Connect Pay come later).
-  - Product images are plain URLs for now (Supabase Storage uploads can be added later).
+  - Product images are uploaded to Supabase Storage (v0.3, see below).
 
 Next steps (v0.3): checkout/orders without payment, order management, image uploads,
   tier upgrades, then Carriacou Connect Pay (test mode, after licensing review).
+
+
+=====================================================================
+v0.3: IMAGE UPLOADS + REDESIGN
+=====================================================================
+STORAGE SETUP (required once for image uploads)
+  11. Dashboard > SQL Editor > New query. Paste the whole of supabase/storage.sql and Run.
+      It creates the public bucket 'product-images' (2 MB limit, JPG/PNG/WebP only) and policies:
+      anyone can read; a signed-in vendor can add/replace/delete files only inside the folder
+      named with their own user id (<uid>/<file>). Safe to run again.
+  Uploads: vendor dashboard > product form > Choose image. The browser resizes to max 1200px and
+  compresses before uploading; preview, Replace and Remove are supported. The public URL is saved in
+  products.image_url. Replacing/removing/deleting a product also deletes the old file.
+  Without storage.sql the product save shows an upload error (the rest of the site still works).
+  Fonts: Google Fonts (Fraunces, Plus Jakarta Sans) with Georgia/system fallbacks.
+  Design: dark-sea and warm-sand palette, wave dividers, glass header, category tiles with inline SVG.
+  Nav: "Log in" text link and "Sign up" pill button.
