@@ -81,7 +81,7 @@ async consumer(){
  if(!c.user){location.href='login.html?next=dashboard-consumer.html';return}
  const {sb,user}=c,p=c.profile||{};
  const {stPill,fdate,fnice,payText,timeline}=window.CC;
- const SEL='*,vendors(name,location),order_items(*),order_status_history(*)';
+ const SEL='*,vendors(name,location,is_sample),order_items(*),order_status_history(*)';
  const oid=new URLSearchParams(location.search).get('order');
  const D=$('#dash');
  const detail=async id=>{
@@ -90,6 +90,7 @@ async consumer(){
   const o=r.data,items=(o.order_items||[]);
   D.innerHTML=`<p><a href="dashboard-consumer.html">&larr; All orders</a></p>
   <div class="odetail"><div class="ohead"><div><span class="kicker">Order</span><h2>${esc(o.order_number)}</h2><div class="muted">${esc(o.vendors&&o.vendors.name||'Vendor')} · placed ${esc(fdate(o.created_at))}</div></div>${stPill(o.status)}</div>
+  <p class="pdfrow"><button class="btn ghost" id="opdf" type="button">Download PDF</button></p><div id="opdfm" class="notice" hidden role="status"></div>
   <h3>Progress</h3>${timeline(o)}
   <h3>Items</h3><table><tr><th>Item</th><th>Price</th><th>Qty</th><th>Total</th></tr>${items.map(i=>`<tr><td>${esc(i.product_name)}</td><td>${xcd(i.unit_price_xcd)}</td><td>${i.quantity}</td><td>${xcd(i.line_total_xcd!=null?i.line_total_xcd:i.unit_price_xcd*i.quantity)}</td></tr>`).join('')}</table>
   <p class="otot">Subtotal ${xcd(o.subtotal_xcd)}${Number(o.delivery_fee_xcd)?` · Delivery ${xcd(o.delivery_fee_xcd)}`:''} · <b>Total ${xcd(o.total_xcd)} XCD</b></p>
@@ -98,6 +99,7 @@ async consumer(){
   <h3>Notes with ${esc(o.vendors&&o.vendors.name||'the vendor')}</h3><div class="notes-box" id="nbox"></div>
   ${o.status==='placed'?'<p><button class="btn alt" id="ocancel">Cancel this order</button><br><small class="muted">You can cancel until the vendor confirms it.</small></p>':''}<div id="om" class="notice" hidden></div></div>`;
   window.CC.notesWidget($('#nbox'),o,'consumer',{sb,user});
+  $('#opdf').onclick=()=>window.CC.orderPdf?window.CC.orderPdf.order(sb,o,{role:'consumer',vendorName:o.vendors&&o.vendors.name,vendorLocation:o.vendors&&o.vendors.location,sample:!!(o.vendors&&o.vendors.is_sample)},$('#opdf'),$('#opdfm')):say($('#opdfm'),'The PDF tool did not load. Refresh the page and try again.');
   const pb=$('#opay');if(pb)pb.onclick=async()=>{pb.disabled=true;const pr=await sb.rpc('pay_order',{p_order_id:o.id,p_idempotency_key:'ord-'+o.id});
    if(pr.error){say($('#opm'),/pay_order|schema cache|does not exist/i.test(pr.error.message)?'Wallets are not switched on yet (pay.sql has not been run in Supabase).':pr.error.message);pb.disabled=false;return}
    detail(o.id)};
@@ -168,11 +170,12 @@ async vendordash(){
    T.innerHTML=`<h3>Incoming orders</h3>${ord.error?'<div class="notice err">Could not load orders: '+esc(ord.error.message)+'. Has orders.sql been run in Supabase?</div>':''}
    <div class="ofilter" role="group" aria-label="Filter by status"><button data-f="" class="${ofilter===''?'on':''}">All (${olist.length})</button>${Object.keys(window.CC.SLABEL).map(k=>`<button data-f="${k}" class="${ofilter===k?'on':''}">${esc(window.CC.SLABEL[k])} (${cnt(k)})</button>`).join('')}</div>
    <div id="omsg" class="notice" hidden role="alert"></div>
+   ${olist.length?`<p class="pdfrow"><button class="btn ghost" id="vsumpdf" type="button">Export these ${list.length} order${list.length===1?'':'s'} (PDF)</button></p>`:''}
    ${list.length?list.map(o=>`<article class="vorder${o.status==='placed'?' isnew':''}" data-oid="${esc(o.id)}"><div class="ohead"><div><b>${esc(o.order_number)}</b> ${stPill(o.status)} ${window.CC.payPill(o,true)}${o.status==='placed'?' <span class="newtag">NEW</span>':''}<div class="muted">${esc(fdate(o.created_at))} · ${fnice(o)} · ${esc(payText(o))}</div></div><div class="price">${xcd(o.total_xcd)}</div></div>
     <ul class="oitems">${(o.order_items||[]).map(i=>`<li>${i.quantity} × ${esc(i.product_name)} <span class="muted">@ ${xcd(i.unit_price_xcd)}</span></li>`).join('')}</ul>
     <div class="info-grid"><div><b>Customer</b><br>${esc(o.contact_name||'(no name)')}<br><a href="tel:${esc((o.contact_phone||'').replace(/[^0-9+]/g,''))}">${esc(o.contact_phone||'')}</a></div>${o.fulfilment==='delivery'?`<div><b>Deliver to</b><br>${esc(o.delivery_address||'')}</div>`:'<div><b>Pickup</b><br>Customer will collect</div>'}</div>
     <details class="notes" data-oid="${esc(o.id)}"><summary>💬 Notes <span class="ncnt"></span><span class="nbx"></span></summary><div class="notes-box"></div></details>
-    <div class="oacts">${o.payment_status==='paid'?`<button class="btn ghost" data-refund="${esc(o.id)}">Refund (test)</button>`:''}${nextSteps(o).map(([to,lbl])=>`<button class="btn ${to==='cancelled'?'ghost':''}" data-o="${o.id}" data-to="${to}">${esc(lbl)}</button>`).join('')||'<span class="muted">No further actions.</span>'}</div></article>`).join(''):`<div class="empty"><div class="empty-ic" aria-hidden="true">📦</div><h3>${olist.length?'No orders with this status':'No orders yet'}</h3><p>${olist.length?'Try another filter.':'New orders from shoppers will appear here.'}</p></div>`}`;
+    <div class="oacts"><button class="btn ghost" data-pdf="${esc(o.id)}" type="button">Download PDF</button>${o.payment_status==='paid'?`<button class="btn ghost" data-refund="${esc(o.id)}">Refund (test)</button>`:''}${nextSteps(o).map(([to,lbl])=>`<button class="btn ${to==='cancelled'?'ghost':''}" data-o="${o.id}" data-to="${to}">${esc(lbl)}</button>`).join('')||'<span class="muted">No further actions.</span>'}</div></article>`).join(''):`<div class="empty"><div class="empty-ic" aria-hidden="true">📦</div><h3>${olist.length?'No orders with this status':'No orders yet'}</h3><p>${olist.length?'Try another filter.':'New orders from shoppers will appear here.'}</p></div>`}`;
    const badges=()=>{let tot=0;T.querySelectorAll('details.notes').forEach(d=>{const x=nsum[d.dataset.oid]||{total:0,unread:0};tot+=x.unread;
      d.querySelector('.ncnt').textContent=x.total?'('+x.total+')':'';d.querySelector('.nbx').innerHTML=window.CC.newBadge(x.unread);d.closest('.vorder').classList.toggle('hasnote',x.unread>0)});
     const all=Object.values(nsum).reduce((n,x)=>n+(x.unread||0),0);const tb=$('#tnb');if(tb)tb.innerHTML=all?' <b class="nbadge note" title="Orders with unread notes">💬'+all+'</b>':''};
@@ -186,6 +189,9 @@ async vendordash(){
     const rr=await sb.rpc('refund_order',{p_order_id:o.id});await draw();tab='orders';showTab('orders');
     if(rr.error)say($('#omsg'),rr.error.message)});
    T.querySelectorAll('[data-f]').forEach(b=>b.onclick=()=>{ofilter=b.dataset.f;drawOrders()});
+   const pdfMsg=T.querySelector('#omsg'),noPdf=()=>say(pdfMsg,'The PDF tool did not load. Refresh the page and try again.');
+   T.querySelectorAll('[data-pdf]').forEach(b=>b.onclick=()=>{const o=olist.find(x=>x.id===b.dataset.pdf);if(!o)return;if(!window.CC.orderPdf)return noPdf();window.CC.orderPdf.order(sb,o,{role:'vendor',vendorName:vendor.name,vendorLocation:vendor.location,sample:!!vendor.is_sample},b,pdfMsg)});
+   const vs=T.querySelector('#vsumpdf');if(vs)vs.onclick=()=>window.CC.orderPdf?window.CC.orderPdf.summary(list,{vendorName:vendor.name,sample:!!vendor.is_sample,filterLabel:ofilter?window.CC.SLABEL[ofilter]:''},vs,pdfMsg):noPdf();
    T.querySelectorAll('[data-to]').forEach(b=>b.onclick=async()=>{const to=b.dataset.to,o=olist.find(x=>x.id===b.dataset.o);
     if(to==='cancelled'&&!confirm('Cancel order '+o.order_number+'? The customer will see it as cancelled.'))return;
     T.querySelectorAll('button').forEach(x=>x.disabled=true);

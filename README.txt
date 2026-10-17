@@ -250,3 +250,21 @@ Testing done (outside the repo, /workspace/cconnect/test)
 
 Changed files: supabase/pay.sql (new), supabase/orders.sql (payment constraint + guard), wallet.html, pos.html, pay.js, vendor/qrcode.js (new),
   cc.js (nav Wallet link, test banner, money helpers, v0.6 text), app.js (checkout), auth.js (order pages, vendor refund + POS link), style.css, README.txt.
+
+
+=== v0.7: Order PDF export (no SQL changes, nothing to run in Supabase) ===
+  Customers: "Download PDF" on the order detail page.  Vendors: "Download PDF" on each order in the Orders tab, plus
+  "Export these N orders (PDF)" which makes a one-table summary of the orders currently shown (respects the status filter).
+  File names: CC-001001.pdf (order number); summary = CC-orders-YYYY-MM-DD.pdf.
+  PDF contents: header/logo text, order number, date, status, vendor, customer/contact, fulfilment, delivery address (or pickup place),
+    order instructions, items table (qty, unit price, line total), subtotal, delivery fee, total in XCD, payment method + status
+    (marked TEST MODE for wallet payments), status history, order notes thread, footer with generated time and page numbers, and a
+    "Sample/Test data" note for wallet-paid orders or SAMPLE vendors. Long item lists and notes continue across pages.
+  How: generated in the browser by jsPDF 4.2.1 (MIT) vendored in vendor/jspdf.umd.min.js (licence: vendor/jspdf-LICENSE.txt), loaded only when
+    a PDF is requested. No CDN, no server, nothing uploaded. orderpdf.js holds the layout; buttons are wired in auth.js.
+  Privacy: uses only rows the signed-in user can already read (orders, items, history, notes via Row Level Security). A vendor PDF includes
+    the customer's order contact name/phone and delivery address (as the Orders tab already shows); a customer PDF has their own.
+  Text is sanitized: control characters removed, characters outside the standard PDF font set (e.g. emoji, CJK) print as "?". No HTML is
+    ever interpreted.
+  Tests: test/pdf_flow.js (headless Chrome 390 and 1280, mocked Supabase: downloads, pdftotext checks, 6-page long order, no JS errors).
+  Changed files: orderpdf.js (new), vendor/jspdf.umd.min.js + jspdf-LICENSE.txt (new), auth.js, dashboard-consumer.html, dashboard-vendor.html, style.css, README.txt.
