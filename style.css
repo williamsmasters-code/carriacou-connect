@@ -22,3 +22,7 @@ nav{display:flex;gap:1rem}main{max-width:1100px;margin:auto;padding:1rem}
 table{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;overflow:hidden}td,th{padding:.5rem;text-align:left;border-bottom:1px solid #e2e8f0}
 td input{width:4rem;padding:.3rem}.notice{background:#fff;border-left:5px solid var(--coral);padding:1rem;border-radius:8px;margin-top:1rem}
 footer{text-align:center;color:#64748b;font-size:.8rem;padding:2rem 1rem}
+.formcard{max-width:460px}label{display:block;margin:.6rem 0;font-weight:600}label input:not([type=checkbox]):not([type=radio]),label textarea,label select{display:block;width:100%;padding:.55rem;margin-top:.2rem;border:1px solid #94a3b8;border-radius:8px;font:inherit}
+label.chk{font-weight:400}fieldset{border:1px solid #cbd5e1;border-radius:8px;margin:.8rem 0}[hidden]{display:none!important}
+.notice{background:#fff;border-left:4px solid var(--sun);padding:.7rem 1rem;margin:.8rem 0;border-radius:6px}.notice.ok{border-color:#15803d}.notice.err{border-color:#b91c1c;color:#7f1d1d}.err-text{color:#b91c1c}
+.meter{display:block;max-width:320px;height:10px;background:#cbd5e1;border-radius:6px;margin-top:.3rem;overflow:hidden}.meter span{display:block;height:100%;background:var(--sea)}

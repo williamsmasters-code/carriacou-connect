@@ -20,8 +20,8 @@ const art=[
 const t=p.name.replace('SAMPLE ','');
 const s=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300"><rect width="400" height="300" fill="${c}"/>${art}<text x="200" y="280" font-family="sans-serif" font-size="20" font-weight="700" fill="#fff" text-anchor="middle">${esc(t).slice(0,28)}</text><text x="10" y="20" font-family="sans-serif" font-size="12" fill="#fff">SAMPLE</text></svg>`;
 return'data:image/svg+xml;utf8,'+encodeURIComponent(s)}
-const img=(p,v=0,cls='ph')=>`<img class="${cls}" alt="${esc(p.name)} (placeholder image ${v+1})" src="${svg(p,v)}" loading="lazy">`;
-const vendor=id=>DATA.vendors.find(v=>v.id===id);
+const img=(p,v=0,cls='ph')=>p.imageUrl&&v===0?`<img class="${cls}" alt="${esc(p.name)}" src="${esc(p.imageUrl)}" loading="lazy">`:`<img class="${cls}" alt="${esc(p.name)} (placeholder image ${v+1})" src="${svg(p,v)}" loading="lazy">`;
+const vendor=id=>DATA.vendors.find(v=>v.id===id)||{id:'',name:'Unknown vendor',tier:'Lite',location:'',about:''};
 const tierBadge=t=>`<span class="badge t-${t.replace('+','')}">${esc(t)}</span>`;
 const card=p=>`<a class="card" href="product.html?id=${p.id}">${img(p)}<div class="body"><h3>${esc(p.name)}</h3><div class="muted">${esc(vendor(p.vendorId).name)}</div><div class="price">${xcd(p.price)} XCD</div></div></a>`;
 // ---- pages ----
@@ -45,7 +45,7 @@ document.title=v.name+' – Carriacou Connect';
 const ps=DATA.products.filter(p=>p.vendorId===v.id);
 $('#v').innerHTML=`<h1>${esc(v.name)} ${tierBadge(v.tier)}</h1><p>${esc(v.about)}<br><span class="muted">${esc(v.location)}, Carriacou · ${esc(v.tier)} plan · ${ps.length} of ${DATA.tiers[v.tier]??'unlimited'} product slots used</span></p><div class="grid">${ps.map(card).join('')}</div>`},
 product(){const p=DATA.products.find(x=>x.id===qs.get('id'));if(!p){$('#p').innerHTML='<p>Product not found.</p>';return}
-document.title=p.name+' – Carriacou Connect';const v=vendor(p.vendorId),cat=DATA.categories.find(c=>c.id===p.category);
+document.title=p.name+' – Carriacou Connect';const v=vendor(p.vendorId),cat=DATA.categories.find(c=>c.id===p.category)||DATA.categories[0];
 $('#p').innerHTML=`<div class="detail"><div><div id="big">${img(p,0,'main-img')}</div><div class="thumbs">${[0,1,2].map(i=>img(p,i,i?'':'on')).join('')}</div></div>
 <div><h1>${esc(p.name)}</h1><p class="price" style="font-size:1.5rem">${xcd(p.price)} XCD</p><p>${esc(p.description)}</p>
 <p class="muted">Category: <a href="browse.html?cat=${cat.id}">${esc(cat.name)}</a><br>Sold by <a href="vendor.html?id=${v.id}">${esc(v.name)}</a> ${tierBadge(v.tier)}</p>
@@ -60,8 +60,21 @@ document.querySelectorAll('input[data-id]').forEach(e=>e.onchange=()=>{const c=g
 document.querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>{const c=getCart();delete c[b.dataset.rm];saveCart(c);draw()});
 $('#co').onclick=()=>{$('#conote').innerHTML='<div class="notice"><strong>Carriacou Connect Pay is coming soon.</strong><br>Checkout is a placeholder in this preview. No payment is taken and no order is placed.</div>'}};draw()}
 };
-function layout(){document.body.insertAdjacentHTML('afterbegin',`<div class="banner">Preview v0.1 – all vendors and products are SAMPLE data. No real payments.</div><header><div class="row"><a class="logo" href="index.html">Carriacou <span>Connect</span> Marketplace</a><nav><a href="browse.html">Browse</a><a href="cart.html">Cart (<span id="cartCount">0</span>)</a></nav></div></header>`);
-document.body.insertAdjacentHTML('beforeend','<footer>Carriacou Connect® by Williams’ Tech · Marketplace v0.1 preview</footer>');badge()}
-layout();
-fetch('products.json').then(r=>r.json()).then(d=>{DATA=d;pages[document.body.dataset.page]()}).catch(e=>{console.error(e);document.querySelector('main').innerHTML='<p>Could not load data.</p>'});
+badge();
+const jsonP=fetch('products.json').then(r=>r.json());
+async function loadData(){
+const d=await jsonP;
+if(!window.CC.configured)return d;
+try{
+const sb=await window.CC.client();if(!sb)return d;
+const [vr,pr]=await Promise.all([sb.from('vendors').select('id,name,description,location,tier').order('name'),sb.from('products').select('id,vendor_id,name,description,price_xcd,category,image_url,featured,created_at').eq('active',true).order('created_at',{ascending:false})]);
+if(vr.error||pr.error)throw (vr.error||pr.error);
+const cc=Object.fromEntries(d.categories.map(c=>[c.id,c.color]));
+const L=window.CC.TIER_LABEL;
+d.vendors=vr.data.map(v=>({id:v.id,name:v.name,tier:L[v.tier]||'Lite',location:v.location||'',about:v.description||''}));
+d.products=pr.data.map(p=>({id:p.id,vendorId:p.vendor_id,category:p.category,name:p.name,price:Number(p.price_xcd),currency:'XCD',description:p.description||'',featured:!!p.featured,color:cc[p.category]||'#0e7490',imageUrl:/^https?:\/\//i.test(p.image_url||'')?p.image_url:null}));
+d.live=true;
+}catch(e){console.warn('Supabase unavailable, using sample data:',e&&e.message||e)}
+return d}
+loadData().then(d=>{DATA=d;pages[document.body.dataset.page]()}).catch(e=>{console.error(e);document.querySelector('main').innerHTML='<p>Could not load data.</p>'});
 })();
