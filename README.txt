@@ -1,4 +1,4 @@
-CARRIACOU CONNECT MARKETPLACE v0.6 (static preview + optional Supabase accounts + TEST-MODE wallets)
+CARRIACOU CONNECT MARKETPLACE v0.8 (static preview + optional Supabase accounts + TEST-MODE wallets + vendor analytics)
 ===================================================
 ALL VENDORS AND PRODUCTS ARE SAMPLE DATA. NO REAL PAYMENTS.
 
@@ -268,3 +268,40 @@ Changed files: supabase/pay.sql (new), supabase/orders.sql (payment constraint +
     ever interpreted.
   Tests: test/pdf_flow.js (headless Chrome 390 and 1280, mocked Supabase: downloads, pdftotext checks, 6-page long order, no JS errors).
   Changed files: orderpdf.js (new), vendor/jspdf.umd.min.js + jspdf-LICENSE.txt (new), auth.js, dashboard-consumer.html, dashboard-vendor.html, style.css, README.txt.
+
+
+=== v0.8: BASIC vendor analytics (every plan) + optional stock tracking ===
+SQL TO RUN (Supabase > SQL Editor > New query, paste the whole file, Run; safe to re-run):
+    supabase/analytics.sql
+  Run order on a fresh project:  schema.sql > seed.sql > storage.sql > orders.sql > order_notes.sql > pay.sql > analytics.sql
+  Existing project (v0.7): just run analytics.sql. Re-running orders.sql / pay.sql afterwards is safe (they never touch the stock
+  triggers or analytics functions; place_order is unchanged). The website works without it, except the Analytics tab shows
+  "Analytics is not switched on yet" and saving a product with a stock quantity is refused until the SQL has been run.
+
+Vendor dashboard > new Analytics tab (analytics.js)
+  Date range: Today / This week (Mon-Sun) / This month / Last 30 days / Custom. Days are Grenada days (America/Grenada, UTC-4).
+  KPI cards: orders, revenue, average order, refunded, cancelled. Daily revenue bar chart (inline SVG, weekly bars over 92 days, no libraries).
+  Best sellers and slowest sellers (active products with no sales count as slowest). Payment methods (pickup / delivery / wallet) with share,
+  plus refunds. Wallet card (TEST MODE play money): balance, money awaiting payment, wallet-paid orders still open. Low-stock alerts with an
+  "Update stock" shortcut. Transaction history (orders + wallet ledger rows) with Export CSV.
+  Definitions (the three groups never overlap): refunded = payment_status 'refunded'; cancelled = cancelled and not refunded (excluded from
+  sales); sales = everything else (placed to completed). Revenue = order totals of sales. Average = revenue / sales orders.
+  CSV: UTF-8 with BOM (opens in Excel), RFC-4180 quoting, text cells starting with = + - @ tab or CR get a leading ' (formula-injection guard).
+Stock tracking: products.stock_qty (blank/NULL = not tracked) and low_stock_threshold (default 5), in the product form.
+  Placing an order takes stock out in the same database transaction; not enough stock rejects the whole order with a clear message
+  (checked under 20 concurrent buyers: never oversold, no deadlocks). Cancelling an order (customer or vendor, paid or not) gives back exactly
+  what was taken, once. A wallet refund WITHOUT a cancel does not restore stock (the goods were handed over). Orders placed before
+  tracking was switched on never add stock back. POS charges (pos.html) are free-amount charges, not product orders, so they do not touch stock.
+Database (supabase/analytics.sql): columns products.stock_qty, products.low_stock_threshold, order_items.stock_deducted; statement-level trigger
+  on order_items (take stock; locks products in id order with FOR NO KEY UPDATE) and a trigger on orders (give back on cancel);
+  functions vendor_sales_summary(from,to), vendor_top_products(from,to,limit), vendor_payment_breakdown(from,to), vendor_low_stock(),
+  vendor_wallet_overview(), vendor_transactions(from,to,limit). All SECURITY INVOKER (Row Level Security applies) and additionally filtered to
+  businesses owned by the caller (auth.uid()), so even an admin sees only their own business here. Logged-in only. Every UPDATE has a WHERE (pg-safeupdate).
+Tests (outside the repo, /workspace/cconnect/test): pgan.mjs (75 checks: v0.7 -> v0.8 upgrade with existing orders, all SQL twice and in re-run orders,
+  hand-computed totals, Grenada midnight edge cases, session-timezone independence, vendor isolation, anon denied, stock race, deadlock check,
+  cancel/refund/multi-vendor rollback), pgfresh.mjs (fresh install, whole sequence twice), lint_safeupdate.js PASS,
+  analytics_flow.js (headless Chrome 390 + 1280, mocked Supabase, CSV injection, stock form, empty/sample/missing-SQL states) plus the existing
+  flows.js, pay_flow.js, notes_flow.js, pdf_flow.js all pass. Screenshots: ../shots/analytics_*.png, products_stock_*.png.
+  NOT yet run against the real Supabase project.
+Changed files: supabase/analytics.sql (new), analytics.js (new), auth.js (tab, stock field and column), dashboard-vendor.html, style.css, cc.js (version text), README.txt.
+Not in this step: stock is not shown to shoppers yet (an out-of-stock item can be put in a cart; checkout then explains it); Standard/Advanced/Premium analytics.

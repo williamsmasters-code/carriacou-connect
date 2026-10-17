@@ -134,7 +134,8 @@ async vendordash(){
  if(!vendor){
   $('#dash').innerHTML=`<h2>Create your business profile</h2><form id="bf">${vendorFields}<button class="btn">Create business (Lite plan)</button></form><div id="bm" class="notice" hidden></div>`;
   $('#bf').onsubmit=async e=>{e.preventDefault();const r=await createVendor(sb,user,{name:$('#bname').value.trim(),description:$('#bdesc').value.trim(),location:$('#bloc').value.trim()});if(r.error)say($('#bm'),r.error.message);else location.reload()};return}
- let tab=location.hash==='#orders'?'orders':'products',ofilter='',nsum={},openN=new Set(),nTimer=null;
+ let tab=location.hash==='#orders'?'orders':location.hash==='#analytics'?'analytics':'products',ofilter='',nsum={},openN=new Set(),nTimer=null;
+ const stockCell=p=>{if(p.stock_qty==null)return '<span class="muted">Not tracked</span>';const th=p.low_stock_threshold==null?5:p.low_stock_threshold;return p.stock_qty===0?'<span class="stk out">Out of stock</span>':p.stock_qty<=th?'<span class="stk low">'+p.stock_qty+' left (low)</span>':'<span class="stk">'+p.stock_qty+' in stock</span>'};
  const draw=async()=>{
   const pr=await sb.from('products').select('*').eq('vendor_id',vendor.id).order('created_at',{ascending:false});
   const prods=pr.data||[],lim=TIER_LIMIT[vendor.tier],used=prods.length,full=lim!=null&&used>=lim;
@@ -146,10 +147,11 @@ async vendordash(){
   <p class="muted">${esc(vendor.location||'')} ${vendor.description?'· '+esc(vendor.description):''}</p>
   <p class="payquick"><a class="btn alt" href="wallet.html">Business wallet (test)</a> <a class="btn ghost" href="pos.html">POS: charge a customer (test)</a></p>
   <p><strong>Products: ${used} of ${lim==null?'unlimited':lim}</strong>${lim?`<span class="meter"><span style="width:${pct}%"></span></span>`:''}${full?'<br><span class="err-text">Limit reached. Delete a product or upgrade your plan (upgrades coming soon).</span>':''}</p>
-  <div class="dtabs" role="tablist"><button data-t="products" role="tab">Products</button><button data-t="orders" role="tab">Orders${newN?` <b class="nbadge" title="New orders">${newN}</b>`:''}<span id="tnb"></span></button></div>
+  <div class="dtabs" role="tablist"><button data-t="products" role="tab">Products</button><button data-t="orders" role="tab">Orders${newN?` <b class="nbadge" title="New orders">${newN}</b>`:''}<span id="tnb"></span></button><button data-t="analytics" role="tab">Analytics</button></div>
   <div id="tab-products"><h3 id="ftitle">Add a product</h3>
   <form id="pf"><input type="hidden" id="pid"><label>Name<input id="pn" maxlength="120" required></label><label>Description<textarea id="pd" rows="3" maxlength="1000"></textarea></label>
   <label>Price (EC$)<input id="pp" type="number" min="0" step="0.01" required></label>
+  <div class="stockrow"><label>Stock quantity <small>(optional, leave blank to not track)</small><input id="ps" type="number" min="0" max="1000000" step="1" inputmode="numeric" placeholder="e.g. 24"></label><label>Low-stock alert at or below<input id="pt" type="number" min="0" max="1000000" step="1" inputmode="numeric" value="5"></label></div>
   <label>Category<select id="pc">${Object.entries(CATS).map(([k,v])=>`<option value="${k}">${esc(v)}</option>`).join('')}</select></label>
   <div class="uploader"><span class="lbl">Product image <small>(JPG, PNG or WebP, up to 2 MB)</small></span>
    <div class="up-row"><div class="up-prev" id="upprev" aria-live="polite"><span class="muted">No image</span></div>
@@ -158,10 +160,13 @@ async vendordash(){
    <input type="hidden" id="pi"></div>
   <label class="chk"><input type="checkbox" id="pa" checked> Active (visible to shoppers)</label>
   <button class="btn" id="psave">Add product</button> <button type="button" class="btn alt" id="pcancel" hidden>Cancel edit</button></form><div id="pm" class="notice" hidden></div>
-  <h3>Your products</h3>${prods.length?`<table><tr><th>Product</th><th>Price</th><th>Status</th><th></th></tr>${prods.map(p=>`<tr><td>${p.image_url?`<img class="thumb" src="${esc(p.image_url)}" alt="">`:''}${esc(p.name)}<div class="muted">${esc(CATS[p.category]||p.category)}</div></td><td>${xcd(p.price_xcd)}</td><td>${p.active?'Active':'Hidden'}</td><td><button class="btn alt" data-e="${p.id}">Edit</button> <button class="btn" data-d="${p.id}">Delete</button></td></tr>`).join('')}</table>`:'<p>No products yet.</p>'}
-  </div><div id="tab-orders" hidden></div>`;
+  <h3>Your products</h3>${prods.length?`<table><tr><th>Product</th><th>Price</th><th>Stock</th><th>Status</th><th></th></tr>${prods.map(p=>`<tr><td>${p.image_url?`<img class="thumb" src="${esc(p.image_url)}" alt="">`:''}${esc(p.name)}<div class="muted">${esc(CATS[p.category]||p.category)}</div></td><td>${xcd(p.price_xcd)}</td><td>${stockCell(p)}</td><td>${p.active?'Active':'Hidden'}</td><td><button class="btn alt" data-e="${p.id}">Edit</button> <button class="btn" data-d="${p.id}">Delete</button></td></tr>`).join('')}</table>`:'<p>No products yet.</p>'}
+  </div><div id="tab-orders" hidden></div><div id="tab-analytics" hidden></div>`;
   const f=$('#pf'),m=$('#pm');
-  const showTab=t=>{tab=t;history.replaceState(null,'',t==='orders'?'#orders':location.pathname+location.search);document.querySelectorAll('.dtabs button').forEach(x=>x.classList.toggle('on',x.dataset.t===t));$('#tab-products').hidden=t!=='products';$('#tab-orders').hidden=t!=='orders'};
+  const goEdit=id=>{showTab('products');const b=document.querySelector('[data-e="'+id+'"]');if(b)b.click()};
+  let anDone=false;
+  const showTab=t=>{tab=t;history.replaceState(null,'',t==='orders'?'#orders':t==='analytics'?'#analytics':location.pathname+location.search);document.querySelectorAll('.dtabs button').forEach(x=>x.classList.toggle('on',x.dataset.t===t));$('#tab-products').hidden=t!=='products';$('#tab-orders').hidden=t!=='orders';$('#tab-analytics').hidden=t!=='analytics';
+   if(t==='analytics'&&!anDone){anDone=true;if(window.CC.analytics)window.CC.analytics.mount($('#tab-analytics'),{sb,vendor,onEdit:goEdit});else $('#tab-analytics').innerHTML='<div class="notice err">Analytics did not load. Refresh the page.</div>'}};
   document.querySelectorAll('.dtabs button').forEach(b=>b.onclick=()=>showTab(b.dataset.t));
   const {stPill,fdate,fnice,payText,nextSteps}=window.CC;
   const drawOrders=()=>{const T=$('#tab-orders');
@@ -219,7 +224,7 @@ async vendordash(){
    if(r.error)throw r.error;return sb.storage.from('product-images').getPublicUrl(path).data.publicUrl}
   const ourPath=u=>{const mk='/product-images/';const i=(u||'').indexOf(mk);return i>0&&u.indexOf('/storage/v1/object/public')>0?decodeURIComponent(u.slice(i+mk.length).split('?')[0]):null};
   async function dropOld(u){const p=ourPath(u);if(p&&p.startsWith(user.id+'/')){try{await sb.storage.from('product-images').remove([p])}catch(e){}}}
-  const reset=()=>{f.reset();if(pending)URL.revokeObjectURL(pending.url);pending=null;oldUrl=null;$('#pi').value='';$('#upmsg').textContent='';prev();$('#pid').value='';$('#ftitle').textContent='Add a product';$('#psave').textContent='Add product';$('#pcancel').hidden=true;$('#pa').checked=true};
+  const reset=()=>{f.reset();if(pending)URL.revokeObjectURL(pending.url);pending=null;oldUrl=null;$('#pi').value='';$('#ps').value='';$('#pt').value='5';$('#upmsg').textContent='';prev();$('#pid').value='';$('#ftitle').textContent='Add a product';$('#psave').textContent='Add product';$('#pcancel').hidden=true;$('#pa').checked=true};
   prev();
   if(full){$('#psave').disabled=true}
   $('#pcancel').onclick=()=>{reset();$('#psave').disabled=full};
@@ -227,13 +232,18 @@ async vendordash(){
    try{let url=$('#pi').value.trim()||null;
     if(pending){say(m,'Uploading image…',true);url=await uploadPending()}
     const row={name:$('#pn').value.trim(),description:$('#pd').value.trim(),price_xcd:parseFloat($('#pp').value),category:$('#pc').value,image_url:url,active:$('#pa').checked};
-    const id=$('#pid').value;
+    const id=$('#pid').value,sv=$('#ps').value.trim(),editing=id?prods.find(x=>x.id===id):null;
+    if(sv!==''){const n=Number(sv),th=$('#pt').value.trim()===''?5:Number($('#pt').value);
+     if(!Number.isInteger(n)||n<0||n>1000000)throw new Error('Stock quantity must be a whole number, 0 or more.');
+     if(!Number.isInteger(th)||th<0||th>1000000)throw new Error('The low-stock alert level must be a whole number, 0 or more.');
+     row.stock_qty=n;row.low_stock_threshold=th}
+    else if(editing&&editing.stock_qty!=null)row.stock_qty=null;
     const r=id?await sb.from('products').update(row).eq('id',id):await sb.from('products').insert({...row,vendor_id:vendor.id});
-    if(r.error){if(pending&&url)await dropOld(url);throw r.error}
+    if(r.error){if(pending&&url)await dropOld(url);if(/stock_qty|low_stock/.test(r.error.message||''))throw new Error('Stock tracking needs supabase/analytics.sql to be run in Supabase first (see README.txt). Clear the stock fields to save without it.');throw r.error}
     if(oldUrl&&oldUrl!==url)await dropOld(oldUrl);
     await draw()}
    catch(err){say(m,(err&&err.message)||'Could not save.');sv.disabled=false}};
-  document.querySelectorAll('[data-e]').forEach(b=>b.onclick=()=>{const p=prods.find(x=>x.id===b.dataset.e);$('#pid').value=p.id;$('#pn').value=p.name;$('#pd').value=p.description;$('#pp').value=p.price_xcd;$('#pc').value=p.category;$('#pi').value=p.image_url||'';oldUrl=p.image_url||null;if(pending){URL.revokeObjectURL(pending.url);pending=null}$('#upmsg').textContent='';prev();$('#pa').checked=p.active;$('#ftitle').textContent='Edit product';$('#psave').textContent='Save changes';$('#psave').disabled=false;$('#pcancel').hidden=false;f.scrollIntoView()});
+  document.querySelectorAll('[data-e]').forEach(b=>b.onclick=()=>{const p=prods.find(x=>x.id===b.dataset.e);$('#pid').value=p.id;$('#pn').value=p.name;$('#pd').value=p.description;$('#pp').value=p.price_xcd;$('#pc').value=p.category;$('#ps').value=p.stock_qty==null?'':p.stock_qty;$('#pt').value=p.low_stock_threshold==null?5:p.low_stock_threshold;$('#pi').value=p.image_url||'';oldUrl=p.image_url||null;if(pending){URL.revokeObjectURL(pending.url);pending=null}$('#upmsg').textContent='';prev();$('#pa').checked=p.active;$('#ftitle').textContent='Edit product';$('#psave').textContent='Save changes';$('#psave').disabled=false;$('#pcancel').hidden=false;f.scrollIntoView()});
   document.querySelectorAll('[data-d]').forEach(b=>b.onclick=async()=>{if(!confirm('Delete this product?'))return;const r=await sb.from('products').delete().eq('id',b.dataset.d);if(r.error)say(m,r.error.message);else{await dropOld(prods.find(x=>x.id===b.dataset.d).image_url);draw()}});
  };
  await draw();
