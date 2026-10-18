@@ -1,4 +1,4 @@
-CARRIACOU CONNECT MARKETPLACE v1.2 (static preview + optional Supabase accounts + TEST-MODE wallets + vendor analytics + plans + team accounts + multi-photo products + bulk upload + Standard analytics + platform analytics)
+CARRIACOU CONNECT MARKETPLACE v1.3 (static preview + optional Supabase accounts + TEST-MODE wallets + vendor analytics + plans + team accounts + multi-photo products + bulk upload + Standard analytics + platform analytics)
 ===================================================
 ALL VENDORS AND PRODUCTS ARE SAMPLE DATA. NO REAL PAYMENTS.
 
@@ -504,3 +504,51 @@ Tests (supabase/*.sql on local Postgres + headless Chrome; see test/ folder)
   test/pgpa_fresh.mjs  fresh install x2, each earlier file re-run then platform_analytics, empty database
   test/pa_flow.js      Chrome 390 and 1280 px with a mock: tabs, charts, CSV, settings, refusal for non-admins, no JS errors
   test/lint_safeupdate.js  every UPDATE/DELETE has a WHERE
+
+
+=====================================================================
+v1.3: ADVANCED (Pro and Enterprise) and PREMIUM (Enterprise only) vendor analytics
+=====================================================================
+SQL TO RUN (Supabase > SQL Editor > New query, paste the whole file, Run; safe to re-run):
+  supabase/advanced_analytics.sql   (run it LAST)
+Full run order: schema, seed, storage, orders, order_notes, pay, analytics, staff, photos, standard_analytics, platform_analytics, advanced_analytics.
+Until it is run, the dashboard shows "Advanced analytics is not switched on yet" instead of the reports. Refresh the browser afterwards.
+
+Who can see what (enforced in the database, not only in the browser)
+  Advanced: Pro and Enterprise plans.   Premium: Enterprise plan only.
+  Owner and sub-admin can read the reports (staff cannot). Only the owner can add or delete expenses and save the dashboard layout.
+  The plan comes from tier_limits.rank (Pro = 4, Enterprise = 5). A lower plan, a non-member, staff, a customer or a logged-out visitor gets an error
+  ("PLAN_REQUIRED..." for plan, a permission error otherwise). The dashboard shows a locked list with an Upgrade button instead.
+  This follows the plan in Analytics_Tier_Plan.txt, but with the tiers, not an add-on: there is no billing, so a paid add-on could not be sold yet.
+
+Advanced reports (Analytics tab, below the Standard sections)
+  Sales forecast and cash flow   weekday averages from the last 12 weeks, next 7 and 28 days, low/high range. Needs 14 days of history. A simple ESTIMATE.
+  Profit and loss                by month: revenue, discounts, cost of goods (cost price saved on each order line), expenses, net profit. CSV + PDF.
+  Expense tracking               owner enters rent, wages, utilities, transport, marketing, fees, equipment, other. Do NOT enter stock purchases (already counted as cost of goods).
+  Inventory                      stock value at cost and selling price, turnover, days of stock, reorder suggestion (delivery days + days to keep). CSV + reorder PDF.
+  Customer lifetime value        spend per customer, segments (champion, loyal, new, one-time, at risk, lapsed), phone-origin local/overseas as a PROXY only.
+  Accounting export              QuickBooks, Xero and a generic journal CSV (layouts not tested against the live software).
+Premium reports (Enterprise)
+  Benchmarking                   median and middle-half range of similar businesses (same category). Needs at least 5 peers, so it may say "not enough" at first. Never shows another business.
+  Pricing and discount insights  rules-based: raise price / discount / hold, plus a before-and-during check of each campaign. Not price elasticity.
+  Fraud monitor                  refund rate, repeat cancellers, big first orders, shared phones, order bursts. Flags are prompts to check, not proof. No chargebacks exist (play money).
+  Credit-readiness score         100-point checklist (history, steady sales, growth, clean orders, repeat customers, expense records, costs known, licence). NOT a real credit score.
+  Data export                    all orders and order lines as CSV.
+  Custom dashboard               choose, hide and re-order the 11 report cards (saved per business, owner only).
+All CSV files are formula-injection safe (cells starting with = + - @ are prefixed with '). Dates and months use Grenada time (UTC-4). Charts are inline SVG.
+
+NOT built (the data or infrastructure does not support it)
+  Scheduled email reports (no email sending or scheduler), multi-location comparison (no locations in the data; staff comparison already exists in Standard),
+  price elasticity (too little price variation), chargebacks (no card payments), API access (no API keys), buying the add-on (no billing).
+
+Database (supabase/advanced_analytics.sql)
+  Tables: vendor_expenses (RLS, 20,000-row cap, date and text checks), vendor_dashboard_prefs (Enterprise only, validated widget list).
+  Functions (all SECURITY DEFINER, search_path pinned, REVOKE from public/anon, GRANT to authenticated): vendor_forecast, vendor_pnl, vendor_inventory_report,
+  vendor_clv_report, vendor_accounting_export, vendor_benchmark, vendor_pricing_insights, vendor_fraud_monitor, vendor_credit_readiness, vendor_data_export.
+  No existing function is redefined, so re-running earlier files does not undo it. Every UPDATE/DELETE has a WHERE (pg-safeupdate). Ends with notify pgrst, 'reload schema'.
+
+Changed files: supabase/advanced_analytics.sql (new), analytics_adv.js (new), analytics.js, analytics_std.js, orderpdf.js (report builder), dashboard-vendor.html, style.css.
+Tests (outside the site folder, test/):
+  test/pgadv.mjs        289 checks, upgrade or fresh (MODE=fresh): tier x function gating matrix, non-member/staff/customer/anon denied, hand-verified numbers, Grenada midnight edges
+  test/pgadv_fresh.mjs  fresh install, all earlier files re-run then advanced_analytics, and advanced_analytics twice
+  test/adv_flow.js      Chrome 390 and 1280 px with test/mock_adv.js: locked states, Pro vs Enterprise cards, expenses, CSV injection, PDFs, customize, no JS errors

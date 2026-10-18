@@ -176,6 +176,26 @@ async function buildTax(R,ex){
  return {doc:d,filename:fname('CC-tax-summary-'+ex.from+'_to_'+ex.to)};
 }
 
+
+// ---- generic report PDF (v1.3 Advanced/Premium analytics): spec = {title, sub, vendorName, period, warn, kvs:[[k,v]], sections:[{h, para, table:{cols,rows,size}}], foot} ----
+async function buildReport(spec,ex){
+ const JsPDF=await lib();
+ const P=Doc(JsPDF,spec.title);const {d,M,CW}=P;
+ header(P,spec.sub||spec.title,null);
+ P.font(14,'bold',P.NAVY);d.text(clean(ex.vendorName||'Business'),M,P.S.y+8);P.S.y+=20;
+ if(spec.period){P.font(9,'normal',P.GREY);d.text(clean(spec.period),M,P.S.y+8);P.S.y+=16}
+ if(spec.warn){P.para(spec.warn,M,CW,8.5,'bold',[180,90,0]);P.S.y+=4}
+ if((spec.kvs||[]).length){table(P,[{t:'Item',w:.55},{t:'Value',w:.45,align:'right'}],spec.kvs.map(r=>[String(r[0]),String(r[1])]))}
+ (spec.sections||[]).forEach(sc=>{
+  P.h2(sc.h);
+  if(sc.para)P.para(sc.para,M,CW,9,'normal',P.GREY);
+  if(sc.table){const rows=(sc.table.rows||[]).slice(0,600);table(P,sc.table.cols,rows.length?rows:[sc.table.cols.map((_,i)=>i===0?'(nothing to show)':'')],{size:sc.table.size||9});
+   if((sc.table.rows||[]).length>rows.length)P.para('Showing the first '+rows.length+' rows; use the CSV for all.',M,CW,8,'italic',P.GREY)}});
+ if(spec.foot){P.S.y+=6;P.para(spec.foot,M,CW,8,'italic',P.GREY)}
+ footers(P,!!ex.test);
+ return {doc:d,filename:fname(spec.file||'CC-report')};
+}
+
 // fetch the extra rows the current user is already allowed to read
 async function extras(sb,o){
  const ex={};
@@ -194,6 +214,7 @@ CC.orderPdf={
  order:async(sb,o,base,btn,msgEl)=>run(async()=>buildOrder(o,Object.assign({},base,await extras(sb,o))),btn,msgEl),
  summary:async(list,base,btn,msgEl)=>run(()=>buildSummary(list,base),btn,msgEl),
  tax:async(rep,base,btn,msgEl)=>run(()=>buildTax(rep,base),btn,msgEl),
+ report:async(spec,base,btn,msgEl)=>run(()=>buildReport(spec,base||{}),btn,msgEl),
  clean
 };
 })();

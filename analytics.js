@@ -115,6 +115,7 @@ async function mount(el,o){
    ${X.truncated?`<p class="muted">Showing the newest ${X.limit} entries. The CSV has the same entries; choose a shorter date range to see older ones.</p>`:''}`:'<div class="empty small"><div class="empty-ic" aria-hidden="true">🧾</div><p>No orders or wallet activity in this period.</p></div>'}</div>`;
   wire();
   {const sx=document.createElement('div');sx.id='anstd';box.appendChild(sx);if(CC.analyticsStd)CC.analyticsStd.mount(sx,{sb,vendor,plan:o.plan,isOwner:o.isOwner,perms:o.perms||[],from:state.from,to:state.to,onUpgrade:o.onUpgrade,onEdit});else sx.innerHTML='<div class="notice err">Standard analytics did not load. Refresh the page.</div>'}
+  {const ax=document.createElement('div');ax.id='anadv';box.appendChild(ax);if(CC.analyticsAdv)CC.analyticsAdv.mount(ax,{sb,vendor,plan:o.plan,isOwner:o.isOwner,perms:o.perms||[],from:state.from,to:state.to,onUpgrade:o.onUpgrade});else ax.innerHTML='<div class="notice err">Advanced analytics did not load. Refresh the page.</div>'}
   const cb=box.querySelector('#ancsv');if(cb)cb.onclick=()=>download('CC-transactions-'+state.from+'_to_'+state.to+'.csv',toCsv(rows));
   box.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>onEdit&&onEdit(b.dataset.edit));
  }

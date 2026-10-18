@@ -194,5 +194,5 @@ async function mount(el,o){
  }));
  await Promise.all(jobs);
 }
-CC.analyticsStd={mount};
+CC.analyticsStd={mount,bars,csv};
 })();
