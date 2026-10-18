@@ -1,4 +1,4 @@
-CARRIACOU CONNECT MARKETPLACE v1.4 (static preview + optional Supabase accounts + TEST-MODE wallets + vendor analytics + plans + team accounts + multi-photo products + bulk upload + Standard analytics + platform analytics + advanced/premium analytics + admin customer management)
+CARRIACOU CONNECT MARKETPLACE v1.5 (static preview + optional Supabase accounts + TEST-MODE wallets + vendor analytics + plans + team accounts + multi-photo products + bulk upload + Standard analytics + platform analytics + advanced/premium analytics + admin customer management + tax and delivery fees)
 ===================================================
 ALL VENDORS AND PRODUCTS ARE SAMPLE DATA. NO REAL PAYMENTS.
 
@@ -600,3 +600,39 @@ Tests (outside the site folder, test/):
                         edit + audit before/after, suspension blocks place_order, place_order_with_code, pay_orders, top-up, transfers in and out, pay_charge, create_charge,
                         refunds still allowed, still enforced after re-running orders.sql, pay.sql, standard_analytics.sql, role rules, audit visibility, ledger reconciles
   test/cust_flow.js     Chrome 390 and 1280 px with test/mock_cust.js: refusal for non-admins, list/search/pages, detail, edit/suspend/role, login/banner/checkout, no JS errors
+
+====================================================================
+v1.5: TAX AND DELIVERY FEES AT CHECKOUT  (TEST MODE wallets, no real payments)
+====================================================================
+New file: supabase/tax_delivery.sql   >>> RUN tax_delivery.sql LAST <<<
+Full run order: schema, seed, storage, orders, order_notes, pay, analytics, staff, photos, standard_analytics, platform_analytics, advanced_analytics, admin_customers, tax_delivery.
+The file is idempotent. It redefines place_order, vendor_tax_report, vendor_pnl and vendor_accounting_export, so if you ever re-run orders.sql,
+standard_analytics.sql or advanced_analytics.sql, re-run tax_delivery.sql afterwards (it is safe to re-run). Existing orders and sample data are untouched.
+
+What it does
+  Vendor dashboard > "Delivery & tax" tab (owner and sub-admin only; staff do not see it):
+    pickup on/off (pickup is always free), delivery on/off, delivery fee (one flat fee, or per Carriacou area: Hillsborough, L'Esterie, Windward,
+    Harvey Vale, Belair, Bogles, Mount Pleasant, Dumfries, editable), optional "free delivery over" amount, VAT registered yes/no, VAT rate
+    (blank = platform default), prices include tax or tax added on top, VAT number.
+  Admin > Settings > "Default VAT rate" (0 to 30, default 15, reason required, history, audit log 'platform_default_vat_changed').
+  Checkout: per vendor the customer chooses pickup or delivery (and an area when the vendor uses areas) and sees Subtotal, Promo, Delivery fee, VAT, Total.
+  The numbers shown come from the server (checkout_quote); the order is priced again by the server in place_order. The client never decides an amount.
+
+Money rules (all computed in the database)
+  subtotal = sum of round(price x qty, 2)       discount = promo discount           net = subtotal - discount
+  delivery fee = 0 for pickup; for delivery the flat fee or the chosen area's fee, and 0 when "free over" is set and net >= that amount (checked AFTER the promo)
+  base = net + delivery fee (the delivery fee is taxed like the goods)
+  prices include tax:   tax = round(base x r / (100 + r), 2)   total = base
+  tax added on top:     tax = round(base x r / 100, 2)         total = base + tax
+  not VAT registered:   rate 0, tax 0
+  Rounding: ONE rounding per order, on the whole base, numeric round half away from zero, to the cent. Order totals are what the wallet is charged,
+  so pay_reconcile stays ok.
+  Snapshot on each order: tax_rate_pct, tax_inclusive, tax_xcd, delivery_fee_xcd, delivery_area, vendor_vat_number. Later setting changes never alter past orders.
+  Defaults: no settings row = pickup and delivery on, no fee, not VAT registered (tax 0).
+Reports: Basic revenue and platform GMV = gross paid. P&L revenue = total minus recorded tax (plus a tax collected line). Tax report: recorded tax where
+  saved (source 'recorded'), the old estimate for older orders (source 'estimate'), revenue before tax. Accounting CSV has a tax column and splits "Sales tax payable".
+  Forecast, CLV, benchmark and other Advanced reports stay gross. POS charges carry no tax. Admin Analytics has a "Tax and delivery" card (sample vendors excluded).
+If tax_delivery.sql is not installed the site falls back to the old single pickup/delivery choice and old place_order.
+
+Tests (test/): pgtd.mjs 137 checks (MODE=fresh 134): hand-verified math, quote = order, wallet debit = total, reconcile, snapshots, access matrix, re-runs.
+  td_flow.js Chrome 390 and 1280 with mock_td.js (116 checks, no JS errors). Screenshots shots/td_*.png.

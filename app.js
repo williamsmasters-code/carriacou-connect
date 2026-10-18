@@ -76,7 +76,7 @@ $('#add').onclick=()=>{const q=Math.max(1,Math.min(99,parseInt($('#qty').value)|
 cart(){const draw=()=>{const c=getCart(),ids=Object.keys(c).filter(i=>DATA.products.some(p=>p.id===i));
 if(!ids.length){$('#cart').innerHTML='<p>Your cart is empty. <a href="browse.html">Browse products</a></p>';return}
 let sum=0;const rows=ids.map(i=>{const p=DATA.products.find(x=>x.id===i),t=p.price*c[i];sum+=t;return`<tr><td><a href="product.html?id=${i}">${esc(p.name)}</a><div class="muted">${esc(vendor(p.vendorId).name)}</div></td><td>${xcd(p.price)}</td><td><input type="number" min="1" max="99" value="${c[i]}" data-id="${i}"></td><td>${xcd(t)}</td><td><button class="btn alt" data-rm="${i}" aria-label="Remove">✕</button></td></tr>`}).join('');
-$('#cart').innerHTML=`<table><tr><th>Item</th><th>Price</th><th>Qty</th><th>Total</th><th></th></tr>${rows}</table><h2>Subtotal: ${xcd(sum)} XCD</h2><p class="muted">No real payments. At checkout you can pay the vendor yourself on pickup or delivery, or use your TEST wallet (play money only).</p><button class="btn" id="co">Checkout</button><div id="conote"></div>`;
+$('#cart').innerHTML=`<table><tr><th>Item</th><th>Price</th><th>Qty</th><th>Total</th><th></th></tr>${rows}</table><h2>Subtotal: ${xcd(sum)} XCD</h2><p class="muted">Delivery fees and tax (if the vendor charges them) are worked out at checkout. No real payments. At checkout you can pay the vendor yourself on pickup or delivery, or use your TEST wallet (play money only).</p><button class="btn" id="co">Checkout</button><div id="conote"></div>`;
 document.querySelectorAll('input[data-id]').forEach(e=>e.onchange=()=>{const c=getCart();c[e.dataset.id]=Math.max(1,Math.min(99,parseInt(e.value)||1));saveCart(c);draw()});
 document.querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>{const c=getCart();delete c[b.dataset.rm];saveCart(c);draw()});
 $('#co').onclick=()=>{if(DATA.live){location.href='checkout.html'}else $('#conote').innerHTML='<div class="notice"><strong>Ordering needs accounts, which are not switched on in this preview.</strong><br>In live mode you log in, choose pickup or delivery and place your order. You pay the vendor on pickup or delivery. Online payment (Carriacou Connect Pay) is coming later.</div>'}};draw()},
@@ -99,13 +99,21 @@ let totalCents=Math.round(total*100),camp=null;
 let wal=null;try{const wr=await sb.rpc('ensure_wallets');if(!wr.error&&Array.isArray(wr.data))wal=wr.data.find(x=>x.kind==='user')||null}catch(e){}
 const payKey=window.CC.uuid();
 let prof={};try{const r=await sb.from('profiles').select('full_name,phone,address').eq('id',user.id).maybeSingle();prof=r.data||{}}catch(e){}
+// v1.5: per-vendor pickup/delivery + delivery fee + tax, all worked out by the server (checkout_quote). If tax_delivery.sql has not been run, opts stays null and the old single pickup/delivery choice is used.
+let opts=null;try{const vr=await sb.rpc('vendor_checkout_options',{p_vendor_ids:Object.keys(byV)});if(!vr.error&&Array.isArray(vr.data)&&vr.data.length===Object.keys(byV).length)opts=Object.fromEntries(vr.data.map(x=>[x.vendor_id,x]))}catch(e){}
+const plan={};if(opts)Object.keys(byV).forEach(v=>{plan[v]={fulfilment:opts[v].pickup_enabled?'pickup':'delivery',area:''}});
+const feeText=o=>{const z=o.delivery_zones||[];let t=o.delivery_model==='zones'&&z.length?'Fee depends on your area (from '+xcd(Math.min(...z.map(a=>Number(a.fee))))+')':(Number(o.delivery_flat_fee)>0?'Delivery fee '+xcd(o.delivery_flat_fee):'No delivery fee set by the vendor');if(o.free_over_xcd!=null)t+=', free on orders of '+xcd(o.free_over_xcd)+' or more';return t};
+const fulBlock=vid=>{const o=opts[vid],both=o.pickup_enabled&&o.delivery_enabled,zs=o.delivery_model==='zones'?(o.delivery_zones||[]):[];
+ return `<div class="vful" data-v="${esc(vid)}"><h3>${esc(vendor(vid).name)}</h3>${both?`<label class="chk opt"><input type="radio" name="ful_${esc(vid)}" value="pickup" checked> <span><b>Pickup</b><small>Collect it yourself. Free. Pay on pickup.</small></span></label>
+<label class="chk opt"><input type="radio" name="ful_${esc(vid)}" value="delivery"> <span><b>Delivery</b><small>${esc(feeText(o))}. Pay on delivery.</small></span></label>`:`<p class="muted">${o.pickup_enabled?'This vendor offers <b>pickup only</b> (free). Pay on pickup.':'This vendor offers <b>delivery only</b>. '+esc(feeText(o))+'. Pay on delivery.'}</p>`}
+<label class="areal" data-area="${esc(vid)}" hidden>Delivery area *<select id="area_${esc(vid)}"><option value="">Choose your area…</option>${zs.map(z=>`<option value="${esc(z.name)}">${esc(z.name)} (${xcd(z.fee)})</option>`).join('')}</select></label></div>`};
 root.innerHTML=`<div class="co-grid"><form id="cof" class="formcard" novalidate>
-<fieldset><legend>How do you want it?</legend>
+${opts?Object.keys(byV).map(fulBlock).join(''):`<fieldset><legend>How do you want it?</legend>
 <label class="chk opt"><input type="radio" name="ful" value="pickup" checked> <span><b>Pickup</b><small>Collect from the vendor. Pay on pickup.</small></span></label>
-<label class="chk opt"><input type="radio" name="ful" value="delivery"> <span><b>Delivery</b><small>The vendor brings it to you. Pay on delivery. Any delivery fee is agreed with the vendor.</small></span></label></fieldset>
+<label class="chk opt"><input type="radio" name="ful" value="delivery"> <span><b>Delivery</b><small>The vendor brings it to you. Pay on delivery. Any delivery fee is agreed with the vendor.</small></span></label></fieldset>`}
  ${wal?`<fieldset id="payf"><legend>How do you want to pay?</legend>
 <label class="chk opt"><input type="radio" name="pay" value="cash" checked> <span><b>Pay the vendor myself</b><small>Cash or as agreed, when you collect or receive your order.</small></span></label>
-<label class="chk opt"><input type="radio" name="pay" value="wallet"> <span><b>Pay with wallet (test)</b><small>Test balance: <b id="wbal">${window.CC.cents(wal.balance_cents)}</b>. Order total ${window.CC.cents(totalCents)}.</small></span></label>
+<label class="chk opt"><input type="radio" name="pay" value="wallet"> <span><b>Pay with wallet (test)</b><small>Test balance: <b id="wbal">${window.CC.cents(wal.balance_cents)}</b>. Order total <b id="wtot">${window.CC.cents(totalCents)}</b>.</small></span></label>
 <div id="wnote" class="notice" hidden>${window.CC.TESTBANNER}<span id="wnt"></span></div></fieldset>`:''}
 <div class="codebox"><label for="cpc">Promo code (optional)</label><div class="coderow"><input id="cpc" maxlength="20" autocapitalize="characters" autocomplete="off" placeholder="Enter a code"><button type="button" class="btn alt" id="cpa">Apply</button></div><div id="cpm" class="notice" role="status" hidden></div></div>
 <label>Your name<input id="cn" maxlength="80" autocomplete="name" value="${esc(prof.full_name||'')}"></label>
@@ -114,20 +122,43 @@ root.innerHTML=`<div class="co-grid"><form id="cof" class="formcard" novalidate>
 <label>Notes for the vendor (optional)<textarea id="cnote" rows="2" maxlength="500"></textarea></label>
 <div id="cm" class="notice" role="alert" hidden></div>
 <button class="btn" id="cgo">Place order</button></form>
-<aside class="ordsum"><h2>Order summary</h2>${summary}<div class="oline disc" id="discline" hidden><span id="disclbl">Promo discount</span><span id="discamt"></span></div><div class="oline total"><span>Total</span><span id="totamt">${xcd(total)} XCD</span></div>
+<aside class="ordsum"><h2>Order summary</h2><div id="sumbox">${summary}</div><div class="oline disc" id="discline" hidden><span id="disclbl">Promo discount</span><span id="discamt"></span></div><div class="oline total"><span>Total</span><span id="totamt">${xcd(total)} XCD</span></div>
 ${nv>1?`<p class="muted">Your cart has items from ${nv} vendors, so it becomes ${nv} separate orders, one per vendor.</p>`:''}
-<p class="muted">Prices are re-checked by the server when you place the order.</p>${payNote}<p><a href="cart.html">Edit cart</a></p></aside></div>`;
+<p class="muted">${opts?'Delivery fees and tax are worked out by the server and shown above. They are re-checked when you place the order.':'Prices are re-checked by the server when you place the order.'}</p>${payNote}<p><a href="cart.html">Edit cart</a></p></aside></div>`;
 const f=$('#cof'),m=$('#cm');
 const susp=await window.CC.acctStatus(sb);if(susp.suspended){m.className='notice err';m.textContent=susp.message+' You cannot place orders right now.';m.hidden=false;$('#cgo').disabled=true}
 const cleanErr=t=>String(t||'').replace(/^ACCOUNT_SUSPENDED:\s*/,'');
 const payWallet=()=>!!wal&&f.pay&&f.pay.value==='wallet';
-const sync=()=>{$('#adl').hidden=f.ful.value!=='delivery';if(wal){const w=$('#wnote');w.hidden=!payWallet();if(payWallet()){const short=Number(wal.balance_cents)<totalCents;$('#wnt').innerHTML=short?' Your test balance is too low for this order. <a href="wallet.html">Add play money in your wallet</a>, then come back.':' Your order is placed and paid straight away from your test wallet. No real money is used.'}$('#cgo').textContent=payWallet()?'Place order and pay with test wallet':'Place order'}};f.addEventListener('change',sync);sync();
+const planFrom=()=>{if(!opts)return;Object.keys(byV).forEach(v=>{const r=f.querySelector('input[name="ful_'+v+'"]:checked');plan[v].fulfilment=r?r.value:(opts[v].pickup_enabled?'pickup':'delivery');const sel=f.querySelector('#area_'+v);plan[v].area=sel?sel.value:''})};
+const anyDel=()=>opts?Object.values(plan).some(p=>p.fulfilment==='delivery'):f.ful.value==='delivery';
+const syncUI=()=>{planFrom();$('#adl').hidden=!anyDel();if(opts)Object.keys(byV).forEach(v=>{const a=f.querySelector('[data-area="'+v+'"]');if(a)a.hidden=!(plan[v].fulfilment==='delivery'&&opts[v].delivery_model==='zones'&&(opts[v].delivery_zones||[]).length>0)});
+ if(wal){const w=$('#wnote');w.hidden=!payWallet();if(payWallet()){const short=Number(wal.balance_cents)<totalCents;$('#wnt').innerHTML=short?' Your test balance is too low for this order. <a href="wallet.html">Add play money in your wallet</a>, then come back.':' Your order is placed and paid straight away from your test wallet. No real money is used.'}$('#cgo').textContent=payWallet()?'Place order and pay with test wallet':'Place order';const wo=$('#wtot');if(wo)wo.textContent=window.CC.cents(totalCents)}};
+let qseq=0;
+const renderSummary=q=>{totalCents=Math.round(Number(q.grand_total_xcd)*100);
+ $('#sumbox').innerHTML=q.orders.map(x=>{const ls=lines.filter(l=>l.p.vendorId===x.vendor_id);
+  return `<div class="osum"><h3>${esc(x.vendor_name)} <span class="ft">· ${x.fulfilment==='delivery'?'delivery':'pickup'}</span></h3>${ls.map(l=>`<div class="oline"><span>${l.q} × ${esc(l.p.name)}</span><span>${xcd(l.p.price*l.q)}</span></div>`).join('')}
+  <div class="oline sub"><span>Subtotal</span><span>${xcd(x.subtotal_xcd)}</span></div>
+  ${Number(x.discount_xcd)>0?`<div class="oline disc"><span>Promo ${esc(camp&&camp.code||'')}</span><span>- ${xcd(x.discount_xcd)}</span></div>`:''}
+  ${x.fulfilment==='delivery'?`<div class="oline"><span>Delivery fee${x.delivery_area?' ('+esc(x.delivery_area)+')':''}</span><span>${Number(x.delivery_fee_xcd)?xcd(x.delivery_fee_xcd):'Free'}</span></div>`:''}
+  ${Number(x.tax_rate_pct)>0?`<div class="oline${x.tax_inclusive?' info':''}"><span>${x.tax_inclusive?'Includes VAT':'VAT'} (${Number(x.tax_rate_pct)}%)</span><span>${xcd(x.tax_xcd)}</span></div>`:''}
+  ${x.error?`<div class="qerr" role="status">${esc(x.error)}</div>`:''}
+  <div class="oline vtot"><span>${q.orders.length>1?'Order total':'Total'}</span><span>${xcd(x.total_xcd)}</span></div></div>`}).join('');
+ $('#totamt').textContent=xcd(q.grand_total_xcd)+' XCD';syncUI()};
+const refreshQuote=async()=>{if(!opts)return;planFrom();const my=++qseq;$('#sumbox').classList.add('qwait');
+ const r=await sb.rpc('checkout_quote',{p_cart:cartJson(),p_plan:plan,p_campaign_code:camp?camp.code:null});
+ if(my!==qseq)return;$('#sumbox').classList.remove('qwait');
+ if(r.error||!r.data){say('Could not work out the totals: '+cleanErr((r.error&&r.error.message)||'try again')+'.');return}
+ if(r.data.code_error&&camp){camp=null;const pm=$('#cpm');pm.className='notice err';pm.textContent=r.data.code_error;pm.hidden=false}
+ renderSummary(r.data)};
+const sync=()=>{syncUI();refreshQuote()};
+f.addEventListener('change',e=>{const t=e.target||{};if(opts&&((t.name||'').startsWith('ful_')||(t.id||'').startsWith('area_')))sync();else syncUI()});syncUI();
 const say=t=>{m.className='notice err';m.textContent=t;m.hidden=!t};
 const cartJson=()=>lines.map(l=>({product_id:l.p.id,quantity:l.q}));
 const setCamp=(c,msg,bad)=>{camp=c;const pm=$('#cpm');pm.className='notice'+(bad?' err':c?' ok':'');pm.textContent=msg||'';pm.hidden=!msg;
+ if(opts){refreshQuote();return}
  const disc=c?Number(c.discount_xcd)||0:0;totalCents=Math.round((total-disc)*100);
  $('#discline').hidden=!(c&&disc>0);if(c&&disc>0){$('#disclbl').textContent='Promo '+c.code+(c.discount_pct!=null?' ('+Number(c.discount_pct)+'% off '+c.vendor_name+')':'');$('#discamt').textContent='- '+xcd(disc)+' XCD'}
- $('#totamt').textContent=xcd(total-disc)+' XCD';document.querySelectorAll('.cotot').forEach(e=>{e.textContent=window.CC.cents(totalCents)});if(typeof sync==='function')sync()};
+ $('#totamt').textContent=xcd(total-disc)+' XCD';document.querySelectorAll('.cotot').forEach(e=>{e.textContent=window.CC.cents(totalCents)});if(typeof syncUI==='function')syncUI()};
 $('#cpc').oninput=()=>{if(camp)setCamp(null,'')};
 $('#cpa').onclick=async()=>{const code=$('#cpc').value.trim();if(!code){setCamp(null,'Type a code first.',true);return}
  const b=$('#cpa');b.disabled=true;const r=await sb.rpc('check_campaign_code',{p_code:code,p_cart:cartJson()});b.disabled=false;
@@ -136,25 +167,28 @@ $('#cpa').onclick=async()=>{const code=$('#cpc').value.trim();if(!code){setCamp(
  const c=Object.assign({code:code.toUpperCase().replace(/\s+/g,'')},r.data);
  setCamp(c,Number(c.discount_xcd)>0?'Code '+c.code+' applied: you save '+xcd(c.discount_xcd)+' XCD on '+c.vendor_name+'.':'Code '+c.code+' accepted ('+c.name+'). No discount, it just tells the vendor which promotion you came from.')};
 
-f.onsubmit=async e=>{e.preventDefault();say('');
- const ful=f.ful.value,ph=$('#cp').value.trim(),ad=$('#ca').value.trim();
+if(opts)refreshQuote();
+f.onsubmit=async e=>{e.preventDefault();say('');planFrom();
+ const ful=anyDel()?'delivery':'pickup',ph=$('#cp').value.trim(),ad=$('#ca').value.trim();
+ if(opts){for(const v of Object.keys(byV)){if(plan[v].fulfilment==='delivery'&&opts[v].delivery_model==='zones'&&(opts[v].delivery_zones||[]).length&&!plan[v].area){say('Please choose a delivery area for '+vendor(v).name+'.');const sl=f.querySelector('#area_'+v);if(sl)sl.focus();return}}}
  if(ph.length<7){say('Please enter a contact phone number the vendor can reach.');$('#cp').focus();return}
  if(ful==='delivery'&&ad.length<5){say('Please enter your delivery address.');$('#ca').focus();return}
  if(payWallet()&&Number(wal.balance_cents)<totalCents){say('Your test wallet balance ('+window.CC.cents(wal.balance_cents)+') is lower than the order total ('+window.CC.cents(totalCents)+'). Add play money in your wallet first.');return}
  const btn=$('#cgo');btn.disabled=true;btn.textContent='Placing order…';
  const oargs={p_cart:cartJson(),p_fulfilment:ful,p_contact_phone:ph,p_delivery_address:ful==='delivery'?ad:null,p_notes:$('#cnote').value.trim()||null,p_contact_name:$('#cn').value.trim()||null};
  const typed=$('#cpc').value.trim();
- const r=typed?await sb.rpc('place_order_with_code',{...oargs,p_campaign_code:typed}):await sb.rpc('place_order',oargs);
+ const r=opts?await sb.rpc('place_order_plan',{p_cart:oargs.p_cart,p_plan:plan,p_contact_phone:ph,p_delivery_address:ful==='delivery'?ad:null,p_notes:oargs.p_notes,p_contact_name:oargs.p_contact_name,p_campaign_code:typed||null}):typed?await sb.rpc('place_order_with_code',{...oargs,p_campaign_code:typed}):await sb.rpc('place_order',oargs);
  if(r.error){say(typed&&/Could not find the function|schema cache/.test(r.error.message||'')?'Promo codes are not switched on yet. Clear the code to place the order.':cleanErr(r.error.message||'Could not place the order.'));btn.disabled=false;if(/ACCOUNT_SUSPENDED/.test(r.error.message||''))btn.disabled=true;else sync();return}
  if(r.data&&!Array.isArray(r.data)&&r.data.error){say(r.data.error+' Fix or clear the promo code and try again.');btn.disabled=false;sync();return}
  saveCart({});
  try{const up={};if(!prof.phone)up.phone=ph;if(!prof.full_name&&$('#cn').value.trim())up.full_name=$('#cn').value.trim();if(ful==='delivery'&&!prof.address)up.address=ad;if(Object.keys(up).length)await sb.from('profiles').update(up).eq('id',user.id)}catch(e){}
  const os=r.data||[];
  let paidMsg='',payErr='';
+ const fl=opts?os.map(o=>o.fulfilment):[ful];const payWhen=fl.every(x=>x==='delivery')?'delivery':fl.every(x=>x==='pickup')?'pickup':'pickup or delivery';
  if(payWallet()){const pr=await sb.rpc('pay_orders',{p_order_ids:os.map(o=>o.id),p_idempotency_key:payKey});if(pr.error)payErr=cleanErr(pr.error.message)||'The payment did not go through.';else paidMsg='Paid from your test wallet.'}
  root.innerHTML=`<div class="confirm"><div class="tick" aria-hidden="true">✓</div><h2>Thank you! Your order${os.length>1?'s are':' is'} placed.</h2>
- ${paidMsg?window.CC.TESTBANNER+'<p><b>'+paidMsg+'</b> This was play money, so no real funds moved.</p>':payErr?'<div class="notice err">Your order was placed but the test payment failed: '+esc(payErr)+'. You can pay it from your order page, or pay the vendor on '+(ful==='delivery'?'delivery':'pickup')+'.</div>':'<p>'+(ful==='delivery'?'Pay the vendor when your order is delivered.':'Pay the vendor when you collect your order.')+' No online payment is taken.</p>'}
- <div class="ordnums">${os.map(o=>`<a class="ordnum" href="dashboard-consumer.html?order=${esc(o.id)}"><b>${esc(o.order_number)}</b><span>${esc(o.vendor_name)} · ${xcd(o.total_xcd)}</span></a>`).join('')}</div>
+ ${paidMsg?window.CC.TESTBANNER+'<p><b>'+paidMsg+'</b> This was play money, so no real funds moved.</p>':payErr?'<div class="notice err">Your order was placed but the test payment failed: '+esc(payErr)+'. You can pay it from your order page, or pay the vendor on '+payWhen+'.</div>':'<p>'+(payWhen==='delivery'?'Pay the vendor when your order is delivered.':payWhen==='pickup'?'Pay the vendor when you collect your order.':'Pay each vendor when you collect or receive your order.')+' No online payment is taken.</p>'}
+ <div class="ordnums">${os.map(o=>`<a class="ordnum" href="dashboard-consumer.html?order=${esc(o.id)}"><b>${esc(o.order_number)}</b><span>${esc(o.vendor_name)} · ${xcd(o.total_xcd)}${Number(o.delivery_fee_xcd)>0?' · incl. delivery '+xcd(o.delivery_fee_xcd):''}${o.tax_xcd!=null&&Number(o.tax_xcd)>0?' · VAT '+xcd(o.tax_xcd):''}</span></a>`).join('')}</div>
  <p>The vendor will confirm your order soon. Follow its progress in your dashboard.</p>
  <a class="btn" href="dashboard-consumer.html">View my orders</a> <a class="btn ghost" href="browse.html">Keep shopping</a></div>`;
  window.scrollTo(0,0)};

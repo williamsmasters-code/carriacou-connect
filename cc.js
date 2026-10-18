@@ -116,7 +116,7 @@ function authLinks(){return '<a href="login.html">Log in</a><a class="pill" href
 function layout(){
  const live=configured;
  const out=live?authLinks():'<a href="login.html">Log in</a>';
- const msg=live?'Preview v1.4 – products labeled SAMPLE are fictional. Wallet payments and plans are TEST MODE only. No real payments or billing.':'Preview v1.1 – all vendors and products are SAMPLE data. Accounts are not switched on yet. No real payments.';
+ const msg=live?'Preview v1.5 – products labeled SAMPLE are fictional. Wallet payments and plans are TEST MODE only. No real payments or billing.':'Preview v1.1 – all vendors and products are SAMPLE data. Accounts are not switched on yet. No real payments.';
  if(!document.querySelector('link[data-cc-fonts]')){const l=document.createElement('link');l.rel='stylesheet';l.dataset.ccFonts='1';l.href='https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,600;0,9..144,800;1,9..144,600&family=Plus+Jakarta+Sans:wght@400;500;700;800&display=swap';document.head.appendChild(l)}
  const m=document.querySelector('main');if(m)m.id='main';
  const home=document.body.dataset.page==='home';
@@ -149,7 +149,15 @@ async function authNav(){
  sb.auth.onAuthStateChange((ev)=>{if(ev==='SIGNED_OUT')render(null)});
 }
 const PCOLS='id,vendor_id,name,description,price_xcd,category,image_url,active,featured,created_at,updated_at,stock_qty,low_stock_threshold,sku',PCOLS_BASE='id,vendor_id,name,description,price_xcd,category,image_url,active,featured,created_at,updated_at,stock_qty,low_stock_threshold'; // never '*': products.cost_price is private (standard_analytics.sql)
-window.CC={acctStatus,PCOLS,PCOLS_BASE,TESTBANNER,cents,toCents,uuid,payPill,noteSummary,newBadge,notesWidget,NOTE_POLL,SLABEL,stPill,fdate,fnice,payText,nextSteps,timeline,safeNext,WAVE,configured,client,esc,getUser,layout,TIER_LABEL,TIER_LIMIT,TIERS,lim,ROLE_LABEL,ROLE_PERMS,
+// Price breakdown of one order row (v1.5): [{k,v,kind}]. kind: 'neg' (discount), 'info' (tax already inside the total), 'total'.
+// Old orders (before tax_delivery.sql) have no tax_xcd: no tax line is shown for them.
+function orderLines(o){
+ const L=[{k:'Subtotal',v:Number(o.subtotal_xcd)||0}];
+ if(Number(o.discount_xcd)>0)L.push({k:'Promo discount',v:-Number(o.discount_xcd),kind:'neg'});
+ if(o.fulfilment==='delivery'||Number(o.delivery_fee_xcd)>0)L.push({k:'Delivery fee'+(o.delivery_area?' ('+o.delivery_area+')':''),v:Number(o.delivery_fee_xcd)||0});
+ if(o.tax_xcd!=null&&Number(o.tax_rate_pct)>0)L.push({k:(o.tax_inclusive?'Includes VAT':'VAT')+' ('+Number(o.tax_rate_pct)+'%)',v:Number(o.tax_xcd)||0,kind:o.tax_inclusive?'info':''});
+ L.push({k:'Total',v:Number(o.total_xcd)||0,kind:'total'});return L}
+window.CC={orderLines,acctStatus,PCOLS,PCOLS_BASE,TESTBANNER,cents,toCents,uuid,payPill,noteSummary,newBadge,notesWidget,NOTE_POLL,SLABEL,stPill,fdate,fnice,payText,nextSteps,timeline,safeNext,WAVE,configured,client,esc,getUser,layout,TIER_LABEL,TIER_LIMIT,TIERS,lim,ROLE_LABEL,ROLE_PERMS,
  xcd:n=>'EC$'+Number(n).toFixed(2)};
 layout();
 })();

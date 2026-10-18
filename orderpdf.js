@@ -99,7 +99,7 @@ async function buildOrder(o,ex){
  h1=P.kv(role==='vendor'?'Customer':'Contact',[o.contact_name||'(no name)',o.contact_phone||''].filter(Boolean).join('\n'),M,colW);
  h2=P.kv('Fulfilment',ful,M+CW/2+8,colW);P.S.y=y2+Math.max(h1,h2)+8;
  const y3=P.S.y;
- const addr=o.fulfilment==='delivery'?(o.delivery_address||'-'):('Collect from '+(ex.vendorName||'the vendor')+(ex.vendorLocation?', '+ex.vendorLocation:''));
+ const addr=o.fulfilment==='delivery'?((o.delivery_address||'-')+(o.delivery_area?'\nArea: '+o.delivery_area:'')):('Collect from '+(ex.vendorName||'the vendor')+(ex.vendorLocation?', '+ex.vendorLocation:''));
  h1=P.kv(o.fulfilment==='delivery'?'Delivery address':'Pickup',addr,M,colW);
  h2=P.kv('Payment',CC.payText(o).replace(/ \(TEST, play money\)/,'')+(test?' - TEST MODE (play money)':'')+'\nStatus: '+payStatusLabel(o)+(test&&o.payment_status==='paid'?' (TEST MODE)':'')+(o.paid_at?'\nPaid '+dt(o.paid_at):''),M+CW/2+8,colW);P.S.y=y3+Math.max(h1,h2)+6;
  if(o.notes){P.h2('Order instructions');P.para(o.notes,M,CW,10)}
@@ -110,10 +110,12 @@ async function buildOrder(o,ex){
  if(!rows.length)rows.push(['(no items)','','','']);
  table(P,[{t:'Item',w:.5},{t:'Qty',w:.1,align:'right'},{t:'Unit price',w:.2,align:'right'},{t:'Line total',w:.2,align:'right'}],rows);
  // totals
- P.need(70);P.S.y+=4;const tx=M+CW,lx=M+CW-190;
+ const OL=CC.orderLines?CC.orderLines(o):[];P.need(40+OL.length*15);P.S.y+=4;const tx=M+CW,lx=M+CW-190;
  const tl=(a,b,bold)=>{P.font(bold?12:10,bold?'bold':'normal',bold?P.NAVY:P.INK);P.d.text(a,lx,P.S.y+11);P.d.text(b,tx,P.S.y+11,{align:'right'});P.S.y+=bold?20:15};
- tl('Subtotal',money(o.subtotal_xcd));tl('Delivery fee',money(o.delivery_fee_xcd||0));
+ OL.filter(l=>l.kind!=='total'&&l.kind!=='info').forEach(l=>tl(l.k,(l.v<0?'- ':'')+money(Math.abs(l.v))));
  d.setDrawColor(...P.NAVY);d.setLineWidth(1);d.line(lx,P.S.y+1,tx,P.S.y+1);P.S.y+=5;tl('Total (XCD)',money(o.total_xcd),true);
+ OL.filter(l=>l.kind==='info').forEach(l=>{P.font(9,'normal',P.GREY);d.text(l.k.replace('Includes VAT','Total includes VAT')+': '+money(l.v),tx,P.S.y+9,{align:'right'});P.S.y+=14});
+ if(o.vendor_vat_number){P.font(9,'normal',P.GREY);d.text('Vendor VAT number: '+clean(o.vendor_vat_number),tx,P.S.y+9,{align:'right'});P.S.y+=14}
  if(test){P.font(8,'bold',[180,90,0]);d.text('TEST MODE - paid with play money, no real funds',tx,P.S.y+8,{align:'right'});P.S.y+=14}
  // timeline
  P.h2('Status history');
@@ -160,18 +162,19 @@ async function buildTax(R,ex){
  const st=R.settings||{};
  P.h2('Settings used');
  table(P,[{t:'Item',w:.4},{t:'Value',w:.6}],[
-  ['Tax rate',st.tax_rate_pct==null?'Not set':Number(st.tax_rate_pct)+'%'],
-  ['Prices',st.tax_rate_pct==null?'-':(st.tax_inclusive?'Include tax (tax = sales x rate / (100 + rate))':'Exclude tax (tax = sales x rate / 100; the platform does not add tax at checkout)')],
+  ...(R.checkout?[['Checkout VAT (v1.5)',R.checkout.vat_registered?'VAT registered, '+Number(R.checkout.effective_rate_pct)+'%, prices '+(R.checkout.prices_include_tax?'include':'exclude')+' tax'+(R.checkout.vat_number?', VAT no. '+R.checkout.vat_number:''):'Not VAT registered (no tax added at checkout)']]:[]),
+  ['Estimate rate for older orders',st.tax_rate_pct==null?'Not set':Number(st.tax_rate_pct)+'%'+(st.tax_inclusive?' (prices include tax)':' (prices exclude tax)')],
   ['License number',st.license_number||'Not set'],['License expiry',st.license_expiry?(st.license_expiry+(st.license_days_left!=null?(st.license_days_left<0?' (EXPIRED)':' ('+st.license_days_left+' days left)'):'')):'Not set']]);
  P.h2('Totals');
  table(P,[{t:'Item',w:.6},{t:'Amount (XCD)',w:.4,align:'right'}],[
   ['Orders counted (not cancelled, not refunded)',String(R.orders)],['Sales',money(R.sales_xcd)],['Sales with a tax rate',money(R.taxed_sales_xcd)],
-  ['Tax (estimated from your rate)',money(R.tax_xcd)],['  of which prices include tax',money(R.tax_inclusive_xcd)],['  of which prices exclude tax',money(R.tax_exclusive_xcd)],
+  ...(R.tax_recorded_xcd!==undefined?[['Revenue before tax',money(R.net_of_tax_xcd)],['Delivery fees (included in sales)',money(R.delivery_xcd)],['Tax collected (recorded on '+R.orders_recorded+' order'+(R.orders_recorded===1?'':'s')+')',money(R.tax_recorded_xcd)],['Tax ESTIMATED for '+R.orders_estimated+' older order'+(R.orders_estimated===1?'':'s')+' (from the estimate rate)',money(R.tax_estimated_xcd)]]:[['Tax (estimated from your rate)',money(R.tax_xcd)],['  of which prices include tax',money(R.tax_inclusive_xcd)],['  of which prices exclude tax',money(R.tax_exclusive_xcd)]]),
+  ['Total tax shown',money(R.tax_xcd)],
   ['Orders with no tax rate (not taxed here)',String(R.orders_without_rate)]]);
  if((R.by_month||[]).length){P.h2('By month');table(P,[{t:'Month',w:.3},{t:'Orders',w:.2,align:'right'},{t:'Sales',w:.25,align:'right'},{t:'Tax',w:.25,align:'right'}],R.by_month.map(m=>[String(m.month).slice(0,7),String(m.orders),money(m.sales_xcd),money(m.tax_xcd)]))}
  const rows=(R.rows||[]).slice(0,400);
  if(rows.length){P.h2('Orders'+(R.rows.length>rows.length?' (first '+rows.length+' of '+R.rows.length+'; use the CSV for all)':''));
-  table(P,[{t:'Date',w:.17},{t:'Order',w:.2},{t:'Total',w:.2,align:'right'},{t:'Rate',w:.18,align:'right'},{t:'Tax',w:.25,align:'right'}],rows.map(r=>[r.day,r.ref,money(r.total_xcd),r.rate_pct==null?'-':Number(r.rate_pct)+'%'+(r.inclusive?' incl.':' excl.'),r.tax_xcd==null?'-':money(r.tax_xcd)]),{size:8})}
+  table(P,[{t:'Date',w:.15},{t:'Order',w:.19},{t:'Total',w:.18,align:'right'},{t:'Rate',w:.16,align:'right'},{t:'Tax',w:.18,align:'right'},{t:'Source',w:.14}],rows.map(r=>[r.day,r.ref,money(r.total_xcd),r.rate_pct==null?'-':Number(r.rate_pct)+'%'+(r.inclusive?' incl.':' excl.'),r.tax_xcd==null?'-':money(r.tax_xcd),r.source==='recorded'?'recorded':(r.source?'estimate':'')]),{size:8})}
  footers(P,!!ex.test);
  return {doc:d,filename:fname('CC-tax-summary-'+ex.from+'_to_'+ex.to)};
 }

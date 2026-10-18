@@ -387,3 +387,12 @@ details.notes{margin:.7rem 0;border-top:1px dashed #10252e26;padding-top:.5rem}d
 @media(max-width:520px){.cu-kpis{grid-template-columns:1fr 1fr}.cu-tab{min-width:640px}}
 .tblwrap{overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%}
 .cu-card .admtab{width:100%}
+
+/* v1.5 tax and delivery */
+.zrow{display:grid;grid-template-columns:1fr 130px auto;gap:.6rem;align-items:end;margin:.4rem 0}.zl{display:block;margin:0}
+.obreak{margin:.5rem 0;max-width:420px}.obreak .oline.info{color:var(--muted,#587a82);font-size:.92rem}.vbreak{font-size:.92rem}
+.vful{border:1.5px solid #8aa3ab55;border-radius:16px;padding:.7rem 1rem;margin:.8rem 0}.vful h3{margin:.1rem 0 .4rem;font-size:1.05rem}
+.vful .areal{display:block;margin-top:.5rem}.ordsum .oline.info{color:#a9cdd3;font-size:.88rem}.ordsum .osum h3 .ft{font-size:.8rem;font-weight:500;color:#a9cdd3}
+.ordsum .oline.vtot{border-top:1px solid #ffffff33;margin-top:.2rem;padding-top:.3rem;font-weight:700;color:#fff}.ordsum .qerr{background:#fff3e0;color:#7a3b00;border-radius:10px;padding:.4rem .6rem;margin:.3rem 0;font-size:.9rem}
+.ordsum .qwait{opacity:.6}
+@media (max-width:520px){.zrow{grid-template-columns:1fr 100px}.zrow .btn{grid-column:1/-1;justify-self:start}}
