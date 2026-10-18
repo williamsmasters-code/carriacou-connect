@@ -1,4 +1,4 @@
-CARRIACOU CONNECT MARKETPLACE v1.0 (static preview + optional Supabase accounts + TEST-MODE wallets + vendor analytics + plans + team accounts + multi-photo products + bulk upload)
+CARRIACOU CONNECT MARKETPLACE v1.2 (static preview + optional Supabase accounts + TEST-MODE wallets + vendor analytics + plans + team accounts + multi-photo products + bulk upload + Standard analytics + platform analytics)
 ===================================================
 ALL VENDORS AND PRODUCTS ARE SAMPLE DATA. NO REAL PAYMENTS.
 
@@ -429,3 +429,78 @@ TESTS (test/): pgstd.mjs (upgrade from v1.0 with data, 215 checks),
   (Chrome 390/1280), lint_safeupdate.js. All earlier suites still pass.
 CAVEATS: test/pgtest.mjs (legacy) already failed before v1.1 (auth schema
   exists). Amounts are EC$; all wallet payments remain test mode.
+
+
+=====================================================================
+v1.2: PLATFORM-LEVEL ANALYTICS FOR THE OPERATOR (platform admin only, TEST MODE)
+=====================================================================
+Where: admin.html has three tabs: "Plans & requests" (as before), "Analytics" and "Settings". Deep links: admin.html#analytics, admin.html#settings.
+Who:   only accounts with profiles.role = 'admin'. The database re-checks this inside every function; vendors, staff, consumers and
+       logged-out visitors are refused ("Platform admins only"). The page itself also says "for platform admins only".
+
+New files
+  supabase/platform_analytics.sql  4 config tables + 10 SECURITY DEFINER functions (admin_pa_*), idempotent, ends with notify pgrst
+  platform.js                      the Analytics and Settings views (inline SVG charts, CSV export)
+  admin.html / admin.js / style.css  tabs + styles
+
+SQL TO RUN (once, in Supabase SQL Editor, AFTER standard_analytics.sql; safe to re-run; re-running it keeps your settings)
+  supabase/platform_analytics.sql
+Run order for everything: schema, seed, storage, orders, order_notes, pay, analytics, staff, photos, standard_analytics, platform_analytics.
+It redefines no earlier function. If you ever re-run an earlier file, run platform_analytics.sql last again anyway. Then refresh the site.
+
+What the Analytics tab shows (choose This week / This month / Last 30 / Last 90 days / custom range; days are Grenada days, America/Grenada)
+  Island GMV (orders), order count, average order, cancelled/refunded totals, daily GMV chart
+  Wallet volume (TEST MONEY): order payments, POS charges, person-to-person transfers; refunds and test top-ups listed separately
+  Platform fee ESTIMATE (see below)
+  Growth: businesses and consumers (total, new, active), 12-month charts of new businesses, new consumers, active businesses
+  Plan mix and TEST-MODE subscription revenue estimate from placeholder prices; churn (downgrades, removed businesses, upgrades)
+  Category demand: orders, units and revenue per product category
+  Top businesses by GMV; low-activity businesses
+  Fraud / anomaly flags (rule-based hints, not proof)
+  A "Download CSV" button on each section (spreadsheet formula-injection safe, UTF-8 with BOM)
+
+Definitions (so the numbers can be checked by hand)
+  Sample businesses (is_sample) are left out of every figure.
+  Sales = orders created in the range that are not cancelled and not refunded. GMV = sum of their total_xcd (after campaign discounts, includes delivery fee).
+  Cancelled = status cancelled. Refunded = not cancelled but payment_status refunded. Shown separately, not in GMV.
+  Wallet volume = order payments + POS charges + person-to-person transfers. Top-ups and refunds are not volume.
+  Category revenue = line totals before campaign discounts, by the product's category; an order with two categories counts once in each; a deleted product shows as "Unknown".
+  Active business / consumer = at least one sale in the range (months in the charts: that month).
+  Churn: downgrades come from the audit log (tier_changed to a lower plan); removed businesses are audit-log vendor ids whose business row no longer exists,
+  dated by their last audit entry (approximate). churn % = (downgraded + removed) / businesses that existed at the start of the range.
+
+Platform fee (ESTIMATE ONLY, NOTHING IS CHARGED OR MOVED)
+  Settings tab > Platform fee. Default 0%. Allowed 0 to 30, two decimals.
+  Estimated per item as round(amount x rate in force when it was paid / 100, 2), then summed. Items = wallet-paid orders (by paid_at, still paid, not refunded)
+  + paid POS charges. Cash orders (pay on pickup/delivery) are NOT counted because the platform never handles that money.
+  The rate in force comes from platform_fee_history (append-only: every change adds a row effective from the moment of saving), so changing the rate never rewrites
+  earlier months. Nothing is written to orders, wallets or the ledger. A real fee would need a licensed payment provider (see Pay_Design_Notes.txt).
+
+Subscription revenue estimate
+  Settings tab > Plan prices. The defaults (Lite 0, Standard 30, Plus+ 60, Pro 120, Enterprise 300 EC$/month) are PLACEHOLDERS, shown with a "placeholder" label until you edit them.
+  Estimate = businesses on each plan x price. There is no billing.
+
+Fraud / anomaly flags (Settings tab > Flag thresholds; all thresholds editable within safe limits; value >= 2x threshold = high)
+  large_order         one order total >= EC$1500
+  order_velocity      one customer places >= 6 orders inside any 24-hour window (counts cancelled ones too)
+  large_transfer      one person-to-person wallet transfer >= EC$1000
+  transfer_velocity   one person makes >= 10 transfers inside any 24-hour window
+  cancel_refund       one customer has >= 3 cancelled/refunded orders in the range AND >= 50% of their orders in the range
+  failed_codes        one person has >= 6 failed code lookups (unknown wallet/charge code). pay.sql deletes these log rows after 1 day, so this rule only sees about the last 24 hours.
+  Also: low activity = at most 0 orders in the range for businesses at least 14 days old (editable).
+
+Privacy
+  Aggregates and BUSINESS names only. Customers appear only as a masked id ("user-" + 8 hex characters of an md5 hash: stable, not reversible). Order numbers appear on large-order
+  flags. No customer names, emails, phones or addresses are returned by any admin_pa_* function. Owner emails are not returned either.
+
+Security notes
+  Every admin_pa_* function: SECURITY DEFINER, search_path pinned, first line checks the platform admin, REVOKE from public and anon, GRANT to authenticated (needed so the admin's browser can call it).
+  The four platform_* tables have RLS on, no policies and no grants: not even the admin can read or write them directly, only through the functions.
+  Settings changes are audited in audit_log (platform_fee_changed, platform_tier_price_changed, platform_flag_changed).
+  All UPDATE statements have a WHERE (Supabase pg-safeupdate).
+
+Tests (supabase/*.sql on local Postgres + headless Chrome; see test/ folder)
+  test/pgpa.mjs        upgrade from v1.1 with data, SQL twice, hand-verified numbers, timezone edges, flags, settings, access control
+  test/pgpa_fresh.mjs  fresh install x2, each earlier file re-run then platform_analytics, empty database
+  test/pa_flow.js      Chrome 390 and 1280 px with a mock: tabs, charts, CSV, settings, refusal for non-admins, no JS errors
+  test/lint_safeupdate.js  every UPDATE/DELETE has a WHERE
