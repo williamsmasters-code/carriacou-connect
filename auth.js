@@ -18,7 +18,7 @@ const home=p=>p&&p.role==='vendor'?'dashboard-vendor.html':'dashboard-consumer.h
 async function createVendor(sb,user,v){
  return sb.from('vendors').insert({owner_id:user.id,name:v.name,description:v.description||'',location:v.location||''}).select().single();
 }
-const vendorFields=`<label>Business name<input id="bname" maxlength="80" required></label><label>Location (e.g. Hillsborough)<input id="bloc" maxlength="80"></label><label>About your business<textarea id="bdesc" rows="3" maxlength="500"></textarea></label><p class="muted">New businesses start on the <strong>Lite</strong> plan (up to 10 products).</p>`;
+const vendorFields=`<p class="notice">After you sign up you will fill in a short <strong>Sell on Carriacou Connect</strong> application (business details, area, contact, delivery and tax). Carriacou Connect reviews it before your shop is shown to shoppers.</p>`;
 
 const pages={
 async signup(){
@@ -26,14 +26,13 @@ async signup(){
  const c=await ctx();if(!c)return offline();
  if(c.user){location.href=NX()||home(c.profile);return}
  const f=$('#f'),msg=$('#msg'),vf=$('#vfields');vf.innerHTML=vendorFields;
- const sync=()=>{const v=f.role.value==='vendor';vf.hidden=!v;$('#bname').required=v};f.addEventListener('change',sync);sync();
+ const sync=()=>{const v=f.role.value==='vendor';vf.hidden=!v};f.addEventListener('change',sync);sync();
  f.onsubmit=async e=>{e.preventDefault();say(msg,'');const btn=f.querySelector('button');btn.disabled=true;
-  const role=f.role.value,biz={name:$('#bname').value.trim(),description:$('#bdesc').value.trim(),location:$('#bloc').value.trim()};
-  const {data,error}=await c.sb.auth.signUp({email:f.email.value.trim(),password:f.password.value,options:{data:{role,full_name:f.fullname.value.trim()},emailRedirectTo:location.origin+location.pathname.replace(/[^/]*$/,'')+'login.html'+(NX()?'?next='+encodeURIComponent(NX()):'')}});
+  const role=f.role.value;
+  const {data,error}=await c.sb.auth.signUp({email:f.email.value.trim(),password:f.password.value,options:{data:{role,full_name:f.fullname.value.trim()},emailRedirectTo:location.origin+location.pathname.replace(/[^/]*$/,'')+'login.html'+(role==='vendor'&&!NX()?'?next=apply.html':NX()?'?next='+encodeURIComponent(NX()):'')}});
   if(error){say(msg,error.message);btn.disabled=false;return}
-  if(role==='vendor')localStorage.setItem(PENDING,JSON.stringify(biz));
-  if(data.session){location.href=NX()||home({role})}
-  else{f.hidden=true;say(msg,'Almost done! Check your email and click the confirmation link, then log in. '+(role==='vendor'?'Your business profile will be created on first login.':''),true);msg.insertAdjacentHTML('beforeend',' <a href="login.html'+(NX()?'?next='+encodeURIComponent(NX()):'')+'">Go to login</a>')}}
+  if(data.session){location.href=NX()||(role==='vendor'?'apply.html':home({role}))}
+  else{f.hidden=true;say(msg,'Almost done! Check your email and click the confirmation link, then log in. '+(role==='vendor'?'After you log in you will fill in the Sell application.':''),true);msg.insertAdjacentHTML('beforeend',' <a href="login.html'+(NX()?'?next='+encodeURIComponent(NX()):role==='vendor'?'?next=apply.html':'')+'">Go to login</a>')}}
 },
 async login(){
  if(!configured)return offline();
@@ -127,13 +126,11 @@ async vendordash(){
  else{const vr=await sb.from('vendors').select('*').eq('owner_id',user.id).limit(1).maybeSingle();vendor=vr.data;legacy=!!vendor;
   if(vendor)me={vendor_id:vendor.id,vendor_name:vendor.name,tier:vendor.tier,role:'admin',is_owner:true,status:'active',perms:window.CC.ROLE_PERMS.admin.filter(p=>p!=='team'&&p!=='plan')}}
  if(!vendor&&me){$('#dash').innerHTML='<div class="notice err">We could not load that business.</div>';return}
- if(!vendor){let pend=null;try{pend=JSON.parse(localStorage.getItem(PENDING))}catch(e){}
-  if(pend&&pend.name){const r=await createVendor(sb,user,pend);if(!r.error){vendor=r.data;localStorage.removeItem(PENDING)}}}
  if(vendor&&!me){try{const r=await sb.rpc('my_vendor_access');if(!r.error&&Array.isArray(r.data))me=r.data.find(a=>a.vendor_id===vendor.id)||null}catch(e){}
   if(!me){legacy=true;me={vendor_id:vendor.id,vendor_name:vendor.name,tier:vendor.tier,role:'admin',is_owner:true,status:'active',perms:window.CC.ROLE_PERMS.admin.filter(p=>p!=='team'&&p!=='plan')}}}
  if(!vendor){
-  $('#dash').innerHTML=`<h2>Create your business profile</h2><form id="bf">${vendorFields}<button class="btn">Create business (Lite plan)</button></form><div id="bm" class="notice" hidden></div>`;
-  $('#bf').onsubmit=async e=>{e.preventDefault();const r=await createVendor(sb,user,{name:$('#bname').value.trim(),description:$('#bdesc').value.trim(),location:$('#bloc').value.trim()});if(r.error)say($('#bm'),r.error.message);else location.reload()};return}
+  $('#dash').innerHTML='<h2>Start selling</h2><div class="notice">You do not have a business yet. Send a short application and Carriacou Connect will review it before your shop goes live.</div><p><a class="btn" href="apply.html">Sell on Carriacou Connect: apply</a></p>';return}
+ if(vendor.status&&!['approved','suspended'].includes(vendor.status)){$('#dash').innerHTML=window.CC.onboarding?window.CC.onboarding.pendingHtml(vendor,vendor.owner_id===user.id):'<div class="notice">This business is waiting for approval. <a href="apply.html">Application status</a></div>';return}
  const perms=new Set(me.perms||[]),can=p=>perms.has(p),isOwner=!!me.is_owner;
  const TABS=[['products',can('products_view')],['orders',can('orders_view')],['analytics',can('analytics')],['campaigns',can('products_edit')&&!legacy],['delivery',['admin','subadmin'].includes(me.role)&&!legacy],['team',can('team')&&!legacy]].filter(x=>x[1]).map(x=>x[0]);
  let tab=TABS.includes(location.hash.slice(1))?location.hash.slice(1):(TABS[0]||'products'),ofilter='',nsum={},openN=new Set(),nTimer=null,plan=null;
@@ -167,12 +164,14 @@ async vendordash(){
   const olist=ord.data||[],newN=olist.filter(o=>o.status==='placed').length;
   $('#dash').innerHTML=`<h2>${esc(vendor.name)} <span class="badge t-${esc(TIER_LABEL[tierKey].replace('+',''))}">${esc(TIER_LABEL[tierKey])}</span> <span class="rolebadge r-${esc(me.role)}" title="Your role in this business">${esc(window.CC.ROLE_LABEL[me.role]||me.role)}</span></h2>
   ${acc.length>1?`<p class="vswitch"><label>Business <select id="vsel">${acc.map(a=>`<option value="${esc(a.vendor_id)}"${a.vendor_id===vendor.id?' selected':''}>${esc(a.vendor_name)} (${esc(window.CC.ROLE_LABEL[a.role]||a.role)})</option>`).join('')}</select></label></p>`:''}
+  ${vendor.status==='suspended'?`<div class="notice err" role="alert"><b>This business is suspended.</b> Shoppers cannot see it or place new orders. You can still see and finish your existing orders.${vendor.status_reason?' Reason: '+esc(vendor.status_reason):''} Please contact Carriacou Connect support.</div>`:''}
   <p class="muted">${esc(vendor.location||'')} ${vendor.description?'· '+esc(vendor.description):''}</p>
   <p class="payquick">${isOwner?'<a class="btn alt" href="wallet.html">Business wallet (test)</a> ':''}${can('pos')?`<a class="btn ghost" href="pos.html${acc.length>1?'?v='+encodeURIComponent(vendor.id):''}">POS: charge a customer (test)</a>`:''}${isOwner&&!legacy?' <a class="btn ghost" href="tiers.html">Plans</a>':''}</p>
   ${!isOwner?`<p class="notice roleinfo">You are signed in as <b>${esc(window.CC.ROLE_LABEL[me.role]||me.role)}</b> for ${esc(vendor.name)}. ${me.role==='staff'?'You can manage orders, take POS payments and write order notes.':'You can also manage products, issue refunds and see analytics.'}</p>`:''}
   ${can('products_view')?`<p id="usedline">${usedHtml()}</p>`:''}
   ${can('products_view')&&photosOn?`<p class="muted phline">Photos per product: up to <b>${maxPh}</b> on your ${esc(TIER_LABEL[tierKey])} plan.${overPh>0?` <span class="err-text">${overPh} product${overPh===1?' has':'s have'} more photos than this plan allows. They are kept, but you can't add more to ${overPh===1?'it':'them'} until you remove some${isOwner&&!legacy?' or <a href="tiers.html">upgrade</a>':''}.</span>`:''}</p>`:''}
   ${plan&&can('team')?`<p class="seatline muted">Team seats: <b>${plan.usage.staff} of ${plan.limits.max_staff==null?'unlimited':plan.limits.max_staff}</b> staff${plan.limits.max_subadmins===0?'':` · <b>${plan.usage.subadmins} of ${plan.limits.max_subadmins==null?'unlimited':plan.limits.max_subadmins}</b> sub-admins`} · <a href="#team" data-goteam>Manage team</a></p>`:''}
+  <div id="onbox"></div>
   <div class="dtabs" role="tablist">${TABS.includes('products')?'<button data-t="products" role="tab">Products</button>':''}${TABS.includes('orders')?`<button data-t="orders" role="tab">Orders${newN?` <b class="nbadge" title="New orders">${newN}</b>`:''}<span id="tnb"></span></button>`:''}${TABS.includes('analytics')?'<button data-t="analytics" role="tab">Analytics</button>':''}${TABS.includes('campaigns')?'<button data-t="campaigns" role="tab">Campaigns</button>':''}${TABS.includes('delivery')?'<button data-t="delivery" role="tab">Delivery &amp; tax</button>':''}${TABS.includes('team')?'<button data-t="team" role="tab">Team &amp; plan</button>':''}</div>
   <div id="tab-products"><div id="pform"${canEdit?'':' hidden'}><h3 id="ftitle">Add a product</h3>
   <form id="pf"><input type="hidden" id="pid"><label>Name<input id="pn" maxlength="120" required></label><label>Description<textarea id="pd" rows="3" maxlength="1000"></textarea></label>
@@ -198,6 +197,7 @@ async vendordash(){
    if(t==='team'&&!tmDone){tmDone=true;if(window.CC.team)window.CC.team.mount($('#tab-team'),{sb,vendor,me,plan,onPlanChange:()=>{tmDone=false;draw().then(()=>showTab('team'))}});else $('#tab-team').innerHTML='<div class="notice err">The team page did not load. Refresh the page.</div>'}
    if(t==='campaigns'&&!cpDone){cpDone=true;if(window.CC.campaigns)window.CC.campaigns.mount($('#tab-campaigns'),{sb,vendor,plan,isOwner});else $('#tab-campaigns').innerHTML='<div class="notice err">Campaigns did not load. Refresh the page.</div>'}
    if(t==='analytics'&&!anDone){anDone=true;if(window.CC.analytics)window.CC.analytics.mount($('#tab-analytics'),{sb,vendor,plan,isOwner,perms:[...perms],onEdit:goEdit,onUpgrade:()=>{if(TABS.includes('team'))showTab('team');else location.href='tiers.html'}});else $('#tab-analytics').innerHTML='<div class="notice err">Analytics did not load. Refresh the page.</div>'}};
+  if(window.CC.onboarding&&vendor.status==='approved')window.CC.onboarding.mount($('#onbox'),{sb,vendor,me,isOwner,can,TABS,goTab:t=>{showTab(t);const el=document.getElementById(t==='products'?'pform':'tab-'+t);if(el)el.scrollIntoView({block:'start'})},reload:()=>draw()});
   document.querySelectorAll('.dtabs button').forEach(b=>b.onclick=()=>showTab(b.dataset.t));
   const {stPill,fdate,fnice,payText,nextSteps}=window.CC;
   const drawOrders=()=>{const T=$('#tab-orders');

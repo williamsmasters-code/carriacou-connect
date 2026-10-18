@@ -1,4 +1,4 @@
-CARRIACOU CONNECT MARKETPLACE v1.5 (static preview + optional Supabase accounts + TEST-MODE wallets + vendor analytics + plans + team accounts + multi-photo products + bulk upload + Standard analytics + platform analytics + advanced/premium analytics + admin customer management + tax and delivery fees)
+CARRIACOU CONNECT MARKETPLACE v1.6 (static preview + optional Supabase accounts + TEST-MODE wallets + vendor analytics + plans + team accounts + multi-photo products + bulk upload + Standard analytics + platform analytics + advanced/premium analytics + admin customer management + tax and delivery fees + real vendor onboarding)
 ===================================================
 ALL VENDORS AND PRODUCTS ARE SAMPLE DATA. NO REAL PAYMENTS.
 
@@ -636,3 +636,55 @@ If tax_delivery.sql is not installed the site falls back to the old single picku
 
 Tests (test/): pgtd.mjs 137 checks (MODE=fresh 134): hand-verified math, quote = order, wallet debit = total, reconcile, snapshots, access matrix, re-runs.
   td_flow.js Chrome 390 and 1280 with mock_td.js (116 checks, no JS errors). Screenshots shots/td_*.png.
+
+
+=====================================================================
+v1.6: REAL VENDOR ONBOARDING  (TEST MODE wallets, no real payments, NO EMAILS SENT)
+=====================================================================
+New file: supabase/vendor_onboarding.sql   >>> RUN vendor_onboarding.sql LAST (after tax_delivery.sql) <<<
+Full run order: schema, seed, storage, orders, order_notes, pay, analytics, staff, photos, standard_analytics, platform_analytics, advanced_analytics, admin_customers, tax_delivery, vendor_onboarding.
+Safe to re-run. If you ever re-run standard_analytics.sql, re-run vendor_onboarding.sql afterwards (standard_analytics.sql redefines public_featured_campaigns, the only earlier function this file redefines).
+Everything else is additive: restrictive RLS policies, triggers, new tables, new RPCs. Ends with notify pgrst, 'reload schema'.
+
+What it does
+- Public page apply.html ("Sell" in the nav and footer, and on signup). The applicant must be logged in and becomes a PENDING vendor.
+  Form: business name, category, island/parish/area, description, phone/WhatsApp, business type, VAT registered + number, ID/registration number (optional),
+  pickup/delivery intent, starting tier (default Lite), terms checkbox. vendor-terms.html is a DRAFT FOR LEGAL REVIEW, not final terms.
+- Status: pending, changes_requested, approved, suspended, rejected, each with a reason.
+  Only APPROVED vendors (with at least one active product, the go-live rule) appear in marketplace, browse, search, product pages and can take orders. Enforced in SQL
+  (restrictive RLS on vendors and products, BEFORE INSERT triggers on orders and pay_requests), not just in the browser.
+  Owners, members, admins and customers who already ordered still see the vendor. Pending/rejected applicants can log in and edit and resubmit.
+  Suspended vendors are hidden, get no new orders, but can still see existing orders.
+- GRANDFATHERING: the new vendors.status column defaults to 'approved', so every existing vendor becomes approved on first run. Browser inserts are forced to pending by a trigger.
+  Note the go-live rule applies to them too: a vendor with zero active products is not shown publicly.
+- Admin > Applications tab: queue with search and status filters, detail view (applicant contact details are admin-only), approve / reject / request changes with reason and tier,
+  suspend / reinstate with reason, assign or reassign owner by customer email, sample-vendor hide/show toggle (default visible), history. All audit-logged (actions start with onb_).
+  All admin RPCs are SECURITY DEFINER, check _require_platform_admin() and are revoked from public/anon.
+- Admin > Vendors tab (vendors.js, like the Customers tab): searchable list, 25 per page, filter by status and plan (columns: business, owner, category, area, status, plan, joined,
+  products, orders, revenue). Detail view: profile and application fields, owner and team, products summary, orders summary (revenue excludes cancelled), delivery and tax settings
+  (read-only), admin history. Admin can edit the profile (name, description, category, island/area, phone, WhatsApp, VAT registered + number, private admin notes), change plan,
+  approve / reject / request changes / suspend / reinstate, assign or reassign the owner, and hide/show sample vendors. EVERY change needs a reason of 3-300 characters and
+  writes audit_log with before/after/reason (actions vend_profile_edited, vend_tier_changed, onb_*). Database functions (admin-only SECURITY DEFINER, revoked from public/anon):
+  admin_vend_list, admin_vend_get, admin_vend_update, admin_vend_set_tier, admin_vend_decide, admin_vend_assign_owner, admin_vend_set_hide_samples. Table vendor_admin_profile
+  (no client access) holds admin notes and category/phone for businesses that have no application row. Admin notes are never visible to vendors or the public.
+- SAMPLE vendors: admin "assign owner" converts a sample vendor to a real one.
+- Vendor dashboard: onboarding checklist with progress bar (profile/logo, 1 product with photo, delivery and tax settings, pickup/delivery, payment info, staff invite).
+  Payment info is text only, stored in vendor_private (owner/sub-admin and admins). No card or bank processing.
+- Ownership transfer (Team tab): owner transfers to an existing active staff or sub-admin after typing the business name to confirm. Admin can reassign with a reason.
+  Audited; a vendor is never left without an owner. The old owner becomes a sub-admin if a seat is free (otherwise loses access: see caveats).
+- Invites: copyable accept link, optional "Email draft" button (opens your own mail app via mailto:), expiry shown, revoke.
+- NOTIFICATIONS: the system sends NO email. Status changes are shown in-app. The table notification_queue is a hook only (rows are queued, sent_at stays NULL, nothing reads or sends them).
+  A future email sender can poll it.
+
+New / changed files: supabase/vendor_onboarding.sql, apply.html, apply.js, vendor-terms.html, onboarding.js, applications.js, vendors.js; changed admin.html, admin.js, auth.js,
+dashboard-vendor.html, cc.js, app.js, team.js, style.css.
+
+Tests (test/): pgonb.mjs 270 checks (upgrade and fresh): grandfathering, access matrix, lifecycle, visibility for anon and consumer, order enforcement, privacy,
+  transfer edge cases, reruns. onb_flow.js and vend_flow.js (Vendors tab) Chrome 390 and 1280 with mock_onb.js (no JS errors). lint_safeupdate passes. All earlier suites pass.
+  Screenshots shots/onb_*.png and shots/vend_*.png.
+
+Caveats
+- Tested on local Postgres 17 and a browser mock only, not on real Supabase. Logo upload (storage) is not covered by the mock.
+- Terms are a draft. A suspended vendor's open POS charges cannot be paid; wallet transfers directly to a suspended vendor wallet are not blocked.
+- A pending vendor created by a direct browser insert (not via apply) has no application row. Staff of a pending vendor only see a status notice.
+- Seat limits can leave the old owner with no access after a transfer/reassign.

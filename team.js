@@ -3,10 +3,11 @@
 (function(){
 const CC=window.CC;if(!CC)return;
 const esc=CC.esc,fdate=CC.fdate;
-const ACTION={checkout_settings_changed:'Delivery and tax settings changed',products_bulk:'Bulk product import',invite_created:'Invite created',invite_revoked:'Invite revoked',member_joined:'Joined the team',role_changed:'Role changed',member_suspended:'Access paused',member_reactivated:'Access restored',member_removed:'Removed from the team',member_left:'Left the team',tier_changed:'Plan changed',upgrade_requested:'Upgrade requested',upgrade_request_cancelled:'Upgrade request cancelled',upgrade_approved:'Upgrade approved',upgrade_declined:'Upgrade declined',plan_override_set:'Custom seat limits set',tier_change_reason:'Plan change note'};
+const ACTION={checkout_settings_changed:'Delivery and tax settings changed',products_bulk:'Bulk product import',invite_created:'Invite created',invite_revoked:'Invite revoked',member_joined:'Joined the team',role_changed:'Role changed',member_suspended:'Access paused',member_reactivated:'Access restored',member_removed:'Removed from the team',member_left:'Left the team',tier_changed:'Plan changed',upgrade_requested:'Upgrade requested',upgrade_request_cancelled:'Upgrade request cancelled',upgrade_approved:'Upgrade approved',upgrade_declined:'Upgrade declined',plan_override_set:'Custom seat limits set',onb_applied:'Application sent',onb_updated:'Application edited',onb_approved:'Application approved',onb_rejected:'Application rejected',onb_changes_requested:'Changes requested on the application',onb_suspended:'Business suspended',onb_reinstated:'Business reinstated',onb_owner_assigned:'Owner assigned',onb_owner_reassigned:'Owner reassigned by Carriacou Connect',onb_owner_transferred:'Ownership transferred',onb_payment_info:'Payment information saved',tier_change_reason:'Plan change note'};
 const nice=m=>{m=(m&&m.message)||String(m||'');return /Could not find the function|schema cache|does not exist/i.test(m)?'Teams and plans are not switched on yet (staff.sql has not been run in Supabase).':m};
 const left=(limit,used)=>limit==null?Infinity:Math.max(0,limit-used);
 const lbl=n=>n==null?'unlimited':String(n);
+const inDays=d=>{const ms=new Date(d)-Date.now();if(ms<=0)return 'expired';const h=Math.floor(ms/36e5);return h<48?'in '+Math.max(1,h)+' hour'+(h===1?'':'s'):'in '+Math.floor(h/24)+' days'};
 function meter(used,limit){return limit==null||limit===0?'':'<span class="meter"><span style="width:'+Math.min(100,Math.round(used/limit*100))+'%"></span></span>'}
 function mount(box,o){
  const {sb,vendor}=o;let data=null,P=o.plan,newInvite=null,busy=false;
@@ -35,7 +36,8 @@ function mount(box,o){
      :'<p class="muted">You are on the top plan. <a href="tiers.html">See all plans</a></p>'}</div></section>
   <section><h3>Team members</h3><div class="members">${data.members.map(m=>memberRow(m)).join('')}</div></section>
   <section><h3>Invite someone</h3>${noTeam?upsell():inviteForm(staffLeft,subLeft)}${newInvite?inviteBox(newInvite):''}</section>
-  <section><h3>Open invites</h3>${data.invites.length?'<div class="invites">'+data.invites.map(i=>`<div class="irow${i.expired?' exp':''}"><div><b>${esc(i.email)}</b> <span class="rolebadge r-${esc(i.role)}">${esc(CC.ROLE_LABEL[i.role])}</span><small>${i.expired?'Expired':'Expires'} ${esc(fdate(i.expires_at))}</small></div><button class="btn ghost sm" data-rev="${esc(i.id)}" type="button">Revoke</button></div>`).join('')+'</div>':'<p class="muted">No open invites.</p>'}</section>
+  <section><h3>Open invites</h3><p class="muted">The invite code is shown only once, when you create it, so a lost invite cannot be shown again: revoke it and create a new one.</p>${data.invites.length?'<div class="invites">'+data.invites.map(i=>`<div class="irow${i.expired?' exp':''}"><div><b>${esc(i.email)}</b> <span class="rolebadge r-${esc(i.role)}">${esc(CC.ROLE_LABEL[i.role])}</span><small>${i.expired?'Expired':'Expires'} ${esc(fdate(i.expires_at))} (${esc(inDays(i.expires_at))})</small></div><button class="btn ghost sm" data-rev="${esc(i.id)}" type="button">Revoke</button></div>`).join('')+'</div>':'<p class="muted">No open invites.</p>'}</section>
+  ${transferSection()}
   <details class="permtable"><summary>What can each role do?</summary>${perms()}</details>
   <details class="auditbox" id="aud"><summary>Activity log</summary><div id="audbody"><p class="muted">Loading…</p></div></details>`;
   wire();
@@ -48,12 +50,14 @@ function mount(box,o){
    <button class="btn" ${full?'disabled':''}>Create invite link</button>${full?`<p class="err-text">All seats on your ${esc(T.name)} plan are used. Remove someone or <a href="tiers.html">upgrade</a>.</p>`:''}
    <p class="muted">No email is sent. You get a link and a code to share yourself. It only works for that email address, once, for 7 days. The person signs up or logs in with that email first.</p></form>`;
  }
+ const mailto=(i,link)=>'mailto:'+encodeURIComponent(i.email).replace(/%40/g,'@')+'?subject='+encodeURIComponent('Join '+vendor.name+' on Carriacou Connect')+'&body='+encodeURIComponent('Hello,\n\nYou are invited to join '+vendor.name+' on Carriacou Connect as '+(CC.ROLE_LABEL[i.role]||i.role)+'.\n\n1. Log in or sign up with THIS email address: '+i.email+'\n2. Open this link: '+link+'\n   (or enter the code '+i.code+' on the Accept invite page)\n\nThe invite works once and expires '+fdate(i.expires_at)+'.\n');
  function inviteBox(i){
   const link=location.origin+location.pathname.replace(/[^/]*$/,'')+'accept-invite.html#code='+encodeURIComponent(i.code);
   return `<div class="invbox" role="status"><b>Invite ready for ${esc(i.email)}</b> as ${esc(CC.ROLE_LABEL[i.role])}
    <p class="muted">Copy it now. For safety the code is shown only once. It expires ${esc(fdate(i.expires_at))}.</p>
    <div class="wcode"><span class="muted">Link</span><code id="ilink">${esc(link)}</code><button class="btn ghost sm" data-copy="${esc(link)}" type="button">Copy link</button></div>
-   <div class="wcode"><span class="muted">Code</span><code>${esc(i.code)}</code><button class="btn ghost sm" data-copy="${esc(i.code)}" type="button">Copy code</button></div></div>`;
+   <div class="wcode"><span class="muted">Code</span><code>${esc(i.code)}</code><button class="btn ghost sm" data-copy="${esc(i.code)}" type="button">Copy code</button></div>
+   <p><a class="btn ghost sm" id="imail" href="${esc(mailto(i,link))}">Email draft (opens your mail app)</a> <small class="muted">Carriacou Connect does not send email. This only opens a draft in your own email app, which you send yourself.</small></p></div>`;
  }
  function memberRow(m){
   const pill=m.status==='suspended'?'<span class="pp pp-ref">Paused</span>':'<span class="pp pp-paid">Active</span>';
@@ -67,6 +71,10 @@ function mount(box,o){
   const rows=[['Orders: see and update','orders_view',1,1,1],['Order notes to customers','notes',1,1,1],['POS charges','pos',1,1,1],['See all products','products_view',1,1,1],['Add, edit, delete products','products_edit',0,1,1],['Refund wallet-paid orders','refunds',0,1,1],['Analytics','analytics',0,1,1],['Team, invites and activity log','team',0,0,1],['Request plan upgrades','plan',0,0,1],['Business wallet (send, top up) and business profile',null,0,0,1]];
   const y='<span class="yes" aria-label="Yes">✓</span>',n='<span class="no" aria-label="No">–</span>';
   return '<div class="tblwrap"><table class="ptab"><tr><th>Action</th><th>Staff</th><th>Sub-admin</th><th>Owner</th></tr>'+rows.map(r=>`<tr><td>${esc(r[0])}</td><td>${r[2]?y:n}</td><td>${r[3]?y:n}</td><td>${r[4]?y:n}</td></tr>`).join('')+'</table></div><p class="muted">Sub-admin seats exist on Pro and Enterprise only.</p>';
+ }
+ function transferSection(){
+  const c=(data.members||[]).filter(m=>!m.is_owner&&m.status==='active');
+  return `<section class="xfer"><h3>Transfer ownership</h3>${c.length?`<p class="muted">Hand this business to someone on your team. They become the owner (billing, team and plan). You become a sub-admin if your plan has a free sub-admin seat; otherwise you lose access. The wallet and orders stay with the business. Carriacou Connect can also reassign an owner.</p><form id="xff" class="invform" autocomplete="off"><label>New owner<select id="xto">${c.map(m=>`<option value="${esc(m.user_id)}">${esc(m.name)} (${esc(CC.ROLE_LABEL[m.role]||m.role)}, ${esc(m.email||'')})</option>`).join('')}</select></label><label>Type the business name to confirm<input id="xcf" maxlength="80" placeholder="${esc(vendor.name)}"></label><button class="btn danger" type="submit">Transfer ownership</button></form>`:'<p class="muted">To transfer ownership, first add an active staff or sub-admin member. A business always has exactly one owner.</p>'}</section>`;
  }
  async function act(fn,args,okMsg){
   if(busy)return;busy=true;box.querySelectorAll('button').forEach(b=>b.disabled=true);
@@ -85,6 +93,12 @@ function mount(box,o){
   box.querySelectorAll('[data-role]').forEach(s=>s.onchange=()=>act('change_member_role',{p_member:s.dataset.role,p_role:s.value},'Role updated. It takes effect immediately.'));
   box.querySelectorAll('[data-susp]').forEach(b=>b.onclick=()=>act('set_member_status',{p_member:b.dataset.susp,p_status:b.dataset.to},b.dataset.to==='suspended'?'Access paused. They keep their seat.':'Access restored.'));
   box.querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>{if(confirm('Remove '+b.dataset.name+' from your team? They lose access straight away.'))act('remove_member',{p_member:b.dataset.rm},'Removed. The seat is free again.')});
+  const xf=box.querySelector('#xff');
+  if(xf)xf.onsubmit=async e=>{e.preventDefault();const to=xf.querySelector('#xto'),nm=to.options[to.selectedIndex].text;if(xf.querySelector('#xcf').value.trim().toLowerCase()!==vendor.name.trim().toLowerCase()){say('Type the exact business name to confirm.');return}
+   if(!confirm('Transfer '+vendor.name+' to '+nm+'? You will no longer be the owner.'))return;if(busy)return;busy=true;xf.querySelectorAll('button').forEach(b=>b.disabled=true);
+   const r=await sb.rpc('transfer_vendor_ownership',{p_vendor:vendor.id,p_new_owner:to.value,p_confirm:xf.querySelector('#xcf').value.trim()});busy=false;
+   if(r.error){await load();say(nice(r.error));return}
+   box.innerHTML='<div class="notice ok" role="status">Ownership transferred to '+esc(r.data.new_owner)+'. '+(r.data.old_owner_role?'You are now a sub-admin.':'You no longer have access to this business.')+' <a href="dashboard-vendor.html">Continue</a></div>';setTimeout(()=>{location.href='dashboard-vendor.html'},2500)};
   const rf=box.querySelector('#rqf');
   if(rf)rf.onsubmit=async e=>{e.preventDefault();const to=rf.querySelector('#rqt').value;
    if(!confirm('Request the '+CC.TIER_LABEL[to]+' plan? TEST MODE: no billing exists yet, the Carriacou Connect team approves test upgrades.'))return;

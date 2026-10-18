@@ -9,12 +9,12 @@ async function boot(){
  const pr=await sb.from('profiles').select('role').eq('id',user.id).maybeSingle();
  if(!pr.data||pr.data.role!=='admin'){R.innerHTML='<div class="notice err">This page is for platform admins only.</div>';return}
  const tabsEl=$('#admtabs'),PA=$('#admpa');tabsEl.hidden=false;
- let tab='plans';
+ let tab='plans';if(CC.applications)CC.applications.pendingCount(sb).then(n=>{const b=tabsEl.querySelector('[data-t=applications]');if(b&&n)b.insertAdjacentHTML('beforeend',' <b class="nbadge" title="Applications waiting">'+n+'</b>')});
  const show=async()=>{tabsEl.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.t===tab));R.hidden=tab!=='plans';PA.hidden=tab==='plans';
-  if(tab==='analytics'){PA.innerHTML='';await CC.platform.mountAnalytics(PA,sb)}else if(tab==='customers'){PA.innerHTML='';await CC.customers.mount(PA,sb)}else if(tab==='settings'){PA.innerHTML='';await CC.platform.mountSettings(PA,sb)}};
+  if(tab==='analytics'){PA.innerHTML='';await CC.platform.mountAnalytics(PA,sb)}else if(tab==='customers'){PA.innerHTML='';await CC.customers.mount(PA,sb)}else if(tab==='vendors'){PA.innerHTML='';await CC.vendors.mount(PA,sb)}else if(tab==='applications'){PA.innerHTML='';await CC.applications.mount(PA,sb)}else if(tab==='settings'){PA.innerHTML='';await CC.platform.mountSettings(PA,sb)}};
  const pick=t=>{tab=t;if(location.hash!=='#'+t&&t!=='plans')history.replaceState(null,'','#'+t);else if(t==='plans')history.replaceState(null,'',location.pathname+location.search);show()};
  tabsEl.querySelectorAll('button').forEach(b=>b.onclick=()=>pick(b.dataset.t));
- window.addEventListener('hashchange',()=>{const h=location.hash.slice(1);if(['analytics','customers','settings'].includes(h)&&h!==tab){tab=h;show()}});
+ window.addEventListener('hashchange',()=>{const h=location.hash.slice(1);if(['analytics','applications','vendors','customers','settings'].includes(h)&&h!==tab){tab=h;show()}});
  let q='',msg='',mok=true;
  const load=async()=>{
   const [v,r]=await Promise.all([sb.rpc('admin_list_vendors'),sb.rpc('admin_list_requests',{p_status:null})]);
@@ -40,7 +40,7 @@ async function boot(){
    call('admin_set_plan_override',{p_vendor:b.dataset.ov,p_max_staff:ms,p_max_subadmins:ma},'Seat limits saved.')});
  }
  await load();
- {const h=location.hash.slice(1);if(['analytics','customers','settings'].includes(h)){tab=h;await show()}}
+ {const h=location.hash.slice(1);if(['analytics','applications','vendors','customers','settings'].includes(h)){tab=h;await show()}}
 }
 boot().catch(e=>{console.error(e);R.innerHTML='<div class="notice err">Something went wrong. Please refresh.</div>'});
 })();

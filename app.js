@@ -46,10 +46,10 @@ let r=DATA.products.filter(p=>(!cs.value||p.category===cs.value)&&(!vs.value||p.
 if(sort==='lo')r.sort((a,b)=>a.price-b.price);if(sort==='hi')r.sort((a,b)=>b.price-a.price);
 $('#count').textContent=r.length+' product(s)';$('#list').innerHTML=r.map(card).join('')||'<p>No products match.</p>'};
 ['input','change'].forEach(e=>document.querySelector('.filters').addEventListener(e,run));run()},
-vendor(){const v=vendor(qs.get('id'));if(!v){$('#v').innerHTML='<p>Vendor not found.</p>';return}
+vendor(){const v=DATA.vendors.find(x=>x.id===qs.get('id'));if(!v){$('#v').innerHTML='<div class="empty"><h3>This business is not available right now</h3><p>It may not be open yet, or it may have paused its shop. <a href="browse.html">Browse the marketplace</a></p></div>';return}
 document.title=v.name+' – Carriacou Connect';
 const ps=DATA.products.filter(p=>p.vendorId===v.id);
-$('#v').innerHTML=`<span class="kicker">Vendor</span><h1>${esc(v.name)} ${tierBadge(v.tier)}</h1><p>${esc(v.about)}<br><span class="muted">${esc(v.location)}, Carriacou · ${esc(v.tier)} plan · ${ps.length} of ${DATA.tiers[v.tier]??'unlimited'} product slots used</span></p><div class="grid">${ps.map(card).join('')}</div>`},
+$('#v').innerHTML=`<span class="kicker">Vendor</span><h1>${esc(v.name)} ${tierBadge(v.tier)}</h1><p>${esc(v.about)}<br><span class="muted">${esc(v.location)}${/,/.test(v.location||'')?'':', Carriacou'} · ${esc(v.tier)} plan · ${ps.length} of ${DATA.tiers[v.tier]??'unlimited'} product slots used</span></p><div class="grid">${ps.map(card).join('')}</div>`},
 async product(){const p=DATA.products.find(x=>x.id===qs.get('id'));if(!p){$('#p').innerHTML='<p>Product not found.</p>';return}
 document.title=p.name+' – Carriacou Connect';const v=vendor(p.vendorId),cat=DATA.categories.find(c=>c.id===p.category)||DATA.categories[0];
 $('#p').innerHTML=`<div class="detail"><div id="gwrap"></div>
@@ -127,7 +127,7 @@ ${nv>1?`<p class="muted">Your cart has items from ${nv} vendors, so it becomes $
 <p class="muted">${opts?'Delivery fees and tax are worked out by the server and shown above. They are re-checked when you place the order.':'Prices are re-checked by the server when you place the order.'}</p>${payNote}<p><a href="cart.html">Edit cart</a></p></aside></div>`;
 const f=$('#cof'),m=$('#cm');
 const susp=await window.CC.acctStatus(sb);if(susp.suspended){m.className='notice err';m.textContent=susp.message+' You cannot place orders right now.';m.hidden=false;$('#cgo').disabled=true}
-const cleanErr=t=>String(t||'').replace(/^ACCOUNT_SUSPENDED:\s*/,'');
+const cleanErr=t=>String(t||'').replace(/^ACCOUNT_SUSPENDED:\s*/,'').replace(/^VENDOR_UNAVAILABLE:\s*/,'Sorry, one of the businesses in your cart is not taking orders right now. Remove its items and try again. ');
 const payWallet=()=>!!wal&&f.pay&&f.pay.value==='wallet';
 const planFrom=()=>{if(!opts)return;Object.keys(byV).forEach(v=>{const r=f.querySelector('input[name="ful_'+v+'"]:checked');plan[v].fulfilment=r?r.value:(opts[v].pickup_enabled?'pickup':'delivery');const sel=f.querySelector('#area_'+v);plan[v].area=sel?sel.value:''})};
 const anyDel=()=>opts?Object.values(plan).some(p=>p.fulfilment==='delivery'):f.ful.value==='delivery';
