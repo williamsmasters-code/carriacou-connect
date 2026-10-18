@@ -116,7 +116,7 @@ function authLinks(){return '<a href="login.html">Log in</a><a class="pill" href
 function layout(){
  const live=configured;
  const out=live?authLinks():'<a href="login.html">Log in</a>';
- const msg=live?'Preview v0.9 – products labeled SAMPLE are fictional. Wallet payments and plans are TEST MODE only. No real payments or billing.':'Preview v0.9 – all vendors and products are SAMPLE data. Accounts are not switched on yet. No real payments.';
+ const msg=live?'Preview v1.1 – products labeled SAMPLE are fictional. Wallet payments and plans are TEST MODE only. No real payments or billing.':'Preview v1.1 – all vendors and products are SAMPLE data. Accounts are not switched on yet. No real payments.';
  if(!document.querySelector('link[data-cc-fonts]')){const l=document.createElement('link');l.rel='stylesheet';l.dataset.ccFonts='1';l.href='https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,600;0,9..144,800;1,9..144,600&family=Plus+Jakarta+Sans:wght@400;500;700;800&display=swap';document.head.appendChild(l)}
  const m=document.querySelector('main');if(m)m.id='main';
  const home=document.body.dataset.page==='home';
@@ -138,7 +138,8 @@ async function authNav(){
  render(await getUser());
  sb.auth.onAuthStateChange((ev)=>{if(ev==='SIGNED_OUT')render(null)});
 }
-window.CC={TESTBANNER,cents,toCents,uuid,payPill,noteSummary,newBadge,notesWidget,NOTE_POLL,SLABEL,stPill,fdate,fnice,payText,nextSteps,timeline,safeNext,WAVE,configured,client,esc,getUser,layout,TIER_LABEL,TIER_LIMIT,TIERS,lim,ROLE_LABEL,ROLE_PERMS,
+const PCOLS='id,vendor_id,name,description,price_xcd,category,image_url,active,featured,created_at,updated_at,stock_qty,low_stock_threshold,sku',PCOLS_BASE='id,vendor_id,name,description,price_xcd,category,image_url,active,featured,created_at,updated_at,stock_qty,low_stock_threshold'; // never '*': products.cost_price is private (standard_analytics.sql)
+window.CC={PCOLS,PCOLS_BASE,TESTBANNER,cents,toCents,uuid,payPill,noteSummary,newBadge,notesWidget,NOTE_POLL,SLABEL,stPill,fdate,fnice,payText,nextSteps,timeline,safeNext,WAVE,configured,client,esc,getUser,layout,TIER_LABEL,TIER_LIMIT,TIERS,lim,ROLE_LABEL,ROLE_PERMS,
  xcd:n=>'EC$'+Number(n).toFixed(2)};
 layout();
 })();

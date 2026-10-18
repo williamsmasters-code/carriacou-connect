@@ -133,12 +133,12 @@ async vendordash(){
   $('#dash').innerHTML=`<h2>Create your business profile</h2><form id="bf">${vendorFields}<button class="btn">Create business (Lite plan)</button></form><div id="bm" class="notice" hidden></div>`;
   $('#bf').onsubmit=async e=>{e.preventDefault();const r=await createVendor(sb,user,{name:$('#bname').value.trim(),description:$('#bdesc').value.trim(),location:$('#bloc').value.trim()});if(r.error)say($('#bm'),r.error.message);else location.reload()};return}
  const perms=new Set(me.perms||[]),can=p=>perms.has(p),isOwner=!!me.is_owner;
- const TABS=[['products',can('products_view')],['orders',can('orders_view')],['analytics',can('analytics')],['team',can('team')&&!legacy]].filter(x=>x[1]).map(x=>x[0]);
+ const TABS=[['products',can('products_view')],['orders',can('orders_view')],['analytics',can('analytics')],['campaigns',can('products_edit')&&!legacy],['team',can('team')&&!legacy]].filter(x=>x[1]).map(x=>x[0]);
  let tab=TABS.includes(location.hash.slice(1))?location.hash.slice(1):(TABS[0]||'products'),ofilter='',nsum={},openN=new Set(),nTimer=null,plan=null;
  const stockCell=p=>{if(p.stock_qty==null)return '<span class="muted">Not tracked</span>';const th=p.low_stock_threshold==null?5:p.low_stock_threshold;return p.stock_qty===0?'<span class="stk out">Out of stock</span>':p.stock_qty<=th?'<span class="stk low">'+p.stock_qty+' left (low)</span>':'<span class="stk">'+p.stock_qty+' in stock</span>'};
  let photosOn=null,prods=[],pTotal=0,pPage=0,pQuery='';const PAGE=50;
  const loadProducts=async()=>{
-  const build=emb=>{let q=sb.from('products').select(emb?'*,product_images(id,url,position)':'*',{count:'exact'}).eq('vendor_id',vendor.id);
+  const build=emb=>{let q=sb.from('products').select(emb?window.CC.PCOLS+',product_images(id,url,position)':window.CC.PCOLS_BASE,{count:'exact'}).eq('vendor_id',vendor.id);
    const t=pQuery.replace(/[%_\\,()*"']/g,' ').replace(/\s+/g,' ').trim();
    if(t)q=emb?q.or('name.ilike.%'+t+'%,sku.ilike.%'+t+'%'):q.ilike('name','%'+t+'%');
    return q.order('created_at',{ascending:false}).order('id',{ascending:false}).range(pPage*PAGE,pPage*PAGE+PAGE-1)};
@@ -147,10 +147,13 @@ async vendordash(){
   else if(!r.error&&photosOn===null)photosOn=true;
   if(!r.error&&!(r.data||[]).length&&pPage>0&&r.count>0){pPage=Math.max(0,Math.ceil(r.count/PAGE)-1);r=await build(photosOn!==false)}
   prods=(r.data||[]).map(p=>{if(p.product_images)p.product_images.sort((a,b)=>a.position-b.position);return p});pTotal=r.count!=null?r.count:prods.length};
+ let costMap=null; // {productId: cost} from vendor_product_costs(); null = standard_analytics.sql not run (or no permission)
+ const loadCosts=async()=>{costMap=null;if(!can('products_edit'))return;try{const r=await sb.rpc('vendor_product_costs',{p_vendor:vendor.id});if(!r.error&&Array.isArray(r.data)){costMap={};r.data.forEach(x=>{costMap[x.id]=x.cost_price})}}catch(e){}};
  const draw=async()=>{
   if(!legacy){try{const pl=await sb.rpc('vendor_plan',{p_vendor:vendor.id});if(!pl.error&&pl.data)plan=pl.data}catch(e){}}
   const cq=await sb.from('products').select('id',{count:'exact',head:true}).eq('vendor_id',vendor.id);
   await loadProducts();
+  await loadCosts();
   let used;const lim=plan?plan.limits.max_products:TIER_LIMIT[vendor.tier];used=cq.count!=null?cq.count:(plan&&plan.usage?plan.usage.products:prods.length);const full=lim!=null&&used>=lim;
   const tierKey=plan?plan.tier:vendor.tier,canEdit=can('products_edit');
   const usedHtml=()=>{const pct=lim?Math.min(100,Math.round(used/lim*100)):0,full=lim!=null&&used>=lim;return `<strong>Products: ${used} of ${lim==null?'unlimited':lim}</strong>${lim?`<span class="meter"><span style="width:${pct}%"></span></span>`:''}${full?`<br><span class="err-text">Limit reached. Delete a product${isOwner&&!legacy?' or <a href="tiers.html">see plans</a>':''}.</span>`:''}`};
@@ -168,10 +171,11 @@ async vendordash(){
   ${can('products_view')?`<p id="usedline">${usedHtml()}</p>`:''}
   ${can('products_view')&&photosOn?`<p class="muted phline">Photos per product: up to <b>${maxPh}</b> on your ${esc(TIER_LABEL[tierKey])} plan.${overPh>0?` <span class="err-text">${overPh} product${overPh===1?' has':'s have'} more photos than this plan allows. They are kept, but you can't add more to ${overPh===1?'it':'them'} until you remove some${isOwner&&!legacy?' or <a href="tiers.html">upgrade</a>':''}.</span>`:''}</p>`:''}
   ${plan&&can('team')?`<p class="seatline muted">Team seats: <b>${plan.usage.staff} of ${plan.limits.max_staff==null?'unlimited':plan.limits.max_staff}</b> staff${plan.limits.max_subadmins===0?'':` · <b>${plan.usage.subadmins} of ${plan.limits.max_subadmins==null?'unlimited':plan.limits.max_subadmins}</b> sub-admins`} · <a href="#team" data-goteam>Manage team</a></p>`:''}
-  <div class="dtabs" role="tablist">${TABS.includes('products')?'<button data-t="products" role="tab">Products</button>':''}${TABS.includes('orders')?`<button data-t="orders" role="tab">Orders${newN?` <b class="nbadge" title="New orders">${newN}</b>`:''}<span id="tnb"></span></button>`:''}${TABS.includes('analytics')?'<button data-t="analytics" role="tab">Analytics</button>':''}${TABS.includes('team')?'<button data-t="team" role="tab">Team &amp; plan</button>':''}</div>
+  <div class="dtabs" role="tablist">${TABS.includes('products')?'<button data-t="products" role="tab">Products</button>':''}${TABS.includes('orders')?`<button data-t="orders" role="tab">Orders${newN?` <b class="nbadge" title="New orders">${newN}</b>`:''}<span id="tnb"></span></button>`:''}${TABS.includes('analytics')?'<button data-t="analytics" role="tab">Analytics</button>':''}${TABS.includes('campaigns')?'<button data-t="campaigns" role="tab">Campaigns</button>':''}${TABS.includes('team')?'<button data-t="team" role="tab">Team &amp; plan</button>':''}</div>
   <div id="tab-products"><div id="pform"${canEdit?'':' hidden'}><h3 id="ftitle">Add a product</h3>
   <form id="pf"><input type="hidden" id="pid"><label>Name<input id="pn" maxlength="120" required></label><label>Description<textarea id="pd" rows="3" maxlength="1000"></textarea></label>
   <label>Price (EC$)<input id="pp" type="number" min="0" step="0.01" required></label>
+  <label id="pcostl">Cost price (EC$) <small>(optional, private: only you and your sub-admins see it. Used for profit reports.)</small><input id="pcost" type="number" min="0" max="1000000" step="0.01" inputmode="decimal" placeholder="what it costs you"></label>
   <div class="stockrow"><label>Stock quantity <small>(optional, leave blank to not track)</small><input id="ps" type="number" min="0" max="1000000" step="1" inputmode="numeric" placeholder="e.g. 24"></label><label>Low-stock alert at or below<input id="pt" type="number" min="0" max="1000000" step="1" inputmode="numeric" value="5"></label></div>
   <label>Category<select id="pc">${Object.entries(CATS).map(([k,v])=>`<option value="${k}">${esc(v)}</option>`).join('')}</select></label>
   <div class="uploader" id="upl"></div>
@@ -181,15 +185,16 @@ async vendordash(){
   <h3>${canEdit?'Your products':'Products'}</h3>
   <div class="plist-tools"><label class="sr" for="psearch">Search products</label><input id="psearch" type="search" placeholder="Search by name or SKU" value="${esc(pQuery)}" autocomplete="off"><span id="pcount" class="muted"></span></div>
   <div id="plist"></div><div id="ppager" class="ppager"></div>
-  </div><div id="tab-orders" hidden></div><div id="tab-analytics" hidden></div><div id="tab-team" hidden></div>`;
+  </div><div id="tab-orders" hidden></div><div id="tab-analytics" hidden></div><div id="tab-campaigns" hidden></div><div id="tab-team" hidden></div>`;
   const vs0=$('#vsel');if(vs0)vs0.onchange=()=>{location.href='dashboard-vendor.html?v='+encodeURIComponent(vs0.value)};
   const gt=document.querySelector('[data-goteam]');if(gt)gt.onclick=e=>{e.preventDefault();showTab('team')};
   const f=$('#pf'),m=$('#pm');
   let goEditRef=null;const goEdit=id=>goEditRef&&goEditRef(id);
-  let anDone=false,tmDone=false;
-  const showTab=t=>{if(!TABS.includes(t))t=TABS[0]||'products';tab=t;history.replaceState(null,'',t==='products'?location.pathname+location.search:location.search+'#'+t);document.querySelectorAll('.dtabs button').forEach(x=>x.classList.toggle('on',x.dataset.t===t));$('#tab-products').hidden=t!=='products';$('#tab-orders').hidden=t!=='orders';$('#tab-analytics').hidden=t!=='analytics';$('#tab-team').hidden=t!=='team';
+  let anDone=false,tmDone=false,cpDone=false;
+  const showTab=t=>{if(!TABS.includes(t))t=TABS[0]||'products';tab=t;history.replaceState(null,'',t==='products'?location.pathname+location.search:location.search+'#'+t);document.querySelectorAll('.dtabs button').forEach(x=>x.classList.toggle('on',x.dataset.t===t));$('#tab-products').hidden=t!=='products';$('#tab-orders').hidden=t!=='orders';$('#tab-analytics').hidden=t!=='analytics';$('#tab-campaigns').hidden=t!=='campaigns';$('#tab-team').hidden=t!=='team';
    if(t==='team'&&!tmDone){tmDone=true;if(window.CC.team)window.CC.team.mount($('#tab-team'),{sb,vendor,me,plan,onPlanChange:()=>{tmDone=false;draw().then(()=>showTab('team'))}});else $('#tab-team').innerHTML='<div class="notice err">The team page did not load. Refresh the page.</div>'}
-   if(t==='analytics'&&!anDone){anDone=true;if(window.CC.analytics)window.CC.analytics.mount($('#tab-analytics'),{sb,vendor,onEdit:goEdit});else $('#tab-analytics').innerHTML='<div class="notice err">Analytics did not load. Refresh the page.</div>'}};
+   if(t==='campaigns'&&!cpDone){cpDone=true;if(window.CC.campaigns)window.CC.campaigns.mount($('#tab-campaigns'),{sb,vendor,plan,isOwner});else $('#tab-campaigns').innerHTML='<div class="notice err">Campaigns did not load. Refresh the page.</div>'}
+   if(t==='analytics'&&!anDone){anDone=true;if(window.CC.analytics)window.CC.analytics.mount($('#tab-analytics'),{sb,vendor,plan,isOwner,perms:[...perms],onEdit:goEdit,onUpgrade:()=>{if(TABS.includes('team'))showTab('team');else location.href='tiers.html'}});else $('#tab-analytics').innerHTML='<div class="notice err">Analytics did not load. Refresh the page.</div>'}};
   document.querySelectorAll('.dtabs button').forEach(b=>b.onclick=()=>showTab(b.dataset.t));
   const {stPill,fdate,fnice,payText,nextSteps}=window.CC;
   const drawOrders=()=>{const T=$('#tab-orders');
@@ -249,6 +254,9 @@ async vendordash(){
    try{
     const row={name:$('#pn').value.trim(),description:$('#pd').value.trim(),price_xcd:parseFloat($('#pp').value),category:$('#pc').value,active:$('#pa').checked};
     const id=$('#pid').value,svv=$('#ps').value.trim(),editing=id?editCache[id]:null;
+    const cv=$('#pcost').value.trim();
+    if(cv!==''){const cn=Number(cv);if(!isFinite(cn)||cn<0||cn>1000000||Math.round(cn*100)/100!==cn)throw new Error('Cost price must be a number like 8.00 (up to 2 decimals).');row.cost_price=cn}
+    else if(id&&costMap&&costMap[id]!=null)row.cost_price=null;
     if(svv!==''){const n=Number(svv),th=$('#pt').value.trim()===''?5:Number($('#pt').value);
      if(!Number.isInteger(n)||n<0||n>1000000)throw new Error('Stock quantity must be a whole number, 0 or more.');
      if(!Number.isInteger(th)||th<0||th>1000000)throw new Error('The low-stock alert level must be a whole number, 0 or more.');
@@ -258,7 +266,7 @@ async vendordash(){
     if(up.hasNew()){const c=await up.commit(uploadBlob,async u=>dropOld(u),t=>say(m,t,true));urls=c.urls;uploaded=c.uploaded}
     if(!photosOn)row.image_url=urls[0]||null;
     const r=id?await sb.from('products').update(row).eq('id',id):await sb.from('products').insert({...row,vendor_id:vendor.id}).select('id').maybeSingle();
-    if(r.error){for(const u of uploaded)await dropOld(u);if(/stock_qty|low_stock/.test(r.error.message||''))throw new Error('Stock tracking needs supabase/analytics.sql to be run in Supabase first (see README.txt). Clear the stock fields to save without it.');throw r.error}
+    if(r.error){for(const u of uploaded)await dropOld(u);if(/cost_price/.test(r.error.message||''))throw new Error('Cost prices need supabase/standard_analytics.sql to be run in Supabase first (see README.txt). Clear the cost field to save without it.');if(/stock_qty|low_stock/.test(r.error.message||''))throw new Error('Stock tracking needs supabase/analytics.sql to be run in Supabase first (see README.txt). Clear the stock fields to save without it.');throw r.error}
     const pid=id||(r.data&&r.data.id);
     if(photosOn&&pid&&(up.dirty()||(!id&&urls.length))){
      const pr=await sb.rpc('set_product_photos',{p_product:pid,p_urls:urls});
@@ -266,12 +274,13 @@ async vendordash(){
     for(const u of up.removed())await dropOld(u);
     await draw()}
    catch(err){say(m,(err&&err.message)||'Could not save.');sv.disabled=false}};
-  function startEdit(p){editCache[p.id]=p;$('#pid').value=p.id;$('#pn').value=p.name;$('#pd').value=p.description;$('#pp').value=p.price_xcd;$('#pc').value=p.category;$('#ps').value=p.stock_qty==null?'':p.stock_qty;$('#pt').value=p.low_stock_threshold==null?5:p.low_stock_threshold;
+  function startEdit(p){editCache[p.id]=p;$('#pid').value=p.id;$('#pn').value=p.name;$('#pd').value=p.description;$('#pp').value=p.price_xcd;$('#pc').value=p.category;$('#ps').value=p.stock_qty==null?'':p.stock_qty;$('#pt').value=p.low_stock_threshold==null?5:p.low_stock_threshold;$('#pcost').value=costMap&&costMap[p.id]!=null?costMap[p.id]:'';
    up.set(photosOn?(p.product_images||[]).map(i=>i.url):(p.image_url?[p.image_url]:[]));
    $('#pa').checked=p.active;$('#ftitle').textContent='Edit product';$('#psave').textContent='Save changes';$('#psave').disabled=false;$('#pcancel').hidden=false;f.scrollIntoView()}
   const editCache={};
+  {const cl=$('#pcostl');if(cl&&!costMap)cl.hidden=true}
   const goEditImpl=async id=>{if(!canEdit)return;showTab('products');let p=prods.find(x=>x.id===id);
-   if(!p){const r=await sb.from('products').select(photosOn?'*,product_images(id,url,position)':'*').eq('id',id).maybeSingle();p=r.data;if(p&&p.product_images)p.product_images.sort((a,b)=>a.position-b.position)}
+   if(!p){const r=await sb.from('products').select(photosOn?window.CC.PCOLS+',product_images(id,url,position)':window.CC.PCOLS_BASE).eq('id',id).maybeSingle();p=r.data;if(p&&p.product_images)p.product_images.sort((a,b)=>a.position-b.position)}
    if(p)startEdit(p)};
   goEditRef=goEditImpl;
   // ---- product list: server-side paging + search (works for thousands of products) ----
@@ -287,7 +296,7 @@ async vendordash(){
   let st=null;const ps=$('#psearch');ps.oninput=()=>{clearTimeout(st);st=setTimeout(async()=>{pQuery=ps.value;pPage=0;await loadProducts();renderList()},250)};
   // ---- bulk upload ----
   if(canEdit&&window.CC.bulk){let bm=false;const bb=$('#bulkbox');bb.addEventListener('toggle',()=>{if(bb.open&&!bm){bm=true;
-    window.CC.bulk.mount($('#bulkmount'),{sb,vendor,hasCost:!!(prods[0]&&'cost_price' in prods[0]),upgradeHref:isOwner&&!legacy?'tiers.html':null,
+    window.CC.bulk.mount($('#bulkmount'),{sb,vendor,hasCost:!!costMap,getCosts:async()=>{const r=await sb.rpc('vendor_product_costs',{p_vendor:vendor.id});return r.error?{}:Object.fromEntries((r.data||[]).map(x=>[x.id,x.cost_price]))},upgradeHref:isOwner&&!legacy?'tiers.html':null,
      getUsage:()=>({used,limit:lim==null?null:lim,tierLabel:TIER_LABEL[tierKey]}),
      onDone:async()=>{const r=await sb.from('products').select('id',{count:'exact',head:true}).eq('vendor_id',vendor.id);if(r.count!=null)used=r.count;const ul=document.getElementById('usedline');if(ul)ul.innerHTML=usedHtml();await loadProducts();renderList()}})}})}
   else if(canEdit){$('#bulkwrap').hidden=true}

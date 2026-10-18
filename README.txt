@@ -366,7 +366,66 @@ BULK UPLOAD (Dashboard > Products > "Bulk upload / export")
   500 rows max per call, race-safe cap). Safe to re-run the same file.
   Error report CSV and a full product export (same format) are provided.
   image_url in a bulk file only applies to products that have no photos yet.
-  cost_price is accepted but not stored (no column yet); it is ignored.
+  cost_price is stored since v1.1 (private; see STANDARD ANALYTICS). Blank on
+  update keeps the existing cost. If standard_analytics.sql has not been run,
+  the cost column is ignored.
 
 NEW FILES: photos.js, bulk.js, templates/products_template.csv,
            supabase/photos.sql
+
+
+=====================================================================
+v1.1  STANDARD ANALYTICS  (supabase/standard_analytics.sql)
+=====================================================================
+SQL RUN ORDER (each file is safe to re-run):
+  schema.sql, seed.sql, storage.sql, orders.sql, order_notes.sql, pay.sql,
+  analytics.sql, staff.sql, photos.sql, standard_analytics.sql
+  RE-RUN standard_analytics.sql LAST whenever any earlier file is re-run
+  (re-running schema.sql re-grants the products table, which would expose
+  the private cost_price column again; the last file re-hides it).
+  It never redefines place_order, create_charge, bulk_upsert_products,
+  vendor_plan or role_perms, so re-running those files cannot undo it.
+
+WHO: Standard, Plus, Pro, Enterprise. Lite sees 8 locked example cards and an
+  Upgrade button. Enforced in every database function (vendor plan + analytics
+  permission = owner or sub-admin), not only the page. Staff see nothing.
+  Campaigns are available on every plan (owner/sub-admin).
+
+FEATURES (Analytics tab, same date range as the basic analytics)
+  Profit per product: revenue - cost, margin %. Cost is snapshotted per order
+    line (order_items.unit_cost_xcd); old orders stay blank and are shown as
+    "no cost". Product form has a private Cost price field; bulk upload and
+    export carry cost_price. products.cost_price is hidden by column-level
+    grants: shoppers and the page never read it (client never uses select *).
+    Owner/sub-admin read it through vendor_product_costs().
+  Sales trends: 12 months, month-over-month and year-over-year (like-for-like
+    first N days when the current month is partial).
+  Peak days/hours + heat map, Grenada time (America/Grenada, UTC-4).
+  Seasonality: tourist season Dec-Apr vs off-season, revenue per day.
+  Staff sales: orders accepted/completed/cancelled per team member (from the
+    status history), POS charges per member (pay_requests.created_by), POS
+    shift rows, and a daily cash-up (cash orders completed that day + POS
+    wallet payments). Wallet money is TEST money; the test banner stays.
+  Customers: new vs returning, repeat rate, top 10. Vendors only see people
+    who ordered from them; phone shows only the last 4 digits.
+  Campaigns: Campaigns tab (name, headline, code, % off, dates, featured,
+    active, max uses, one use per customer). Featured + running campaigns show
+    as a banner on the home page (code is never shown there). Shoppers enter
+    the code at checkout; check_campaign_code previews, place_order_with_code
+    places the order and the discount is applied inside the database insert
+    (trigger), on that vendor's items only, rounded to cents. One code per
+    order, no stacking. Expired/paused/unknown codes are refused; max uses is
+    race-safe (row lock); code guesses are rate-limited. Campaign results
+    report: orders, revenue, discount given, customers.
+  Tax and license: owner sets rate %, inclusive flag, license number/expiry.
+    The rate is snapshotted on each order; orders before a rate was set use the
+    current rate. Inclusive: tax = total*r/(100+r); exclusive: total*r/100 (the
+    checkout does not add tax). CSV and PDF (jsPDF) download. Label: "summary
+    for your records, not official tax advice". License expiry reminders.
+
+NEW FILES: analytics_std.js, campaigns.js, supabase/standard_analytics.sql
+TESTS (test/): pgstd.mjs (upgrade from v1.0 with data, 215 checks),
+  pgstd_fresh.mjs (fresh install + re-run orders), std_flow.js + mock_std.js
+  (Chrome 390/1280), lint_safeupdate.js. All earlier suites still pass.
+CAVEATS: test/pgtest.mjs (legacy) already failed before v1.1 (auth schema
+  exists). Amounts are EC$; all wallet payments remain test mode.

@@ -67,7 +67,7 @@ const state={preset:'month',from:null,to:null};
 let seq=0;
 
 async function mount(el,o){
- const {sb,onEdit}=o;const my=++seq;
+ const {sb,onEdit,vendor}=o;const my=++seq;
  const today=todayGD(),R=ranges(today);
  if(state.preset!=='custom'){[state.from,state.to]=R[state.preset]||R.month}
  else if(!state.from||!state.to){[state.from,state.to]=R.month}
@@ -114,6 +114,7 @@ async function mount(el,o){
     return `<tr><td>${esc(fmtT.format(new Date(r.at)))}</td><td>${o?'Order':'Wallet <small>(test)</small>'}</td><td>${esc(r.ref)}</td><td>${o?esc(METHOD[r.method]||r.method)+' · '+esc(SLAB()[r.status]||r.status)+(r.payment_status==='refunded'?' · refunded':''):esc(WTYPE[r.method]||r.method)+(r.note?' · '+esc(r.note):'')}</td><td class="${!o&&amt<0?'neg':''}">${money(amt)}</td></tr>`}).join('')}</table>
    ${X.truncated?`<p class="muted">Showing the newest ${X.limit} entries. The CSV has the same entries; choose a shorter date range to see older ones.</p>`:''}`:'<div class="empty small"><div class="empty-ic" aria-hidden="true">🧾</div><p>No orders or wallet activity in this period.</p></div>'}</div>`;
   wire();
+  {const sx=document.createElement('div');sx.id='anstd';box.appendChild(sx);if(CC.analyticsStd)CC.analyticsStd.mount(sx,{sb,vendor,plan:o.plan,isOwner:o.isOwner,perms:o.perms||[],from:state.from,to:state.to,onUpgrade:o.onUpgrade,onEdit});else sx.innerHTML='<div class="notice err">Standard analytics did not load. Refresh the page.</div>'}
   const cb=box.querySelector('#ancsv');if(cb)cb.onclick=()=>download('CC-transactions-'+state.from+'_to_'+state.to+'.csv',toCsv(rows));
   box.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>onEdit&&onEdit(b.dataset.edit));
  }
@@ -127,5 +128,5 @@ async function mount(el,o){
  }
  await load();
 }
-CC.analytics={mount,toCsv,csvCell,ranges,todayGD,chart};
+CC.analytics={mount,toCsv,csvCell,ranges,todayGD,chart,download,money,validDate,addDays};
 })();

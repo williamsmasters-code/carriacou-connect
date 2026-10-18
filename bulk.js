@@ -112,7 +112,7 @@ function build(table,opts){
   rows.push({row:line,data,error:err,warns,status:err?'error':'ok',msg:err||''})});
  if(rows.length>MAX_ROWS)return {fatal:'That file has more than '+MAX_ROWS.toLocaleString()+' rows. Split it into smaller files.'};
  if(!rows.length)return {fatal:'The file has a header but no product rows.',ignored};
- if(!opts.hasCost&&'cost_price' in map&&rows.some(r=>r.data.cost_price!==''))problems.push('The cost_price column is read but not stored yet: it will be ignored for now.');
+ if(!opts.hasCost&&'cost_price' in map&&rows.some(r=>r.data.cost_price!==''))problems.push('The cost_price column is read but cannot be stored until supabase/standard_analytics.sql has been run: it will be ignored for now.');
  return {rows,ignored,problems,present:Object.keys(map)}}
 // ---------- UI ----------
 const dl=(name,text,type,bom)=>{const b=new Blob([bom?'\uFEFF'+text:text],{type:type||'text/csv;charset=utf-8'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000)};
@@ -127,7 +127,7 @@ function mount(root,o){ // o: {sb, vendor, getUsage:()=>({used,limit,tierLabel})
    <li><b>name</b>, <b>category</b>, <b>price_xcd</b> are required.</li>
    <li><b>category</b>: ${Object.entries(CATS).map(([k,v])=>`<code>${esc(k)}</code> (${esc(v)})`).join(', ')}</li>
    <li><b>sku</b>: your own item code (optional, unique in your business). It is how "update" finds an existing product; without it the product name is used.</li>
-   <li><b>stock_qty</b>: blank = not tracked. <b>low_stock_threshold</b>: blank = 5. <b>active</b>: yes/no, blank = yes. <b>cost_price</b> is optional and not stored yet.</li>
+   <li><b>stock_qty</b>: blank = not tracked. <b>low_stock_threshold</b>: blank = 5. <b>active</b>: yes/no, blank = yes. <b>cost_price</b> is optional and private (used for profit reports): blank on update keeps the current cost.</li>
    <li>When updating, blank optional cells leave the current value alone.</li></ul></details>
   <div class="bk-drop"><label class="btn" for="bk-file" id="bk-pick" tabindex="0">Choose file…</label><input type="file" id="bk-file" class="sr" accept=".csv,.txt,.xlsx,text/csv" aria-label="Choose a CSV or Excel file"> <span id="bk-fname" class="muted">No file chosen</span></div>
   <div id="bk-msg" class="notice" role="status" hidden></div>
@@ -138,8 +138,10 @@ function mount(root,o){ // o: {sb, vendor, getUsage:()=>({used,limit,tierLabel})
  $('#bk-tpl').onclick=()=>dl('products_template.csv',TEMPLATE,'text/csv;charset=utf-8',true);
  $('#bk-pick').onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();$('#bk-file').click()}};
  $('#bk-exp').onclick=async()=>{const b=$('#bk-exp'),m=$('#bk-expm');b.disabled=true;m.textContent='Preparing…';
-  try{const all=[];for(let from=0;;from+=1000){const r=await sb.from('products').select('*').eq('vendor_id',vendor.id).order('created_at',{ascending:true}).order('id',{ascending:true}).range(from,from+999);
+  try{const all=[];for(let from=0;;from+=1000){const r=await sb.from('products').select(window.CC.PCOLS).eq('vendor_id',vendor.id).order('created_at',{ascending:true}).order('id',{ascending:true}).range(from,from+999);
     if(r.error)throw r.error;all.push(...(r.data||[]));m.textContent='Read '+fmt(all.length)+' products…';if(!r.data||r.data.length<1000)break}
+   let costs={};if(o.getCosts){try{costs=await o.getCosts()||{}}catch(e){}}
+   all.forEach(p=>{if(costs[p.id]!=null)p.cost_price=costs[p.id]});
    const rows=[COLS].concat(all.map(p=>[p.sku||'',p.name,p.description||'',p.category,Number(p.price_xcd).toFixed(2),p.stock_qty==null?'':p.stock_qty,p.low_stock_threshold==null?'':p.low_stock_threshold,p.cost_price==null?'':p.cost_price,p.active?'yes':'no',p.image_url||'']));
    dl('my_products_'+new Date().toISOString().slice(0,10)+'.csv',toCSV(rows,true),'text/csv;charset=utf-8',true);m.textContent=all.length?'Exported '+fmt(all.length)+' products. Edit and re-upload with "Update existing".':'You have no products yet: the file contains just the headings.'}
   catch(e){m.textContent='Export failed: '+(e&&e.message||e)}finally{b.disabled=false}};

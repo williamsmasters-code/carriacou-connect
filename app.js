@@ -30,8 +30,11 @@ const card=p=>`<a class="card" href="product.html?id=${p.id}"><div class="imgw">
 // ---- pages ----
 const pages={
 home(){
+const promos=async()=>{const pb=$('#promos');if(!pb||!DATA.live||!window.CC.configured)return;try{const sb=await window.CC.client();const r=await sb.rpc('public_featured_campaigns');if(r.error||!Array.isArray(r.data)||!r.data.length)return;
+ pb.innerHTML='<div class="sec-head"><div><span class="kicker">On now</span><h2>Promotions</h2></div></div><div class="promos">'+r.data.map(c=>'<a class="promo" href="vendor.html?id='+encodeURIComponent(c.vendor_id)+'"><span class="promo-v">'+esc(c.vendor_name)+'</span><b>'+esc(c.name)+'</b>'+(c.headline?'<span>'+esc(c.headline)+'</span>':'')+'<small>Until '+esc(c.ends_on)+(c.has_discount?' · discount code at checkout':'')+'</small></a>').join('')+'</div>'}catch(e){}};
 $('#cats').innerHTML=DATA.categories.map(c=>`<a class="cat" style="--c:${esc(c.color)}" href="browse.html?cat=${c.id}">${catIcon(c.id)}<span>${esc(c.name)}</span></a>`).join('');
 $('#featured').innerHTML=DATA.products.filter(p=>p.featured).map(card).join('');
+promos();
 $('#vendors').innerHTML=DATA.vendors.map(v=>`<a class="card vcard" href="vendor.html?id=${v.id}"><div class="body"><h3>${esc(v.name)}</h3>${tierBadge(v.tier)}<div class="muted">${esc(v.location)}</div></div></a>`).join('')},
 browse(){
 const cs=$('#cat'),vs=$('#vend');
@@ -92,7 +95,7 @@ let total=0;
 const summary=Object.entries(byV).map(([vid,ls])=>{const sub=ls.reduce((a,l)=>a+l.p.price*l.q,0);total+=sub;
 return `<div class="osum"><h3>${esc(vendor(vid).name)}</h3>${ls.map(l=>`<div class="oline"><span>${l.q} × ${esc(l.p.name)}</span><span>${xcd(l.p.price*l.q)}</span></div>`).join('')}<div class="oline sub"><span>Subtotal</span><span>${xcd(sub)}</span></div></div>`}).join('');
 const nv=Object.keys(byV).length;
-const totalCents=Math.round(total*100);
+let totalCents=Math.round(total*100),camp=null;
 let wal=null;try{const wr=await sb.rpc('ensure_wallets');if(!wr.error&&Array.isArray(wr.data))wal=wr.data.find(x=>x.kind==='user')||null}catch(e){}
 const payKey=window.CC.uuid();
 let prof={};try{const r=await sb.from('profiles').select('full_name,phone,address').eq('id',user.id).maybeSingle();prof=r.data||{}}catch(e){}
@@ -104,27 +107,44 @@ root.innerHTML=`<div class="co-grid"><form id="cof" class="formcard" novalidate>
 <label class="chk opt"><input type="radio" name="pay" value="cash" checked> <span><b>Pay the vendor myself</b><small>Cash or as agreed, when you collect or receive your order.</small></span></label>
 <label class="chk opt"><input type="radio" name="pay" value="wallet"> <span><b>Pay with wallet (test)</b><small>Test balance: <b id="wbal">${window.CC.cents(wal.balance_cents)}</b>. Order total ${window.CC.cents(totalCents)}.</small></span></label>
 <div id="wnote" class="notice" hidden>${window.CC.TESTBANNER}<span id="wnt"></span></div></fieldset>`:''}
+<div class="codebox"><label for="cpc">Promo code (optional)</label><div class="coderow"><input id="cpc" maxlength="20" autocapitalize="characters" autocomplete="off" placeholder="Enter a code"><button type="button" class="btn alt" id="cpa">Apply</button></div><div id="cpm" class="notice" role="status" hidden></div></div>
 <label>Your name<input id="cn" maxlength="80" autocomplete="name" value="${esc(prof.full_name||'')}"></label>
 <label>Contact phone *<input id="cp" type="tel" maxlength="30" autocomplete="tel" required value="${esc(prof.phone||'')}"></label>
 <label id="adl" hidden>Delivery address *<textarea id="ca" rows="3" maxlength="300">${esc(prof.address||'')}</textarea></label>
 <label>Notes for the vendor (optional)<textarea id="cnote" rows="2" maxlength="500"></textarea></label>
 <div id="cm" class="notice" role="alert" hidden></div>
 <button class="btn" id="cgo">Place order</button></form>
-<aside class="ordsum"><h2>Order summary</h2>${summary}<div class="oline total"><span>Total</span><span>${xcd(total)} XCD</span></div>
+<aside class="ordsum"><h2>Order summary</h2>${summary}<div class="oline disc" id="discline" hidden><span id="disclbl">Promo discount</span><span id="discamt"></span></div><div class="oline total"><span>Total</span><span id="totamt">${xcd(total)} XCD</span></div>
 ${nv>1?`<p class="muted">Your cart has items from ${nv} vendors, so it becomes ${nv} separate orders, one per vendor.</p>`:''}
 <p class="muted">Prices are re-checked by the server when you place the order.</p>${payNote}<p><a href="cart.html">Edit cart</a></p></aside></div>`;
 const f=$('#cof'),m=$('#cm');
 const payWallet=()=>!!wal&&f.pay&&f.pay.value==='wallet';
 const sync=()=>{$('#adl').hidden=f.ful.value!=='delivery';if(wal){const w=$('#wnote');w.hidden=!payWallet();if(payWallet()){const short=Number(wal.balance_cents)<totalCents;$('#wnt').innerHTML=short?' Your test balance is too low for this order. <a href="wallet.html">Add play money in your wallet</a>, then come back.':' Your order is placed and paid straight away from your test wallet. No real money is used.'}$('#cgo').textContent=payWallet()?'Place order and pay with test wallet':'Place order'}};f.addEventListener('change',sync);sync();
 const say=t=>{m.className='notice err';m.textContent=t;m.hidden=!t};
+const cartJson=()=>lines.map(l=>({product_id:l.p.id,quantity:l.q}));
+const setCamp=(c,msg,bad)=>{camp=c;const pm=$('#cpm');pm.className='notice'+(bad?' err':c?' ok':'');pm.textContent=msg||'';pm.hidden=!msg;
+ const disc=c?Number(c.discount_xcd)||0:0;totalCents=Math.round((total-disc)*100);
+ $('#discline').hidden=!(c&&disc>0);if(c&&disc>0){$('#disclbl').textContent='Promo '+c.code+(c.discount_pct!=null?' ('+Number(c.discount_pct)+'% off '+c.vendor_name+')':'');$('#discamt').textContent='- '+xcd(disc)+' XCD'}
+ $('#totamt').textContent=xcd(total-disc)+' XCD';document.querySelectorAll('.cotot').forEach(e=>{e.textContent=window.CC.cents(totalCents)});if(typeof sync==='function')sync()};
+$('#cpc').oninput=()=>{if(camp)setCamp(null,'')};
+$('#cpa').onclick=async()=>{const code=$('#cpc').value.trim();if(!code){setCamp(null,'Type a code first.',true);return}
+ const b=$('#cpa');b.disabled=true;const r=await sb.rpc('check_campaign_code',{p_code:code,p_cart:cartJson()});b.disabled=false;
+ if(r.error){setCamp(null,/Could not find the function|schema cache/.test(r.error.message||'')?'Promo codes are not switched on yet.':(r.error.message||'Could not check that code.'),true);return}
+ if(!r.data||!r.data.ok){setCamp(null,(r.data&&r.data.error)||'That code is not valid.',true);return}
+ const c=Object.assign({code:code.toUpperCase().replace(/\s+/g,'')},r.data);
+ setCamp(c,Number(c.discount_xcd)>0?'Code '+c.code+' applied: you save '+xcd(c.discount_xcd)+' XCD on '+c.vendor_name+'.':'Code '+c.code+' accepted ('+c.name+'). No discount, it just tells the vendor which promotion you came from.')};
+
 f.onsubmit=async e=>{e.preventDefault();say('');
  const ful=f.ful.value,ph=$('#cp').value.trim(),ad=$('#ca').value.trim();
  if(ph.length<7){say('Please enter a contact phone number the vendor can reach.');$('#cp').focus();return}
  if(ful==='delivery'&&ad.length<5){say('Please enter your delivery address.');$('#ca').focus();return}
  if(payWallet()&&Number(wal.balance_cents)<totalCents){say('Your test wallet balance ('+window.CC.cents(wal.balance_cents)+') is lower than the order total ('+window.CC.cents(totalCents)+'). Add play money in your wallet first.');return}
  const btn=$('#cgo');btn.disabled=true;btn.textContent='Placing order…';
- const r=await sb.rpc('place_order',{p_cart:lines.map(l=>({product_id:l.p.id,quantity:l.q})),p_fulfilment:ful,p_contact_phone:ph,p_delivery_address:ful==='delivery'?ad:null,p_notes:$('#cnote').value.trim()||null,p_contact_name:$('#cn').value.trim()||null});
- if(r.error){say(r.error.message||'Could not place the order.');btn.disabled=false;sync();return}
+ const oargs={p_cart:cartJson(),p_fulfilment:ful,p_contact_phone:ph,p_delivery_address:ful==='delivery'?ad:null,p_notes:$('#cnote').value.trim()||null,p_contact_name:$('#cn').value.trim()||null};
+ const typed=$('#cpc').value.trim();
+ const r=typed?await sb.rpc('place_order_with_code',{...oargs,p_campaign_code:typed}):await sb.rpc('place_order',oargs);
+ if(r.error){say(typed&&/Could not find the function|schema cache/.test(r.error.message||'')?'Promo codes are not switched on yet. Clear the code to place the order.':(r.error.message||'Could not place the order.'));btn.disabled=false;sync();return}
+ if(r.data&&!Array.isArray(r.data)&&r.data.error){say(r.data.error+' Fix or clear the promo code and try again.');btn.disabled=false;sync();return}
  saveCart({});
  try{const up={};if(!prof.phone)up.phone=ph;if(!prof.full_name&&$('#cn').value.trim())up.full_name=$('#cn').value.trim();if(ful==='delivery'&&!prof.address)up.address=ad;if(Object.keys(up).length)await sb.from('profiles').update(up).eq('id',user.id)}catch(e){}
  const os=r.data||[];

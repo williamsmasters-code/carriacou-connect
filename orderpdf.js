@@ -149,6 +149,33 @@ async function buildSummary(list,ex){
  return {doc:d,filename:fname('CC-orders-'+new Date().toISOString().slice(0,10))};
 }
 
+// ---- tax summary (v1.1): summary for the vendor's own records, NOT official tax advice ----
+async function buildTax(R,ex){
+ const JsPDF=await lib();
+ const P=Doc(JsPDF,'Tax summary');const {d,M,CW}=P;
+ header(P,'Tax and license summary',null);
+ P.font(14,'bold',P.NAVY);d.text(clean(ex.vendorName||'Business'),M,P.S.y+8);P.S.y+=20;
+ P.font(9,'normal',P.GREY);d.text(clean('Period '+ex.from+' to '+ex.to+' (Grenada local days)'),M,P.S.y+8);P.S.y+=16;
+ P.para('Summary for your records, not official tax advice. Check amounts and rules with the Inland Revenue Division or your accountant.',M,CW,8.5,'bold',[180,90,0]);P.S.y+=4;
+ const st=R.settings||{};
+ P.h2('Settings used');
+ table(P,[{t:'Item',w:.4},{t:'Value',w:.6}],[
+  ['Tax rate',st.tax_rate_pct==null?'Not set':Number(st.tax_rate_pct)+'%'],
+  ['Prices',st.tax_rate_pct==null?'-':(st.tax_inclusive?'Include tax (tax = sales x rate / (100 + rate))':'Exclude tax (tax = sales x rate / 100; the platform does not add tax at checkout)')],
+  ['License number',st.license_number||'Not set'],['License expiry',st.license_expiry?(st.license_expiry+(st.license_days_left!=null?(st.license_days_left<0?' (EXPIRED)':' ('+st.license_days_left+' days left)'):'')):'Not set']]);
+ P.h2('Totals');
+ table(P,[{t:'Item',w:.6},{t:'Amount (XCD)',w:.4,align:'right'}],[
+  ['Orders counted (not cancelled, not refunded)',String(R.orders)],['Sales',money(R.sales_xcd)],['Sales with a tax rate',money(R.taxed_sales_xcd)],
+  ['Tax (estimated from your rate)',money(R.tax_xcd)],['  of which prices include tax',money(R.tax_inclusive_xcd)],['  of which prices exclude tax',money(R.tax_exclusive_xcd)],
+  ['Orders with no tax rate (not taxed here)',String(R.orders_without_rate)]]);
+ if((R.by_month||[]).length){P.h2('By month');table(P,[{t:'Month',w:.3},{t:'Orders',w:.2,align:'right'},{t:'Sales',w:.25,align:'right'},{t:'Tax',w:.25,align:'right'}],R.by_month.map(m=>[String(m.month).slice(0,7),String(m.orders),money(m.sales_xcd),money(m.tax_xcd)]))}
+ const rows=(R.rows||[]).slice(0,400);
+ if(rows.length){P.h2('Orders'+(R.rows.length>rows.length?' (first '+rows.length+' of '+R.rows.length+'; use the CSV for all)':''));
+  table(P,[{t:'Date',w:.17},{t:'Order',w:.2},{t:'Total',w:.2,align:'right'},{t:'Rate',w:.18,align:'right'},{t:'Tax',w:.25,align:'right'}],rows.map(r=>[r.day,r.ref,money(r.total_xcd),r.rate_pct==null?'-':Number(r.rate_pct)+'%'+(r.inclusive?' incl.':' excl.'),r.tax_xcd==null?'-':money(r.tax_xcd)]),{size:8})}
+ footers(P,!!ex.test);
+ return {doc:d,filename:fname('CC-tax-summary-'+ex.from+'_to_'+ex.to)};
+}
+
 // fetch the extra rows the current user is already allowed to read
 async function extras(sb,o){
  const ex={};
@@ -166,6 +193,7 @@ async function run(builder,btn,msgEl){
 CC.orderPdf={
  order:async(sb,o,base,btn,msgEl)=>run(async()=>buildOrder(o,Object.assign({},base,await extras(sb,o))),btn,msgEl),
  summary:async(list,base,btn,msgEl)=>run(()=>buildSummary(list,base),btn,msgEl),
+ tax:async(rep,base,btn,msgEl)=>run(()=>buildTax(rep,base),btn,msgEl),
  clean
 };
 })();
