@@ -44,6 +44,8 @@ async login(){
  f.onsubmit=async e=>{e.preventDefault();say(msg,'');const btn=f.querySelector('button');btn.disabled=true;
   const {error}=await c.sb.auth.signInWithPassword({email:f.email.value.trim(),password:f.password.value});
   if(error){say(msg,error.message);btn.disabled=false;return}
+  const st=await window.CC.acctStatus(c.sb);
+  if(st.suspended){say(msg,st.message+' You are logged in, so you can still browse and manage your profile.');const go=document.createElement('a');go.className='btn alt';go.id='suspgo';go.textContent='Continue';go.href=NX()||'browse.html';msg.insertAdjacentElement('afterend',go);return}
   const c2=await ctx();location.href=NX()||home(c2.profile)};
  $('#forgot').onclick=async e=>{e.preventDefault();const em=f.email.value.trim();if(!em){say(msg,'Type your email above first.');return}
   const {error}=await c.sb.auth.resetPasswordForEmail(em,{redirectTo:location.origin+location.pathname.replace(/[^/]*$/,'')+'account.html'});

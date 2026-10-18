@@ -367,3 +367,23 @@ details.notes{margin:.7rem 0;border-top:1px dashed #10252e26;padding-top:.5rem}d
 .aa-inv input{max-width:170px}.aa-fd select{max-width:200px}
 @media(max-width:520px){.aa-credit{justify-content:center;text-align:center}.aa-bmh{flex-direction:column}.aa-cl .btn{padding:.2rem .6rem}.an-card .tblw table{min-width:480px}}
 @media(max-width:520px){#anadv .kpi b,#anadv .kpi .v,#anadv .kpi strong{font-size:1.25rem;word-break:keep-all}}
+/* v1.4 admin customers */
+.cu-filters{display:flex;gap:.8rem;flex-wrap:wrap;align-items:flex-end;margin:.6rem 0 1rem}
+.cu-filters label{display:flex;flex-direction:column;gap:.25rem;font-weight:700}
+.cu-filters .cu-q{flex:1 1 260px}
+.cu-pager{display:flex;justify-content:space-between;align-items:center;gap:.6rem;flex-wrap:wrap;margin:.8rem 0}
+.cu-tab td,.cu-tab th{vertical-align:middle}
+.cu-chip{white-space:nowrap}
+.cu-head h2{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;margin-bottom:.1rem}
+.cu-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem;align-items:start}
+.cu-card{background:#fff;border-radius:16px;padding:1rem 1.1rem;margin:1rem 0;box-shadow:0 6px 18px -12px #0006;min-width:0}
+.cu-grid .cu-card{margin:0}
+.cu-card h3{margin:.2rem 0 .6rem;font-family:var(--disp);color:var(--abyss)}
+.cu-card form{display:flex;flex-direction:column;gap:.6rem;margin-bottom:.6rem}
+.cu-card label{display:flex;flex-direction:column;gap:.25rem;font-weight:700}
+.cu-sm{font-size:1rem!important}
+.susp-banner{margin:0;border-radius:0;text-align:center}
+@media(max-width:820px){.cu-grid{grid-template-columns:1fr}.cu-grid .cu-card{margin:0 0 1rem}}
+@media(max-width:520px){.cu-kpis{grid-template-columns:1fr 1fr}.cu-tab{min-width:640px}}
+.tblwrap{overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%}
+.cu-card .admtab{width:100%}

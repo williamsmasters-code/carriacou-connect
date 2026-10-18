@@ -116,7 +116,7 @@ function authLinks(){return '<a href="login.html">Log in</a><a class="pill" href
 function layout(){
  const live=configured;
  const out=live?authLinks():'<a href="login.html">Log in</a>';
- const msg=live?'Preview v1.1 – products labeled SAMPLE are fictional. Wallet payments and plans are TEST MODE only. No real payments or billing.':'Preview v1.1 – all vendors and products are SAMPLE data. Accounts are not switched on yet. No real payments.';
+ const msg=live?'Preview v1.4 – products labeled SAMPLE are fictional. Wallet payments and plans are TEST MODE only. No real payments or billing.':'Preview v1.1 – all vendors and products are SAMPLE data. Accounts are not switched on yet. No real payments.';
  if(!document.querySelector('link[data-cc-fonts]')){const l=document.createElement('link');l.rel='stylesheet';l.dataset.ccFonts='1';l.href='https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,600;0,9..144,800;1,9..144,600&family=Plus+Jakarta+Sans:wght@400;500;700;800&display=swap';document.head.appendChild(l)}
  const m=document.querySelector('main');if(m)m.id='main';
  const home=document.body.dataset.page==='home';
@@ -127,19 +127,29 @@ function layout(){
  if(!matchMedia('(prefers-reduced-motion: reduce)').matches&&'IntersectionObserver' in window){const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}}),{threshold:.08});window.CC_REVEAL=()=>document.querySelectorAll('.rv:not(.in)').forEach(x=>io.observe(x))}
  else window.CC_REVEAL=()=>document.querySelectorAll('.rv').forEach(x=>x.classList.add('in'));
 }
+async function acctStatus(sb){ // the person's OWN suspension status (admin_customers.sql). Quietly "not suspended" if the function is not installed.
+ try{const r=await sb.rpc('my_account_status');return r&&!r.error&&r.data&&r.data.suspended?{suspended:true,message:r.data.message||'Your account is suspended. Please contact Carriacou Connect support.'}:{suspended:false}}catch(e){return {suspended:false}}
+}
+async function suspBanner(sb){
+ if(document.getElementById('suspBanner'))return;
+ const st=await acctStatus(sb);window.CC.suspended=!!st.suspended;if(!st.suspended)return;
+ const h=document.querySelector('header');if(!h||document.getElementById('suspBanner'))return;
+ h.insertAdjacentHTML('afterend','<div class="notice err susp-banner" id="suspBanner" role="alert"><b>Account suspended.</b> '+esc(st.message)+'</div>');
+}
 async function authNav(){
  const sb=await client();if(!sb)return;
  const render=async user=>{const el=document.getElementById('authNav');if(!el)return;
   if(!user){el.innerHTML=authLinks();return}
   let role='consumer',team=false;try{const {data}=await sb.from('profiles').select('role').eq('id',user.id).maybeSingle();if(data)role=data.role}catch(e){}
   if(role!=='vendor'&&role!=='admin'){try{const r=await sb.rpc('my_vendor_access');team=!r.error&&Array.isArray(r.data)&&r.data.length>0}catch(e){}}
+  suspBanner(sb);
   el.innerHTML=`<a href="${role==='vendor'||team?'dashboard-vendor.html':'dashboard-consumer.html'}">${team?'Work dashboard':'Dashboard'}</a>${team?'<a href="dashboard-consumer.html">My orders</a>':''}${role==='admin'?'<a href="admin.html">Admin</a>':''}<a href="wallet.html">Wallet</a><a href="account.html">Account</a><a class="pill" href="#" id="logoutLink">Log out</a>`;
   document.getElementById('logoutLink').onclick=async e=>{e.preventDefault();await sb.auth.signOut();location.href='index.html'}};
  render(await getUser());
  sb.auth.onAuthStateChange((ev)=>{if(ev==='SIGNED_OUT')render(null)});
 }
 const PCOLS='id,vendor_id,name,description,price_xcd,category,image_url,active,featured,created_at,updated_at,stock_qty,low_stock_threshold,sku',PCOLS_BASE='id,vendor_id,name,description,price_xcd,category,image_url,active,featured,created_at,updated_at,stock_qty,low_stock_threshold'; // never '*': products.cost_price is private (standard_analytics.sql)
-window.CC={PCOLS,PCOLS_BASE,TESTBANNER,cents,toCents,uuid,payPill,noteSummary,newBadge,notesWidget,NOTE_POLL,SLABEL,stPill,fdate,fnice,payText,nextSteps,timeline,safeNext,WAVE,configured,client,esc,getUser,layout,TIER_LABEL,TIER_LIMIT,TIERS,lim,ROLE_LABEL,ROLE_PERMS,
+window.CC={acctStatus,PCOLS,PCOLS_BASE,TESTBANNER,cents,toCents,uuid,payPill,noteSummary,newBadge,notesWidget,NOTE_POLL,SLABEL,stPill,fdate,fnice,payText,nextSteps,timeline,safeNext,WAVE,configured,client,esc,getUser,layout,TIER_LABEL,TIER_LIMIT,TIERS,lim,ROLE_LABEL,ROLE_PERMS,
  xcd:n=>'EC$'+Number(n).toFixed(2)};
 layout();
 })();

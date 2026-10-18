@@ -1,4 +1,4 @@
-CARRIACOU CONNECT MARKETPLACE v1.3 (static preview + optional Supabase accounts + TEST-MODE wallets + vendor analytics + plans + team accounts + multi-photo products + bulk upload + Standard analytics + platform analytics)
+CARRIACOU CONNECT MARKETPLACE v1.4 (static preview + optional Supabase accounts + TEST-MODE wallets + vendor analytics + plans + team accounts + multi-photo products + bulk upload + Standard analytics + platform analytics + advanced/premium analytics + admin customer management)
 ===================================================
 ALL VENDORS AND PRODUCTS ARE SAMPLE DATA. NO REAL PAYMENTS.
 
@@ -511,7 +511,7 @@ v1.3: ADVANCED (Pro and Enterprise) and PREMIUM (Enterprise only) vendor analyti
 =====================================================================
 SQL TO RUN (Supabase > SQL Editor > New query, paste the whole file, Run; safe to re-run):
   supabase/advanced_analytics.sql   (run it LAST)
-Full run order: schema, seed, storage, orders, order_notes, pay, analytics, staff, photos, standard_analytics, platform_analytics, advanced_analytics.
+Full run order: schema, seed, storage, orders, order_notes, pay, analytics, staff, photos, standard_analytics, platform_analytics, advanced_analytics, admin_customers (v1.4).
 Until it is run, the dashboard shows "Advanced analytics is not switched on yet" instead of the reports. Refresh the browser afterwards.
 
 Who can see what (enforced in the database, not only in the browser)
@@ -552,3 +552,51 @@ Tests (outside the site folder, test/):
   test/pgadv.mjs        289 checks, upgrade or fresh (MODE=fresh): tier x function gating matrix, non-member/staff/customer/anon denied, hand-verified numbers, Grenada midnight edges
   test/pgadv_fresh.mjs  fresh install, all earlier files re-run then advanced_analytics, and advanced_analytics twice
   test/adv_flow.js      Chrome 390 and 1280 px with test/mock_adv.js: locked states, Pro vs Enterprise cards, expenses, CSV injection, PDFs, customize, no JS errors
+
+
+=====================================================================
+v1.4: PLATFORM ADMIN CUSTOMER MANAGEMENT (admin.html > Customers tab)
+=====================================================================
+SQL TO RUN (Supabase > SQL Editor > New query, paste the whole file, Run; safe to re-run):
+  supabase/admin_customers.sql   (run it LAST; adds nothing to earlier files, so re-running those does not undo it)
+Full run order: schema, seed, storage, orders, order_notes, pay, analytics, staff, photos, standard_analytics, platform_analytics, advanced_analytics, admin_customers.
+Until it is run, the Customers tab says "Customer management is not switched on yet". Refresh the browser afterwards.
+
+What the platform admin (profiles.role = 'admin') can do
+  List       searchable (name, email or phone; % and _ are plain characters), filter by status and by Customers / Vendor accounts / Everyone, 25 per page.
+             Shows name, email, phone, status, joined, order count and wallet balance (play money, read-only). Admin accounts are never listed.
+  Detail     profile, order history (latest 10 + totals), wallet summary (balance, received, sent, latest 10 transactions: READ-ONLY, no money movement),
+             businesses owned, and the admin history of that person (who did what, when, why, before and after).
+  Edit       name, phone, address and internal admin notes (notes are visible to admins only). A reason is required. Email is managed by sign-in and cannot be changed.
+  Suspend / reactivate   with a reason. No one is deleted (no service_role key is used); suspending is the "deactivate" option. Anonymising is not offered.
+  Role       switch between Customer (consumer) and Vendor account only. NOT possible from the website: granting admin, changing an admin (including yourself or the
+             last admin: admin accounts are refused by every function), or making someone a customer while they own a business.
+
+What suspension does (enforced in the DATABASE with triggers, so it also stops people who are already logged in, and a hand-made request)
+  orders         BEFORE INSERT trigger: a suspended customer cannot place an order (place_order, place_order_with_code, anything else).
+  transactions   BEFORE INSERT trigger: no top-up, transfer, wallet payment of an order or POS-charge payment when the logged-in user is suspended or the paying wallet
+                 is theirs; nobody can top up or transfer INTO a suspended person's wallet. Refunds and other money owed back to them are still allowed.
+  pay_requests   BEFORE INSERT trigger: a suspended person cannot create a POS charge.
+  Error text starts with 'ACCOUNT_SUSPENDED:' (errcode 42501). The site shows: a red banner under the header on every page, a message on the login page after logging in
+  (with a Continue button), and on checkout the message plus a disabled Place order button. They can still log in, browse and edit their own profile.
+  The suspended person sees a generic message; the reason you typed stays internal (admin only). Reactivating removes the block at once.
+  Not blocked on purpose: reading their own data, cash orders already placed (the vendor still sees them), vendor-side order handling by the vendor's other staff.
+  Known side effect: a suspended vendor owner cannot cancel a wallet-paid order or refund it (that needs a ledger move). Reactivate first.
+
+Privacy: the admin sees email and phone on this screen because they operate the platform. Everywhere else (platform analytics etc.) people stay masked, unchanged.
+Audit: every change writes one row to audit_log (actor_id = the admin, target_user_id = the person, action customer_edited / customer_suspended / customer_reactivated /
+  customer_role_changed, details = {reason, before, after}). The log is append-only. Only admins can read these rows (vendor owners cannot).
+
+Database (supabase/admin_customers.sql)
+  Table: profile_admin (status, reason, admin notes; RLS on, no policies, no grants).
+  Functions, all SECURITY DEFINER with pinned search_path, REVOKE from public/anon, GRANT to authenticated: admin_cust_list, admin_cust_get, admin_cust_update,
+  admin_cust_set_status, admin_cust_set_role (each starts with the platform-admin check; anyone else gets "Platform admins only"), and my_account_status (a person's OWN status only).
+  Internal helpers and trigger functions are not callable by clients. Every UPDATE/DELETE has a WHERE (pg-safeupdate). Ends with notify pgrst, 'reload schema'.
+
+Changed files: supabase/admin_customers.sql (new), customers.js (new), admin.html, admin.js, cc.js (suspension banner + CC.acctStatus), auth.js (login message), app.js (checkout),
+  pay.js (message wording), style.css, README.txt.
+Tests (outside the site folder, test/):
+  test/pgcust.mjs       114 checks, upgrade or fresh (MODE=fresh): access matrix (vendor, staff, consumer, anon, no login) for every function, list/search/pagination/filters,
+                        edit + audit before/after, suspension blocks place_order, place_order_with_code, pay_orders, top-up, transfers in and out, pay_charge, create_charge,
+                        refunds still allowed, still enforced after re-running orders.sql, pay.sql, standard_analytics.sql, role rules, audit visibility, ledger reconciles
+  test/cust_flow.js     Chrome 390 and 1280 px with test/mock_cust.js: refusal for non-admins, list/search/pages, detail, edit/suspend/role, login/banner/checkout, no JS errors

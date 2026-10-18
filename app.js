@@ -118,6 +118,8 @@ root.innerHTML=`<div class="co-grid"><form id="cof" class="formcard" novalidate>
 ${nv>1?`<p class="muted">Your cart has items from ${nv} vendors, so it becomes ${nv} separate orders, one per vendor.</p>`:''}
 <p class="muted">Prices are re-checked by the server when you place the order.</p>${payNote}<p><a href="cart.html">Edit cart</a></p></aside></div>`;
 const f=$('#cof'),m=$('#cm');
+const susp=await window.CC.acctStatus(sb);if(susp.suspended){m.className='notice err';m.textContent=susp.message+' You cannot place orders right now.';m.hidden=false;$('#cgo').disabled=true}
+const cleanErr=t=>String(t||'').replace(/^ACCOUNT_SUSPENDED:\s*/,'');
 const payWallet=()=>!!wal&&f.pay&&f.pay.value==='wallet';
 const sync=()=>{$('#adl').hidden=f.ful.value!=='delivery';if(wal){const w=$('#wnote');w.hidden=!payWallet();if(payWallet()){const short=Number(wal.balance_cents)<totalCents;$('#wnt').innerHTML=short?' Your test balance is too low for this order. <a href="wallet.html">Add play money in your wallet</a>, then come back.':' Your order is placed and paid straight away from your test wallet. No real money is used.'}$('#cgo').textContent=payWallet()?'Place order and pay with test wallet':'Place order'}};f.addEventListener('change',sync);sync();
 const say=t=>{m.className='notice err';m.textContent=t;m.hidden=!t};
@@ -143,13 +145,13 @@ f.onsubmit=async e=>{e.preventDefault();say('');
  const oargs={p_cart:cartJson(),p_fulfilment:ful,p_contact_phone:ph,p_delivery_address:ful==='delivery'?ad:null,p_notes:$('#cnote').value.trim()||null,p_contact_name:$('#cn').value.trim()||null};
  const typed=$('#cpc').value.trim();
  const r=typed?await sb.rpc('place_order_with_code',{...oargs,p_campaign_code:typed}):await sb.rpc('place_order',oargs);
- if(r.error){say(typed&&/Could not find the function|schema cache/.test(r.error.message||'')?'Promo codes are not switched on yet. Clear the code to place the order.':(r.error.message||'Could not place the order.'));btn.disabled=false;sync();return}
+ if(r.error){say(typed&&/Could not find the function|schema cache/.test(r.error.message||'')?'Promo codes are not switched on yet. Clear the code to place the order.':cleanErr(r.error.message||'Could not place the order.'));btn.disabled=false;if(/ACCOUNT_SUSPENDED/.test(r.error.message||''))btn.disabled=true;else sync();return}
  if(r.data&&!Array.isArray(r.data)&&r.data.error){say(r.data.error+' Fix or clear the promo code and try again.');btn.disabled=false;sync();return}
  saveCart({});
  try{const up={};if(!prof.phone)up.phone=ph;if(!prof.full_name&&$('#cn').value.trim())up.full_name=$('#cn').value.trim();if(ful==='delivery'&&!prof.address)up.address=ad;if(Object.keys(up).length)await sb.from('profiles').update(up).eq('id',user.id)}catch(e){}
  const os=r.data||[];
  let paidMsg='',payErr='';
- if(payWallet()){const pr=await sb.rpc('pay_orders',{p_order_ids:os.map(o=>o.id),p_idempotency_key:payKey});if(pr.error)payErr=pr.error.message||'The payment did not go through.';else paidMsg='Paid from your test wallet.'}
+ if(payWallet()){const pr=await sb.rpc('pay_orders',{p_order_ids:os.map(o=>o.id),p_idempotency_key:payKey});if(pr.error)payErr=cleanErr(pr.error.message)||'The payment did not go through.';else paidMsg='Paid from your test wallet.'}
  root.innerHTML=`<div class="confirm"><div class="tick" aria-hidden="true">✓</div><h2>Thank you! Your order${os.length>1?'s are':' is'} placed.</h2>
  ${paidMsg?window.CC.TESTBANNER+'<p><b>'+paidMsg+'</b> This was play money, so no real funds moved.</p>':payErr?'<div class="notice err">Your order was placed but the test payment failed: '+esc(payErr)+'. You can pay it from your order page, or pay the vendor on '+(ful==='delivery'?'delivery':'pickup')+'.</div>':'<p>'+(ful==='delivery'?'Pay the vendor when your order is delivered.':'Pay the vendor when you collect your order.')+' No online payment is taken.</p>'}
  <div class="ordnums">${os.map(o=>`<a class="ordnum" href="dashboard-consumer.html?order=${esc(o.id)}"><b>${esc(o.order_number)}</b><span>${esc(o.vendor_name)} · ${xcd(o.total_xcd)}</span></a>`).join('')}</div>

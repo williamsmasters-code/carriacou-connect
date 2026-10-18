@@ -5,7 +5,7 @@ const $=s=>document.querySelector(s);
 const main=()=>document.querySelector('main');
 const say=(el,msg,ok)=>{if(!el)return;el.className=ok?'notice ok':'notice err';el.textContent=msg||'';el.hidden=!msg};
 const NOPAY='Wallets are not switched on yet: supabase/pay.sql has not been run in your Supabase project.';
-const fixErr=e=>{const m=(e&&e.message)||'Something went wrong.';return /schema cache|does not exist|Could not find the function/i.test(m)?NOPAY:m};
+const fixErr=e=>{const m=(e&&e.message)||'Something went wrong.';const m2=m.replace(/^ACCOUNT_SUSPENDED:\s*/,'');return /schema cache|does not exist|Could not find the function/i.test(m)?NOPAY:m2};
 const base=f=>new URL(f,location.href).href.split('?')[0].split('#')[0];
 // ---- QR (vendor/qrcode.js, MIT, generated in the browser; nothing is sent anywhere) ----
 function qrSvg(text,px){
