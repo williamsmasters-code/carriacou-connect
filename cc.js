@@ -18,6 +18,17 @@ function client(){
 }
 const TIER_LABEL={lite:'Lite',standard:'Standard',plus:'Plus+',pro:'Pro',enterprise:'Enterprise'};
 const TIER_LIMIT={lite:10,standard:25,plus:50,pro:null,enterprise:null};
+// ---- plans (v0.9, TEST MODE: no billing). The database (tier_limits table) is the source of truth for limits; this is the display copy. null = unlimited.
+const TIERS=[
+ {k:'lite',name:'Lite',tag:'Start small',staff:0,sub:0,products:10,pos:'Basic',bizAnalytics:false,multi:false,support:false,blurb:'For one person running a small shop or side business.'},
+ {k:'standard',name:'Standard',tag:'Add a helper',staff:2,sub:0,products:25,pos:'Basic',bizAnalytics:false,multi:false,support:false,blurb:'Owner plus two staff accounts for a growing shop.'},
+ {k:'plus',name:'Plus+',tag:'Busy counter',staff:5,sub:0,products:50,pos:'Enhanced',bizAnalytics:false,multi:false,support:false,blurb:'Owner plus five staff, with the enhanced point of sale.'},
+ {k:'pro',name:'Pro',tag:'Run a team',staff:5,sub:2,products:null,pos:'Professional',bizAnalytics:true,multi:false,support:false,blurb:'Two sub-admins, five staff, unlimited products and business analytics.'},
+ {k:'enterprise',name:'Enterprise',tag:'Island scale',staff:null,sub:null,products:null,pos:'Professional',bizAnalytics:true,multi:true,support:true,blurb:'Variable team size, multiple locations and dedicated support.'}];
+const lim=n=>n==null?'Unlimited':String(n);
+const ROLE_LABEL={admin:'Owner',subadmin:'Sub-admin',staff:'Staff'};
+// what each business role may do (mirrors role_perms() in staff.sql; the database is the real gatekeeper)
+const ROLE_PERMS={staff:['orders_view','orders_update','notes','pos','products_view'],subadmin:['orders_view','orders_update','notes','pos','products_view','products_edit','refunds','analytics'],admin:['orders_view','orders_update','notes','pos','products_view','products_edit','refunds','analytics','team','plan','vendor_edit']};
 async function getUser(){const sb=await client();if(!sb)return null;try{const {data}=await sb.auth.getSession();return data.session?data.session.user:null}catch(e){return null}}
 
 // ---- orders helpers (v0.4) ----
@@ -105,13 +116,13 @@ function authLinks(){return '<a href="login.html">Log in</a><a class="pill" href
 function layout(){
  const live=configured;
  const out=live?authLinks():'<a href="login.html">Log in</a>';
- const msg=live?'Preview v0.8 – products labeled SAMPLE are fictional. Wallet payments are TEST MODE play money only. No real payments.':'Preview v0.8 – all vendors and products are SAMPLE data. Accounts are not switched on yet. No real payments.';
+ const msg=live?'Preview v0.9 – products labeled SAMPLE are fictional. Wallet payments and plans are TEST MODE only. No real payments or billing.':'Preview v0.9 – all vendors and products are SAMPLE data. Accounts are not switched on yet. No real payments.';
  if(!document.querySelector('link[data-cc-fonts]')){const l=document.createElement('link');l.rel='stylesheet';l.dataset.ccFonts='1';l.href='https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,600;0,9..144,800;1,9..144,600&family=Plus+Jakarta+Sans:wght@400;500;700;800&display=swap';document.head.appendChild(l)}
  const m=document.querySelector('main');if(m)m.id='main';
  const home=document.body.dataset.page==='home';
- document.body.insertAdjacentHTML('afterbegin','<a class="skip" href="#main">Skip to content</a><div class="banner">'+msg+'</div><header><div class="row"><a class="logo" href="index.html">'+LOGO+'<div>Carriacou <span>Connect</span><small>Marketplace</small></div></a><nav aria-label="Main"><a href="browse.html">Browse</a><a class="cartlink" href="cart.html">Cart<b id="cartCount">0</b></a><span id="authNav">'+out+'</span></nav></div></header>');
+ document.body.insertAdjacentHTML('afterbegin','<a class="skip" href="#main">Skip to content</a><div class="banner">'+msg+'</div><header><div class="row"><a class="logo" href="index.html">'+LOGO+'<div>Carriacou <span>Connect</span><small>Marketplace</small></div></a><nav aria-label="Main"><a href="browse.html">Browse</a><a href="tiers.html">Plans</a><a class="cartlink" href="cart.html">Cart<b id="cartCount">0</b></a><span id="authNav">'+out+'</span></nav></div></header>');
  const hasBand=document.querySelector('.band');
- document.body.insertAdjacentHTML('beforeend',(hasBand?'':WAVE('#04202c',false).replace('class="wave-sep"','class="wave-sep foot-wave"'))+'<footer><b>Carriacou Connect®</b><br>by Williams’ Tech · Marketplace v0.8 preview<br>Sea, reef, spice and sail: made on Carriacou.</footer>');
+ document.body.insertAdjacentHTML('beforeend',(hasBand?'':WAVE('#04202c',false).replace('class="wave-sep"','class="wave-sep foot-wave"'))+'<footer><b>Carriacou Connect®</b><br>by Williams’ Tech · Marketplace v0.9 preview<br>Sea, reef, spice and sail: made on Carriacou.</footer>');
  if(live)authNav();
  if(!matchMedia('(prefers-reduced-motion: reduce)').matches&&'IntersectionObserver' in window){const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}}),{threshold:.08});window.CC_REVEAL=()=>document.querySelectorAll('.rv:not(.in)').forEach(x=>io.observe(x))}
  else window.CC_REVEAL=()=>document.querySelectorAll('.rv').forEach(x=>x.classList.add('in'));
@@ -120,13 +131,14 @@ async function authNav(){
  const sb=await client();if(!sb)return;
  const render=async user=>{const el=document.getElementById('authNav');if(!el)return;
   if(!user){el.innerHTML=authLinks();return}
-  let role='consumer';try{const {data}=await sb.from('profiles').select('role').eq('id',user.id).maybeSingle();if(data)role=data.role}catch(e){}
-  el.innerHTML=`<a href="${role==='vendor'?'dashboard-vendor.html':'dashboard-consumer.html'}">Dashboard</a><a href="wallet.html">Wallet</a><a href="account.html">Account</a><a class="pill" href="#" id="logoutLink">Log out</a>`;
+  let role='consumer',team=false;try{const {data}=await sb.from('profiles').select('role').eq('id',user.id).maybeSingle();if(data)role=data.role}catch(e){}
+  if(role!=='vendor'&&role!=='admin'){try{const r=await sb.rpc('my_vendor_access');team=!r.error&&Array.isArray(r.data)&&r.data.length>0}catch(e){}}
+  el.innerHTML=`<a href="${role==='vendor'||team?'dashboard-vendor.html':'dashboard-consumer.html'}">${team?'Work dashboard':'Dashboard'}</a>${team?'<a href="dashboard-consumer.html">My orders</a>':''}${role==='admin'?'<a href="admin.html">Admin</a>':''}<a href="wallet.html">Wallet</a><a href="account.html">Account</a><a class="pill" href="#" id="logoutLink">Log out</a>`;
   document.getElementById('logoutLink').onclick=async e=>{e.preventDefault();await sb.auth.signOut();location.href='index.html'}};
  render(await getUser());
  sb.auth.onAuthStateChange((ev)=>{if(ev==='SIGNED_OUT')render(null)});
 }
-window.CC={TESTBANNER,cents,toCents,uuid,payPill,noteSummary,newBadge,notesWidget,NOTE_POLL,SLABEL,stPill,fdate,fnice,payText,nextSteps,timeline,safeNext,WAVE,configured,client,esc,getUser,layout,TIER_LABEL,TIER_LIMIT,
+window.CC={TESTBANNER,cents,toCents,uuid,payPill,noteSummary,newBadge,notesWidget,NOTE_POLL,SLABEL,stPill,fdate,fnice,payText,nextSteps,timeline,safeNext,WAVE,configured,client,esc,getUser,layout,TIER_LABEL,TIER_LIMIT,TIERS,lim,ROLE_LABEL,ROLE_PERMS,
  xcd:n=>'EC$'+Number(n).toFixed(2)};
 layout();
 })();

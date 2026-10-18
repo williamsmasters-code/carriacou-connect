@@ -1,4 +1,4 @@
-CARRIACOU CONNECT MARKETPLACE v0.8 (static preview + optional Supabase accounts + TEST-MODE wallets + vendor analytics)
+CARRIACOU CONNECT MARKETPLACE v0.9 (static preview + optional Supabase accounts + TEST-MODE wallets + vendor analytics + plans + team accounts)
 ===================================================
 ALL VENDORS AND PRODUCTS ARE SAMPLE DATA. NO REAL PAYMENTS.
 
@@ -305,3 +305,30 @@ Tests (outside the repo, /workspace/cconnect/test): pgan.mjs (75 checks: v0.7 ->
   NOT yet run against the real Supabase project.
 Changed files: supabase/analytics.sql (new), analytics.js (new), auth.js (tab, stock field and column), dashboard-vendor.html, style.css, cc.js (version text), README.txt.
 Not in this step: stock is not shown to shoppers yet (an out-of-stock item can be put in a cart; checkout then explains it); Standard/Advanced/Premium analytics.
+
+==================================================================================================
+v0.9: SUBSCRIPTION TIERS (TEST MODE, NO REAL BILLING) + STAFF ACCOUNTS AND PERMISSIONS
+==================================================================================================
+Run order in the Supabase SQL editor: schema -> orders -> order_notes -> pay -> analytics -> staff.sql (new, idempotent, safe to re-run).
+  If you ever re-run an older SQL file after staff.sql, run staff.sql again (older files restore owner-only rules).
+  The site still works without staff.sql (owner-only, v0.8 behaviour, built-in limits); Team tab and admin page need it.
+Plans (supabase table tier_limits, UI in tiers.html): Lite (10 products, no team), Standard (1 owner + 2 staff), Plus (5 staff),
+  Pro (5 staff + 2 sub-admins, unlimited products), Enterprise (variable seats via admin override). Prices are not announced: billing is NOT live.
+  Vendors cannot change their own tier (trigger). They press "Request upgrade"; a platform admin approves in admin.html. Downgrades that would
+  exceed the new limits are blocked with an explanation (remove X staff / products first).
+Roles per business: Owner (vendors.owner_id, full access) / Sub-admin / Staff. Permission matrix:
+  Staff     : view+update orders, order notes, POS, view products
+  Sub-admin : staff + edit products, refunds/cancel paid orders, analytics (read-only view of business wallet)
+  Owner     : sub-admin + team, plan, business profile, wallet spending
+Invites (no email is sent): owner creates an invite bound to an email; a one-time link/code (CCI-XXXXX-...) is shown once and shared by hand.
+  Stored only as a hash, expires in 7 days, single use, brute-force throttled. The invitee signs up/logs in with that email and opens
+  accept-invite.html. Seat and sub-admin limits are enforced by DB triggers (not just the UI). Owner can pause, restore, change role, remove.
+  Append-only audit log (activity log in the Team tab).
+Platform admin: in the SQL editor run   update profiles set role='admin' where id='<user uuid>';   then open admin.html
+  (list vendors, approve/decline requests, set tier, Enterprise seat overrides).
+New files: supabase/staff.sql, team.js, tiers.html/.js, accept-invite.html/.js, admin.html/.js. Changed: cc.js, auth.js, pay.js, style.css, dashboard-vendor.html.
+Tests (outside repo, /workspace/cconnect/test): pgstaff.mjs (285 checks: both SQL orders twice, v0.8 upgrade with data, fresh install, limits,
+  every role x every action, escalation attempts, invite abuse, RLS isolation), pgfresh.mjs, lint_safeupdate.js, staff_flow.js (headless Chrome 390+1280),
+  plus all earlier suites. Screenshots: ../shots/staff_*.png, tiers_*.png, admin_*.png.
+Caveats: plans are test mode only; staff sign up as ordinary accounts; owner cannot also be staff elsewhere; no owner transfer; invites shared manually;
+  multi-location, dedicated support and business analytics beyond Basic are flags only (not built); NOT yet run against the real Supabase.

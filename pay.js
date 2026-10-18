@@ -110,15 +110,19 @@ async wallet(){
 
 async pos(){
  const c=await boot();if(!c)return;const {sb,user}=c;const R=$('#pay');
- const vr=await sb.from('vendors').select('id,name').eq('owner_id',user.id).order('created_at').limit(1);
- const v=vr.data&&vr.data[0];
- if(!v){R.innerHTML=TESTBANNER+'<div class="notice">POS is for vendor businesses. <a href="signup.html">Sign up as a vendor</a> or <a href="dashboard-vendor.html">create your business profile</a>.</div>';return}
+ // v0.9: the owner or any team member with the POS permission (staff.sql). Without staff.sql: the owner's own business (v0.8 behaviour).
+ let v=null,isOwner=true;
+ try{const ar=await sb.rpc('my_vendor_access');if(!ar.error&&Array.isArray(ar.data)){const want=new URLSearchParams(location.search).get('v');
+  const ok=ar.data.filter(a=>a.status==='active'&&(a.perms||[]).includes('pos'));const m=ok.find(a=>a.vendor_id===want)||ok.find(a=>a.is_owner)||ok[0];
+  if(m){v={id:m.vendor_id,name:m.vendor_name};isOwner=!!m.is_owner}}}catch(e){}
+ if(!v){const vr=await sb.from('vendors').select('id,name').eq('owner_id',user.id).order('created_at').limit(1);v=vr.data&&vr.data[0]}
+ if(!v){R.innerHTML=TESTBANNER+'<div class="notice">POS is for vendor businesses and their team. <a href="signup.html">Sign up as a vendor</a>, <a href="dashboard-vendor.html">create your business profile</a>, or <a href="accept-invite.html">join a team with an invite code</a>.</div>';return}
  const pr=await sb.from('products').select('id,name,price_xcd').eq('vendor_id',v.id).eq('active',true).order('name');
  const prods=pr.data||[];const qty={};let active=null,timer=null;
  const total=()=>Object.entries(qty).reduce((s,[id,n])=>{const p=prods.find(x=>x.id===id);return s+(p?Math.round(Number(p.price_xcd)*100)*n:0)},0);
  function form(note){
   clearInterval(timer);
-  R.innerHTML=TESTBANNER+`<p class="muted">${esc(v.name)} · Customers pay from their <b>test wallet</b>. Create a charge, show the code or QR, and the customer enters it on their wallet page. <a href="wallet.html">My business wallet</a></p>
+  R.innerHTML=TESTBANNER+`<p class="muted">${esc(v.name)} · Customers pay from their <b>test wallet</b>. Create a charge, show the code or QR, and the customer enters it on their wallet page. ${isOwner?'<a href="wallet.html">My business wallet</a>':'<span>Charges go to the business wallet.</span>'}</p>
   <div id="pm" class="notice${note?' ok':''}" ${note?'':'hidden'} role="status">${esc(note||'')}</div>
   <div class="posgrid"><section class="wcard"><h3>Items</h3>${prods.length?`<div class="posprods">${prods.map(p=>`<div class="pprod"><div><b>${esc(p.name)}</b><small>${cents(Math.round(Number(p.price_xcd)*100))}</small></div><div class="qtyc"><button type="button" data-m="${esc(p.id)}" aria-label="Fewer ${esc(p.name)}">−</button><span id="q-${esc(p.id)}">${qty[p.id]||0}</span><button type="button" data-p="${esc(p.id)}" aria-label="More ${esc(p.name)}">+</button></div></div>`).join('')}</div>`:'<p class="muted">No active products. Enter a custom amount instead.</p>'}</section>
   <form class="wcard" id="fch" novalidate><h3>New charge</h3><div class="oline total2"><span>Items total</span><b id="itot">${cents(total())}</b></div>
@@ -133,7 +137,7 @@ async pos(){
    const items=Object.entries(qty).filter(([,n])=>n>0).map(([id,n])=>{const p=prods.find(x=>x.id===id);return {name:p.name,qty:n,unit_cents:Math.round(Number(p.price_xcd)*100)}});
    if(custom)items.push({name:'Custom amount',qty:1,unit_cents:custom});
    const amt=total()+(custom||0);if(amt<1){say(m,'Pick items or enter an amount first.');return}
-   $('#cgo').disabled=true;const r=await rpc(sb,'create_charge',{p_amount_cents:amt,p_note:$('#cnote').value.trim()||null,p_items:items});
+   $('#cgo').disabled=true;const r=await rpc(sb,'create_charge',{p_amount_cents:amt,p_note:$('#cnote').value.trim()||null,p_items:items,p_vendor_id:v.id});
    if(r.error){say(m,fixErr(r.error));$('#cgo').disabled=false;return}
    for(const k of Object.keys(qty))delete qty[k];show(r.data)};
   recent();

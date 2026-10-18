@@ -125,30 +125,48 @@ async vendordash(){
  if(!configured)return offline();
  const c=await ctx();if(!c)return offline();
  if(!c.user){location.href='login.html';return}
- const {sb,user,profile}=c;
- if(!profile||profile.role!=='vendor'){$('#dash').innerHTML='<div class="notice">This dashboard is for vendor accounts. <a href="dashboard-consumer.html">Go to your consumer dashboard</a>. To sell, create a new vendor account with a different email.</div>';return}
- let vr=await sb.from('vendors').select('*').eq('owner_id',user.id).limit(1).maybeSingle();
- let vendor=vr.data;
+ const {sb,user,profile}=c;let legacy=false;
+ // v0.9: who am I for which business? Owner, sub-admin or staff. Without staff.sql the owner lookup below still works (v0.8 behaviour).
+ let acc=[];try{const r=await sb.rpc('my_vendor_access');if(!r.error&&Array.isArray(r.data))acc=r.data}catch(e){}
+ const isVendorP=!!(profile&&profile.role==='vendor');
+ const wantV=new URLSearchParams(location.search).get('v');
+ let me=acc.find(a=>a.vendor_id===wantV)||acc.find(a=>a.is_owner)||acc[0]||null;
+ if(!me&&!isVendorP){$('#dash').innerHTML='<div class="notice">This dashboard is for vendor accounts and their team. <a href="dashboard-consumer.html">Go to your consumer dashboard</a>. To sell, create a new vendor account with a different email. If you were invited to a team, <a href="accept-invite.html">enter your invite code</a>.</div>';return}
+ if(me&&me.status==='suspended'){$('#dash').innerHTML='<div class="notice err">Your access to <b>'+esc(me.vendor_name)+'</b> has been paused by the business owner. Ask them to switch it back on. <a href="dashboard-consumer.html">Go to my orders</a></div>';return}
+ let vendor=null;
+ if(me){const vr0=await sb.from('vendors').select('*').eq('id',me.vendor_id).maybeSingle();vendor=vr0.data}
+ else{const vr=await sb.from('vendors').select('*').eq('owner_id',user.id).limit(1).maybeSingle();vendor=vr.data;legacy=!!vendor;
+  if(vendor)me={vendor_id:vendor.id,vendor_name:vendor.name,tier:vendor.tier,role:'admin',is_owner:true,status:'active',perms:window.CC.ROLE_PERMS.admin.filter(p=>p!=='team'&&p!=='plan')}}
+ if(!vendor&&me){$('#dash').innerHTML='<div class="notice err">We could not load that business.</div>';return}
  if(!vendor){let pend=null;try{pend=JSON.parse(localStorage.getItem(PENDING))}catch(e){}
   if(pend&&pend.name){const r=await createVendor(sb,user,pend);if(!r.error){vendor=r.data;localStorage.removeItem(PENDING)}}}
+ if(vendor&&!me){try{const r=await sb.rpc('my_vendor_access');if(!r.error&&Array.isArray(r.data))me=r.data.find(a=>a.vendor_id===vendor.id)||null}catch(e){}
+  if(!me){legacy=true;me={vendor_id:vendor.id,vendor_name:vendor.name,tier:vendor.tier,role:'admin',is_owner:true,status:'active',perms:window.CC.ROLE_PERMS.admin.filter(p=>p!=='team'&&p!=='plan')}}}
  if(!vendor){
   $('#dash').innerHTML=`<h2>Create your business profile</h2><form id="bf">${vendorFields}<button class="btn">Create business (Lite plan)</button></form><div id="bm" class="notice" hidden></div>`;
   $('#bf').onsubmit=async e=>{e.preventDefault();const r=await createVendor(sb,user,{name:$('#bname').value.trim(),description:$('#bdesc').value.trim(),location:$('#bloc').value.trim()});if(r.error)say($('#bm'),r.error.message);else location.reload()};return}
- let tab=location.hash==='#orders'?'orders':location.hash==='#analytics'?'analytics':'products',ofilter='',nsum={},openN=new Set(),nTimer=null;
+ const perms=new Set(me.perms||[]),can=p=>perms.has(p),isOwner=!!me.is_owner;
+ const TABS=[['products',can('products_view')],['orders',can('orders_view')],['analytics',can('analytics')],['team',can('team')&&!legacy]].filter(x=>x[1]).map(x=>x[0]);
+ let tab=TABS.includes(location.hash.slice(1))?location.hash.slice(1):(TABS[0]||'products'),ofilter='',nsum={},openN=new Set(),nTimer=null,plan=null;
  const stockCell=p=>{if(p.stock_qty==null)return '<span class="muted">Not tracked</span>';const th=p.low_stock_threshold==null?5:p.low_stock_threshold;return p.stock_qty===0?'<span class="stk out">Out of stock</span>':p.stock_qty<=th?'<span class="stk low">'+p.stock_qty+' left (low)</span>':'<span class="stk">'+p.stock_qty+' in stock</span>'};
  const draw=async()=>{
+  if(!legacy){try{const pl=await sb.rpc('vendor_plan',{p_vendor:vendor.id});if(!pl.error&&pl.data)plan=pl.data}catch(e){}}
   const pr=await sb.from('products').select('*').eq('vendor_id',vendor.id).order('created_at',{ascending:false});
-  const prods=pr.data||[],lim=TIER_LIMIT[vendor.tier],used=prods.length,full=lim!=null&&used>=lim;
+  const prods=pr.data||[],lim=plan?plan.limits.max_products:TIER_LIMIT[vendor.tier],used=prods.length,full=lim!=null&&used>=lim;
+  const tierKey=plan?plan.tier:vendor.tier,canEdit=can('products_edit');
   const pct=lim?Math.min(100,Math.round(used/lim*100)):0;
-  const ord=await sb.from('orders').select('*,order_items(*)').eq('vendor_id',vendor.id).order('created_at',{ascending:false}).limit(200);
-  nsum=await window.CC.noteSummary(sb);
+  const ord=can('orders_view')?await sb.from('orders').select('*,order_items(*)').eq('vendor_id',vendor.id).order('created_at',{ascending:false}).limit(200):{data:[]};
+  nsum=can('orders_view')?await window.CC.noteSummary(sb):{};
   const olist=ord.data||[],newN=olist.filter(o=>o.status==='placed').length;
-  $('#dash').innerHTML=`<h2>${esc(vendor.name)} <span class="badge t-${esc(TIER_LABEL[vendor.tier].replace('+',''))}">${esc(TIER_LABEL[vendor.tier])}</span></h2>
+  $('#dash').innerHTML=`<h2>${esc(vendor.name)} <span class="badge t-${esc(TIER_LABEL[tierKey].replace('+',''))}">${esc(TIER_LABEL[tierKey])}</span> <span class="rolebadge r-${esc(me.role)}" title="Your role in this business">${esc(window.CC.ROLE_LABEL[me.role]||me.role)}</span></h2>
+  ${acc.length>1?`<p class="vswitch"><label>Business <select id="vsel">${acc.map(a=>`<option value="${esc(a.vendor_id)}"${a.vendor_id===vendor.id?' selected':''}>${esc(a.vendor_name)} (${esc(window.CC.ROLE_LABEL[a.role]||a.role)})</option>`).join('')}</select></label></p>`:''}
   <p class="muted">${esc(vendor.location||'')} ${vendor.description?'· '+esc(vendor.description):''}</p>
-  <p class="payquick"><a class="btn alt" href="wallet.html">Business wallet (test)</a> <a class="btn ghost" href="pos.html">POS: charge a customer (test)</a></p>
-  <p><strong>Products: ${used} of ${lim==null?'unlimited':lim}</strong>${lim?`<span class="meter"><span style="width:${pct}%"></span></span>`:''}${full?'<br><span class="err-text">Limit reached. Delete a product or upgrade your plan (upgrades coming soon).</span>':''}</p>
-  <div class="dtabs" role="tablist"><button data-t="products" role="tab">Products</button><button data-t="orders" role="tab">Orders${newN?` <b class="nbadge" title="New orders">${newN}</b>`:''}<span id="tnb"></span></button><button data-t="analytics" role="tab">Analytics</button></div>
-  <div id="tab-products"><h3 id="ftitle">Add a product</h3>
+  <p class="payquick">${isOwner?'<a class="btn alt" href="wallet.html">Business wallet (test)</a> ':''}${can('pos')?`<a class="btn ghost" href="pos.html${acc.length>1?'?v='+encodeURIComponent(vendor.id):''}">POS: charge a customer (test)</a>`:''}${isOwner&&!legacy?' <a class="btn ghost" href="tiers.html">Plans</a>':''}</p>
+  ${!isOwner?`<p class="notice roleinfo">You are signed in as <b>${esc(window.CC.ROLE_LABEL[me.role]||me.role)}</b> for ${esc(vendor.name)}. ${me.role==='staff'?'You can manage orders, take POS payments and write order notes.':'You can also manage products, issue refunds and see analytics.'}</p>`:''}
+  ${can('products_view')?`<p><strong>Products: ${used} of ${lim==null?'unlimited':lim}</strong>${lim?`<span class="meter"><span style="width:${pct}%"></span></span>`:''}${full?`<br><span class="err-text">Limit reached. Delete a product${isOwner&&!legacy?' or <a href="tiers.html">see plans</a>':''}.</span>`:''}</p>`:''}
+  ${plan&&can('team')?`<p class="seatline muted">Team seats: <b>${plan.usage.staff} of ${plan.limits.max_staff==null?'unlimited':plan.limits.max_staff}</b> staff${plan.limits.max_subadmins===0?'':` · <b>${plan.usage.subadmins} of ${plan.limits.max_subadmins==null?'unlimited':plan.limits.max_subadmins}</b> sub-admins`} · <a href="#team" data-goteam>Manage team</a></p>`:''}
+  <div class="dtabs" role="tablist">${TABS.includes('products')?'<button data-t="products" role="tab">Products</button>':''}${TABS.includes('orders')?`<button data-t="orders" role="tab">Orders${newN?` <b class="nbadge" title="New orders">${newN}</b>`:''}<span id="tnb"></span></button>`:''}${TABS.includes('analytics')?'<button data-t="analytics" role="tab">Analytics</button>':''}${TABS.includes('team')?'<button data-t="team" role="tab">Team &amp; plan</button>':''}</div>
+  <div id="tab-products"><div id="pform"${canEdit?'':' hidden'}><h3 id="ftitle">Add a product</h3>
   <form id="pf"><input type="hidden" id="pid"><label>Name<input id="pn" maxlength="120" required></label><label>Description<textarea id="pd" rows="3" maxlength="1000"></textarea></label>
   <label>Price (EC$)<input id="pp" type="number" min="0" step="0.01" required></label>
   <div class="stockrow"><label>Stock quantity <small>(optional, leave blank to not track)</small><input id="ps" type="number" min="0" max="1000000" step="1" inputmode="numeric" placeholder="e.g. 24"></label><label>Low-stock alert at or below<input id="pt" type="number" min="0" max="1000000" step="1" inputmode="numeric" value="5"></label></div>
@@ -159,13 +177,16 @@ async vendordash(){
    <div id="upmsg" class="muted" role="status"></div>
    <input type="hidden" id="pi"></div>
   <label class="chk"><input type="checkbox" id="pa" checked> Active (visible to shoppers)</label>
-  <button class="btn" id="psave">Add product</button> <button type="button" class="btn alt" id="pcancel" hidden>Cancel edit</button></form><div id="pm" class="notice" hidden></div>
-  <h3>Your products</h3>${prods.length?`<table><tr><th>Product</th><th>Price</th><th>Stock</th><th>Status</th><th></th></tr>${prods.map(p=>`<tr><td>${p.image_url?`<img class="thumb" src="${esc(p.image_url)}" alt="">`:''}${esc(p.name)}<div class="muted">${esc(CATS[p.category]||p.category)}</div></td><td>${xcd(p.price_xcd)}</td><td>${stockCell(p)}</td><td>${p.active?'Active':'Hidden'}</td><td><button class="btn alt" data-e="${p.id}">Edit</button> <button class="btn" data-d="${p.id}">Delete</button></td></tr>`).join('')}</table>`:'<p>No products yet.</p>'}
-  </div><div id="tab-orders" hidden></div><div id="tab-analytics" hidden></div>`;
+  <button class="btn" id="psave">Add product</button> <button type="button" class="btn alt" id="pcancel" hidden>Cancel edit</button></form><div id="pm" class="notice" hidden></div></div>
+  <h3>${canEdit?'Your products':'Products'}</h3>${prods.length?`<table><tr><th>Product</th><th>Price</th><th>Stock</th><th>Status</th><th></th></tr>${prods.map(p=>`<tr><td>${p.image_url?`<img class="thumb" src="${esc(p.image_url)}" alt="">`:''}${esc(p.name)}<div class="muted">${esc(CATS[p.category]||p.category)}</div></td><td>${xcd(p.price_xcd)}</td><td>${stockCell(p)}</td><td>${p.active?'Active':'Hidden'}</td><td>${canEdit?`<button class="btn alt" data-e="${p.id}">Edit</button> <button class="btn" data-d="${p.id}">Delete</button>`:'<span class="muted">View only</span>'}</td></tr>`).join('')}</table>`:'<p>No products yet.</p>'}
+  </div><div id="tab-orders" hidden></div><div id="tab-analytics" hidden></div><div id="tab-team" hidden></div>`;
+  const vs0=$('#vsel');if(vs0)vs0.onchange=()=>{location.href='dashboard-vendor.html?v='+encodeURIComponent(vs0.value)};
+  const gt=document.querySelector('[data-goteam]');if(gt)gt.onclick=e=>{e.preventDefault();showTab('team')};
   const f=$('#pf'),m=$('#pm');
-  const goEdit=id=>{showTab('products');const b=document.querySelector('[data-e="'+id+'"]');if(b)b.click()};
-  let anDone=false;
-  const showTab=t=>{tab=t;history.replaceState(null,'',t==='orders'?'#orders':t==='analytics'?'#analytics':location.pathname+location.search);document.querySelectorAll('.dtabs button').forEach(x=>x.classList.toggle('on',x.dataset.t===t));$('#tab-products').hidden=t!=='products';$('#tab-orders').hidden=t!=='orders';$('#tab-analytics').hidden=t!=='analytics';
+  const goEdit=id=>{if(!canEdit)return;showTab('products');const b=document.querySelector('[data-e="'+id+'"]');if(b)b.click()};
+  let anDone=false,tmDone=false;
+  const showTab=t=>{if(!TABS.includes(t))t=TABS[0]||'products';tab=t;history.replaceState(null,'',t==='products'?location.pathname+location.search:location.search+'#'+t);document.querySelectorAll('.dtabs button').forEach(x=>x.classList.toggle('on',x.dataset.t===t));$('#tab-products').hidden=t!=='products';$('#tab-orders').hidden=t!=='orders';$('#tab-analytics').hidden=t!=='analytics';$('#tab-team').hidden=t!=='team';
+   if(t==='team'&&!tmDone){tmDone=true;if(window.CC.team)window.CC.team.mount($('#tab-team'),{sb,vendor,me,plan,onPlanChange:()=>{tmDone=false;draw().then(()=>showTab('team'))}});else $('#tab-team').innerHTML='<div class="notice err">The team page did not load. Refresh the page.</div>'}
    if(t==='analytics'&&!anDone){anDone=true;if(window.CC.analytics)window.CC.analytics.mount($('#tab-analytics'),{sb,vendor,onEdit:goEdit});else $('#tab-analytics').innerHTML='<div class="notice err">Analytics did not load. Refresh the page.</div>'}};
   document.querySelectorAll('.dtabs button').forEach(b=>b.onclick=()=>showTab(b.dataset.t));
   const {stPill,fdate,fnice,payText,nextSteps}=window.CC;
@@ -180,7 +201,7 @@ async vendordash(){
     <ul class="oitems">${(o.order_items||[]).map(i=>`<li>${i.quantity} × ${esc(i.product_name)} <span class="muted">@ ${xcd(i.unit_price_xcd)}</span></li>`).join('')}</ul>
     <div class="info-grid"><div><b>Customer</b><br>${esc(o.contact_name||'(no name)')}<br><a href="tel:${esc((o.contact_phone||'').replace(/[^0-9+]/g,''))}">${esc(o.contact_phone||'')}</a></div>${o.fulfilment==='delivery'?`<div><b>Deliver to</b><br>${esc(o.delivery_address||'')}</div>`:'<div><b>Pickup</b><br>Customer will collect</div>'}</div>
     <details class="notes" data-oid="${esc(o.id)}"><summary>💬 Notes <span class="ncnt"></span><span class="nbx"></span></summary><div class="notes-box"></div></details>
-    <div class="oacts"><button class="btn ghost" data-pdf="${esc(o.id)}" type="button">Download PDF</button>${o.payment_status==='paid'?`<button class="btn ghost" data-refund="${esc(o.id)}">Refund (test)</button>`:''}${nextSteps(o).map(([to,lbl])=>`<button class="btn ${to==='cancelled'?'ghost':''}" data-o="${o.id}" data-to="${to}">${esc(lbl)}</button>`).join('')||'<span class="muted">No further actions.</span>'}</div></article>`).join(''):`<div class="empty"><div class="empty-ic" aria-hidden="true">📦</div><h3>${olist.length?'No orders with this status':'No orders yet'}</h3><p>${olist.length?'Try another filter.':'New orders from shoppers will appear here.'}</p></div>`}`;
+    <div class="oacts"><button class="btn ghost" data-pdf="${esc(o.id)}" type="button">Download PDF</button>${o.payment_status==='paid'&&can('refunds')?`<button class="btn ghost" data-refund="${esc(o.id)}">Refund (test)</button>`:''}${(can('orders_update')?nextSteps(o).filter(([to])=>!(to==='cancelled'&&o.payment_status==='paid'&&!can('refunds'))):[]).map(([to,lbl])=>`<button class="btn ${to==='cancelled'?'ghost':''}" data-o="${o.id}" data-to="${to}">${esc(lbl)}</button>`).join('')||`<span class="muted">${o.payment_status==='paid'&&!can('refunds')&&nextSteps(o).length?'Cancelling a wallet-paid order refunds it: ask the owner or a sub-admin.':'No further actions.'}</span>`}</div></article>`).join(''):`<div class="empty"><div class="empty-ic" aria-hidden="true">📦</div><h3>${olist.length?'No orders with this status':'No orders yet'}</h3><p>${olist.length?'Try another filter.':'New orders from shoppers will appear here.'}</p></div>`}`;
    const badges=()=>{let tot=0;T.querySelectorAll('details.notes').forEach(d=>{const x=nsum[d.dataset.oid]||{total:0,unread:0};tot+=x.unread;
      d.querySelector('.ncnt').textContent=x.total?'('+x.total+')':'';d.querySelector('.nbx').innerHTML=window.CC.newBadge(x.unread);d.closest('.vorder').classList.toggle('hasnote',x.unread>0)});
     const all=Object.values(nsum).reduce((n,x)=>n+(x.unread||0),0);const tb=$('#tnb');if(tb)tb.innerHTML=all?' <b class="nbadge note" title="Orders with unread notes">💬'+all+'</b>':''};
