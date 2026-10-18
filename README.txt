@@ -1,4 +1,4 @@
-CARRIACOU CONNECT MARKETPLACE v0.9 (static preview + optional Supabase accounts + TEST-MODE wallets + vendor analytics + plans + team accounts)
+CARRIACOU CONNECT MARKETPLACE v1.0 (static preview + optional Supabase accounts + TEST-MODE wallets + vendor analytics + plans + team accounts + multi-photo products + bulk upload)
 ===================================================
 ALL VENDORS AND PRODUCTS ARE SAMPLE DATA. NO REAL PAYMENTS.
 
@@ -332,3 +332,41 @@ Tests (outside repo, /workspace/cconnect/test): pgstaff.mjs (285 checks: both SQ
   plus all earlier suites. Screenshots: ../shots/staff_*.png, tiers_*.png, admin_*.png.
 Caveats: plans are test mode only; staff sign up as ordinary accounts; owner cannot also be staff elsewhere; no owner transfer; invites shared manually;
   multi-location, dedicated support and business analytics beyond Basic are flags only (not built); NOT yet run against the real Supabase.
+
+=====================================================================
+v1.0: PRODUCT PHOTOS BY PLAN + BULK PRODUCT UPLOAD
+=====================================================================
+SQL RUN ORDER (Supabase SQL editor, each file once, in this order):
+  schema.sql, seed.sql, orders.sql, order_notes.sql, pay.sql,
+  analytics.sql, staff.sql, storage.sql, then supabase/photos.sql (NEW).
+photos.sql is safe to re-run. RE-RUN IT whenever schema.sql, staff.sql or
+storage.sql is re-run (they redefine vendor_plan and the storage policies).
+
+PHOTOS PER PRODUCT (tier_limits.max_photos)
+  Lite 1, Standard 1, Plus 3, Pro 3, Enterprise 5.
+  Enforced in the database (trigger), not just the page. products.image_url
+  stays as the cover photo (first photo). Existing image_url values are
+  migrated automatically. On a downgrade, extra photos are KEPT but no more
+  can be added until the vendor removes some (a notice is shown).
+  Product form: add several photos, reorder, set cover, remove.
+  Product page: swipeable gallery with thumbnails.
+
+BULK UPLOAD (Dashboard > Products > "Bulk upload / export")
+  Who: owner and sub-admin (products_edit). Staff do not see it.
+  Template: templates/products_template.csv (also a button on the page).
+  Columns: sku, name, description, category, price_xcd, stock_qty,
+           low_stock_threshold, cost_price, active, image_url
+  Files: .csv (Excel CSV, UTF-8 BOM, ; or tab delimiters ok) and .xlsx.
+         Old .xls is not supported (save as CSV). Max 20,000 rows / 8 MB.
+  Preview shows each row's problems, duplicates, and the plan-limit check
+  ("would exceed your plan limit by N": import only the first N, or nothing).
+  Modes: add new only / update existing (match by sku, else name) / both.
+  Update mode leaves blank optional cells unchanged.
+  Imports in batches of 200 via bulk_upsert_products (SECURITY DEFINER,
+  500 rows max per call, race-safe cap). Safe to re-run the same file.
+  Error report CSV and a full product export (same format) are provided.
+  image_url in a bulk file only applies to products that have no photos yet.
+  cost_price is accepted but not stored (no column yet); it is ignored.
+
+NEW FILES: photos.js, bulk.js, templates/products_template.csv,
+           supabase/photos.sql

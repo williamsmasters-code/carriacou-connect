@@ -9,6 +9,8 @@ const rows=[
  ['Staff accounts',t=>CC.lim(t.staff).replace('Unlimited','Variable')+(t.k==='lite'?' (owner only)':'')],
  ['Sub-admin accounts',t=>t.sub===0?no:CC.lim(t.sub).replace('Unlimited','Variable')],
  ['Products',t=>CC.lim(t.products)],
+ ['Photos per product',t=>String(t.photos)],
+ ['Bulk upload (CSV / Excel)',()=>yes],
  ['Business dashboard + orders',()=>yes],
  ['Wallet payments and refunds (test)',()=>yes],
  ['POS',t=>t.pos],
@@ -36,7 +38,7 @@ async function boot(){
  '<p class="lead">Every business starts on <b>Lite</b>. A plan sets how many team accounts and products you can have. Pricing will be announced before billing goes live.'+(owner?'':' <a href="login.html?next=tiers.html">Log in</a> as a vendor to request an upgrade.')+'</p>'+
  '<div id="rmsg" class="notice" hidden role="alert"></div>'+
  '<div class="tiercards">'+T.map((t,i)=>'<article class="tiercard'+(t.k===cur?' current':'')+(t.k==='pro'?' pop':'')+'"><span class="kicker">'+esc(t.tag)+'</span><h2><span class="badge t-'+esc(t.name.replace('+',''))+'">'+esc(t.name)+'</span></h2><p class="muted">'+esc(t.blurb)+'</p>'+
-   '<ul class="tierul"><li><b>'+esc(CC.lim(t.products))+'</b> products</li><li><b>'+(t.staff===0?'No':esc(CC.lim(t.staff).replace('Unlimited','Variable')))+'</b> staff</li>'+(t.sub?'<li><b>'+esc(CC.lim(t.sub).replace('Unlimited','Variable'))+'</b> sub-admins</li>':'')+'<li>'+esc(t.pos)+' POS</li>'+(t.bizAnalytics?'<li>Business analytics</li>':'')+(t.multi?'<li>Multiple locations</li>':'')+(t.support?'<li>Dedicated support</li>':'')+'</ul><div class="tieract">'+act(t)+'</div></article>').join('')+'</div>'+
+   '<ul class="tierul"><li><b>'+esc(CC.lim(t.products))+'</b> products</li><li><b>'+t.photos+'</b> photo'+(t.photos===1?'':'s')+' per product</li><li><b>'+(t.staff===0?'No':esc(CC.lim(t.staff).replace('Unlimited','Variable')))+'</b> staff</li>'+(t.sub?'<li><b>'+esc(CC.lim(t.sub).replace('Unlimited','Variable'))+'</b> sub-admins</li>':'')+'<li>'+esc(t.pos)+' POS</li>'+(t.bizAnalytics?'<li>Business analytics</li>':'')+(t.multi?'<li>Multiple locations</li>':'')+(t.support?'<li>Dedicated support</li>':'')+'</ul><div class="tieract">'+act(t)+'</div></article>').join('')+'</div>'+
  '<h2>Compare plans</h2><div class="tblwrap"><table class="cmp"><tr><th>Feature</th>'+T.map(t=>'<th class="'+(t.k===cur?'cur':'')+'">'+esc(t.name)+'</th>').join('')+'</tr>'+rows.map(r=>'<tr><td>'+esc(r[0])+'</td>'+T.map(t=>'<td class="'+(t.k===cur?'cur':'')+'">'+r[1](t)+'</td>').join('')+'</tr>').join('')+'</table></div>'+
  '<p class="muted">“Variable” means the team size is agreed with Carriacou Connect. Features marked <i>coming soon</i> are planned, not built yet. Campaigns and advertising are also planned for every plan.</p>'+
  '<h2>Who can do what in a team</h2><div class="tblwrap"><table class="ptab"><tr><th>Action</th><th>Staff</th><th>Sub-admin</th><th>Owner</th></tr>'+

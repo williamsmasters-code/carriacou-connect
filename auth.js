@@ -20,19 +20,6 @@ async function createVendor(sb,user,v){
 }
 const vendorFields=`<label>Business name<input id="bname" maxlength="80" required></label><label>Location (e.g. Hillsborough)<input id="bloc" maxlength="80"></label><label>About your business<textarea id="bdesc" rows="3" maxlength="500"></textarea></label><p class="muted">New businesses start on the <strong>Lite</strong> plan (up to 10 products).</p>`;
 
-// Resize to max 1200px and re-encode (keeps PNG transparency as PNG, otherwise JPEG ~0.82).
-async function shrink(file){
- const url=URL.createObjectURL(file);
- try{const im=await new Promise((ok,no)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=()=>no(new Error('Could not read that image.'));i.src=url});
-  const M=1200,k=Math.min(1,M/Math.max(im.naturalWidth,im.naturalHeight)),w=Math.max(1,Math.round(im.naturalWidth*k)),h=Math.max(1,Math.round(im.naturalHeight*k));
-  const cv=document.createElement('canvas');cv.width=w;cv.height=h;const cx=cv.getContext('2d');
-  const png=file.type==='image/png';if(!png){cx.fillStyle='#fff';cx.fillRect(0,0,w,h)}
-  cx.drawImage(im,0,0,w,h);
-  let type=png?'image/png':'image/jpeg',blob=await new Promise(r=>cv.toBlob(r,type,.82));
-  if(png&&blob&&blob.size>1.8*1024*1024){type='image/jpeg';cx.globalCompositeOperation='destination-over';cx.fillStyle='#fff';cx.fillRect(0,0,w,h);blob=await new Promise(r=>cv.toBlob(r,type,.82))}
-  if(!blob)throw new Error('Could not process that image.');
-  return {blob,type,w,h}}
- finally{URL.revokeObjectURL(url)}}
 const pages={
 async signup(){
  if(!configured)return offline();
@@ -149,12 +136,27 @@ async vendordash(){
  const TABS=[['products',can('products_view')],['orders',can('orders_view')],['analytics',can('analytics')],['team',can('team')&&!legacy]].filter(x=>x[1]).map(x=>x[0]);
  let tab=TABS.includes(location.hash.slice(1))?location.hash.slice(1):(TABS[0]||'products'),ofilter='',nsum={},openN=new Set(),nTimer=null,plan=null;
  const stockCell=p=>{if(p.stock_qty==null)return '<span class="muted">Not tracked</span>';const th=p.low_stock_threshold==null?5:p.low_stock_threshold;return p.stock_qty===0?'<span class="stk out">Out of stock</span>':p.stock_qty<=th?'<span class="stk low">'+p.stock_qty+' left (low)</span>':'<span class="stk">'+p.stock_qty+' in stock</span>'};
+ let photosOn=null,prods=[],pTotal=0,pPage=0,pQuery='';const PAGE=50;
+ const loadProducts=async()=>{
+  const build=emb=>{let q=sb.from('products').select(emb?'*,product_images(id,url,position)':'*',{count:'exact'}).eq('vendor_id',vendor.id);
+   const t=pQuery.replace(/[%_\\,()*"']/g,' ').replace(/\s+/g,' ').trim();
+   if(t)q=emb?q.or('name.ilike.%'+t+'%,sku.ilike.%'+t+'%'):q.ilike('name','%'+t+'%');
+   return q.order('created_at',{ascending:false}).order('id',{ascending:false}).range(pPage*PAGE,pPage*PAGE+PAGE-1)};
+  let r=await build(photosOn!==false);
+  if(r.error&&photosOn!==false&&/product_images|relationship|sku|schema cache|column/i.test(r.error.message||'')){photosOn=false;r=await build(false)}
+  else if(!r.error&&photosOn===null)photosOn=true;
+  if(!r.error&&!(r.data||[]).length&&pPage>0&&r.count>0){pPage=Math.max(0,Math.ceil(r.count/PAGE)-1);r=await build(photosOn!==false)}
+  prods=(r.data||[]).map(p=>{if(p.product_images)p.product_images.sort((a,b)=>a.position-b.position);return p});pTotal=r.count!=null?r.count:prods.length};
  const draw=async()=>{
   if(!legacy){try{const pl=await sb.rpc('vendor_plan',{p_vendor:vendor.id});if(!pl.error&&pl.data)plan=pl.data}catch(e){}}
-  const pr=await sb.from('products').select('*').eq('vendor_id',vendor.id).order('created_at',{ascending:false});
-  const prods=pr.data||[],lim=plan?plan.limits.max_products:TIER_LIMIT[vendor.tier],used=prods.length,full=lim!=null&&used>=lim;
+  const cq=await sb.from('products').select('id',{count:'exact',head:true}).eq('vendor_id',vendor.id);
+  await loadProducts();
+  let used;const lim=plan?plan.limits.max_products:TIER_LIMIT[vendor.tier];used=cq.count!=null?cq.count:(plan&&plan.usage?plan.usage.products:prods.length);const full=lim!=null&&used>=lim;
   const tierKey=plan?plan.tier:vendor.tier,canEdit=can('products_edit');
+  const usedHtml=()=>{const pct=lim?Math.min(100,Math.round(used/lim*100)):0,full=lim!=null&&used>=lim;return `<strong>Products: ${used} of ${lim==null?'unlimited':lim}</strong>${lim?`<span class="meter"><span style="width:${pct}%"></span></span>`:''}${full?`<br><span class="err-text">Limit reached. Delete a product${isOwner&&!legacy?' or <a href="tiers.html">see plans</a>':''}.</span>`:''}`};
   const pct=lim?Math.min(100,Math.round(used/lim*100)):0;
+  const maxPh=Math.max(1,(plan&&plan.limits&&plan.limits.max_photos)||window.CC.photos.TIER_PHOTOS[tierKey]||1);
+  const overPh=plan&&plan.usage&&plan.usage.products_over_photo_limit!=null?plan.usage.products_over_photo_limit:prods.filter(p=>(p.product_images||[]).length>maxPh).length;
   const ord=can('orders_view')?await sb.from('orders').select('*,order_items(*)').eq('vendor_id',vendor.id).order('created_at',{ascending:false}).limit(200):{data:[]};
   nsum=can('orders_view')?await window.CC.noteSummary(sb):{};
   const olist=ord.data||[],newN=olist.filter(o=>o.status==='placed').length;
@@ -163,7 +165,8 @@ async vendordash(){
   <p class="muted">${esc(vendor.location||'')} ${vendor.description?'· '+esc(vendor.description):''}</p>
   <p class="payquick">${isOwner?'<a class="btn alt" href="wallet.html">Business wallet (test)</a> ':''}${can('pos')?`<a class="btn ghost" href="pos.html${acc.length>1?'?v='+encodeURIComponent(vendor.id):''}">POS: charge a customer (test)</a>`:''}${isOwner&&!legacy?' <a class="btn ghost" href="tiers.html">Plans</a>':''}</p>
   ${!isOwner?`<p class="notice roleinfo">You are signed in as <b>${esc(window.CC.ROLE_LABEL[me.role]||me.role)}</b> for ${esc(vendor.name)}. ${me.role==='staff'?'You can manage orders, take POS payments and write order notes.':'You can also manage products, issue refunds and see analytics.'}</p>`:''}
-  ${can('products_view')?`<p><strong>Products: ${used} of ${lim==null?'unlimited':lim}</strong>${lim?`<span class="meter"><span style="width:${pct}%"></span></span>`:''}${full?`<br><span class="err-text">Limit reached. Delete a product${isOwner&&!legacy?' or <a href="tiers.html">see plans</a>':''}.</span>`:''}</p>`:''}
+  ${can('products_view')?`<p id="usedline">${usedHtml()}</p>`:''}
+  ${can('products_view')&&photosOn?`<p class="muted phline">Photos per product: up to <b>${maxPh}</b> on your ${esc(TIER_LABEL[tierKey])} plan.${overPh>0?` <span class="err-text">${overPh} product${overPh===1?' has':'s have'} more photos than this plan allows. They are kept, but you can't add more to ${overPh===1?'it':'them'} until you remove some${isOwner&&!legacy?' or <a href="tiers.html">upgrade</a>':''}.</span>`:''}</p>`:''}
   ${plan&&can('team')?`<p class="seatline muted">Team seats: <b>${plan.usage.staff} of ${plan.limits.max_staff==null?'unlimited':plan.limits.max_staff}</b> staff${plan.limits.max_subadmins===0?'':` · <b>${plan.usage.subadmins} of ${plan.limits.max_subadmins==null?'unlimited':plan.limits.max_subadmins}</b> sub-admins`} · <a href="#team" data-goteam>Manage team</a></p>`:''}
   <div class="dtabs" role="tablist">${TABS.includes('products')?'<button data-t="products" role="tab">Products</button>':''}${TABS.includes('orders')?`<button data-t="orders" role="tab">Orders${newN?` <b class="nbadge" title="New orders">${newN}</b>`:''}<span id="tnb"></span></button>`:''}${TABS.includes('analytics')?'<button data-t="analytics" role="tab">Analytics</button>':''}${TABS.includes('team')?'<button data-t="team" role="tab">Team &amp; plan</button>':''}</div>
   <div id="tab-products"><div id="pform"${canEdit?'':' hidden'}><h3 id="ftitle">Add a product</h3>
@@ -171,19 +174,18 @@ async vendordash(){
   <label>Price (EC$)<input id="pp" type="number" min="0" step="0.01" required></label>
   <div class="stockrow"><label>Stock quantity <small>(optional, leave blank to not track)</small><input id="ps" type="number" min="0" max="1000000" step="1" inputmode="numeric" placeholder="e.g. 24"></label><label>Low-stock alert at or below<input id="pt" type="number" min="0" max="1000000" step="1" inputmode="numeric" value="5"></label></div>
   <label>Category<select id="pc">${Object.entries(CATS).map(([k,v])=>`<option value="${k}">${esc(v)}</option>`).join('')}</select></label>
-  <div class="uploader"><span class="lbl">Product image <small>(JPG, PNG or WebP, up to 2 MB)</small></span>
-   <div class="up-row"><div class="up-prev" id="upprev" aria-live="polite"><span class="muted">No image</span></div>
-   <div class="up-btns"><label class="btn alt up-pick" for="pfile" id="uppicklbl" tabindex="0">Choose image</label><input type="file" id="pfile" accept="image/jpeg,image/png,image/webp" class="sr"><button type="button" class="btn ghost" id="upclear" hidden>Remove image</button></div></div>
-   <div id="upmsg" class="muted" role="status"></div>
-   <input type="hidden" id="pi"></div>
+  <div class="uploader" id="upl"></div>
   <label class="chk"><input type="checkbox" id="pa" checked> Active (visible to shoppers)</label>
   <button class="btn" id="psave">Add product</button> <button type="button" class="btn alt" id="pcancel" hidden>Cancel edit</button></form><div id="pm" class="notice" hidden></div></div>
-  <h3>${canEdit?'Your products':'Products'}</h3>${prods.length?`<table><tr><th>Product</th><th>Price</th><th>Stock</th><th>Status</th><th></th></tr>${prods.map(p=>`<tr><td>${p.image_url?`<img class="thumb" src="${esc(p.image_url)}" alt="">`:''}${esc(p.name)}<div class="muted">${esc(CATS[p.category]||p.category)}</div></td><td>${xcd(p.price_xcd)}</td><td>${stockCell(p)}</td><td>${p.active?'Active':'Hidden'}</td><td>${canEdit?`<button class="btn alt" data-e="${p.id}">Edit</button> <button class="btn" data-d="${p.id}">Delete</button>`:'<span class="muted">View only</span>'}</td></tr>`).join('')}</table>`:'<p>No products yet.</p>'}
+  <div id="bulkwrap"${canEdit?'':' hidden'}><details id="bulkbox" class="bulkbox"><summary>Bulk upload or export products (CSV / Excel)</summary><div id="bulkmount" class="bulkmount"></div></details></div>
+  <h3>${canEdit?'Your products':'Products'}</h3>
+  <div class="plist-tools"><label class="sr" for="psearch">Search products</label><input id="psearch" type="search" placeholder="Search by name or SKU" value="${esc(pQuery)}" autocomplete="off"><span id="pcount" class="muted"></span></div>
+  <div id="plist"></div><div id="ppager" class="ppager"></div>
   </div><div id="tab-orders" hidden></div><div id="tab-analytics" hidden></div><div id="tab-team" hidden></div>`;
   const vs0=$('#vsel');if(vs0)vs0.onchange=()=>{location.href='dashboard-vendor.html?v='+encodeURIComponent(vs0.value)};
   const gt=document.querySelector('[data-goteam]');if(gt)gt.onclick=e=>{e.preventDefault();showTab('team')};
   const f=$('#pf'),m=$('#pm');
-  const goEdit=id=>{if(!canEdit)return;showTab('products');const b=document.querySelector('[data-e="'+id+'"]');if(b)b.click()};
+  let goEditRef=null;const goEdit=id=>goEditRef&&goEditRef(id);
   let anDone=false,tmDone=false;
   const showTab=t=>{if(!TABS.includes(t))t=TABS[0]||'products';tab=t;history.replaceState(null,'',t==='products'?location.pathname+location.search:location.search+'#'+t);document.querySelectorAll('.dtabs button').forEach(x=>x.classList.toggle('on',x.dataset.t===t));$('#tab-products').hidden=t!=='products';$('#tab-orders').hidden=t!=='orders';$('#tab-analytics').hidden=t!=='analytics';$('#tab-team').hidden=t!=='team';
    if(t==='team'&&!tmDone){tmDone=true;if(window.CC.team)window.CC.team.mount($('#tab-team'),{sb,vendor,me,plan,onPlanChange:()=>{tmDone=false;draw().then(()=>showTab('team'))}});else $('#tab-team').innerHTML='<div class="notice err">The team page did not load. Refresh the page.</div>'}
@@ -229,43 +231,66 @@ async vendordash(){
   clearInterval(nTimer);nTimer=setInterval(async()=>{if(document.hidden||!document.getElementById('tab-orders'))return;nsum=await window.CC.noteSummary(sb);
    const T=$('#tab-orders');if(!T)return;T.querySelectorAll('details.notes').forEach(d=>{const x=nsum[d.dataset.oid]||{total:0,unread:0};if(!d.open||!x.unread){d.querySelector('.ncnt').textContent=x.total?'('+x.total+')':'';d.querySelector('.nbx').innerHTML=d.open?'':window.CC.newBadge(x.unread);d.closest('.vorder').classList.toggle('hasnote',!d.open&&x.unread>0)}});
    const all=Object.entries(nsum).reduce((n,[k,x])=>n+(x.unread||0),0);const tb=$('#tnb');if(tb)tb.innerHTML=all?' <b class="nbadge note" title="Orders with unread notes">💬'+all+'</b>':''},window.CC.NOTE_POLL);
-  let pending=null,oldUrl=null; // pending: {blob,url} resized file waiting for save; oldUrl: stored url when editing
-  const prev=()=>{const u=pending?pending.url:$('#pi').value;$('#upprev').innerHTML=u?`<img src="${esc(u)}" alt="Product image preview">`:'<span class="muted">No image</span>';$('#upclear').hidden=!u;$('#uppicklbl').textContent=u?'Replace image':'Choose image'};
-  $('#uppicklbl').onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();$('#pfile').click()}};
-  $('#pfile').onchange=async e=>{const file=e.target.files[0];e.target.value='';if(!file)return;const um=$('#upmsg');um.className='muted';
-   if(!/^image\/(jpeg|png|webp)$/.test(file.type)){um.className='err-text';um.textContent='Please choose a JPG, PNG or WebP image.';return}
-   if(file.size>12*1024*1024){um.className='err-text';um.textContent='That file is too large. Choose one under 12 MB.';return}
-   try{const r=await shrink(file);if(r.blob.size>2*1024*1024)throw new Error('Image is still over 2 MB after compression. Try a smaller picture.');
-    if(pending)URL.revokeObjectURL(pending.url);pending={blob:r.blob,url:URL.createObjectURL(r.blob),type:r.type};um.textContent='Resized to '+r.w+'x'+r.h+', '+Math.round(r.blob.size/1024)+' KB. It uploads when you save.';prev()}
-   catch(err){um.className='err-text';um.textContent=err.message||'Could not read that image.'}};
-  $('#upclear').onclick=()=>{if(pending){URL.revokeObjectURL(pending.url);pending=null}$('#pi').value='';$('#upmsg').textContent='Image removed. Save to apply.';prev()};
-  async function uploadPending(){const ext=pending.type==='image/png'?'png':pending.type==='image/webp'?'webp':'jpg';
-   const path=user.id+'/'+Date.now()+'-'+Math.random().toString(36).slice(2,8)+'.'+ext;
-   const r=await sb.storage.from('product-images').upload(path,pending.blob,{contentType:pending.type,cacheControl:'31536000',upsert:false});
-   if(r.error)throw r.error;return sb.storage.from('product-images').getPublicUrl(path).data.publicUrl}
+  // ---- photos (v1.0): several per product, by plan ----
+  const folder=vendor.owner_id||user.id;
+  const up=window.CC.photos.uploader($('#upl'),{max:maxPh,tier:tierKey,upgradeHref:isOwner&&!legacy?'tiers.html':null});
+  if(!photosOn)up.setMax(1);
+  const BUCKET='product-images';
+  async function uploadBlob(blob,type){const ext=type==='image/png'?'png':type==='image/webp'?'webp':'jpg';
+   const path=folder+'/'+Date.now()+'-'+Math.random().toString(36).slice(2,8)+'.'+ext;
+   const r=await sb.storage.from(BUCKET).upload(path,blob,{contentType:type,cacheControl:'31536000',upsert:false});
+   if(r.error)throw r.error;return sb.storage.from(BUCKET).getPublicUrl(path).data.publicUrl}
   const ourPath=u=>{const mk='/product-images/';const i=(u||'').indexOf(mk);return i>0&&u.indexOf('/storage/v1/object/public')>0?decodeURIComponent(u.slice(i+mk.length).split('?')[0]):null};
-  async function dropOld(u){const p=ourPath(u);if(p&&p.startsWith(user.id+'/')){try{await sb.storage.from('product-images').remove([p])}catch(e){}}}
-  const reset=()=>{f.reset();if(pending)URL.revokeObjectURL(pending.url);pending=null;oldUrl=null;$('#pi').value='';$('#ps').value='';$('#pt').value='5';$('#upmsg').textContent='';prev();$('#pid').value='';$('#ftitle').textContent='Add a product';$('#psave').textContent='Add product';$('#pcancel').hidden=true;$('#pa').checked=true};
-  prev();
+  async function dropOld(u){const p=ourPath(u);if(p&&(p.startsWith(folder+'/')||p.startsWith(user.id+'/'))){try{await sb.storage.from(BUCKET).remove([p])}catch(e){}}}
+  const reset=()=>{f.reset();$('#ps').value='';$('#pt').value='5';up.set([]);$('#pid').value='';$('#ftitle').textContent='Add a product';$('#psave').textContent='Add product';$('#pcancel').hidden=true;$('#pa').checked=true};
   if(full){$('#psave').disabled=true}
   $('#pcancel').onclick=()=>{reset();$('#psave').disabled=full};
-  f.onsubmit=async e=>{e.preventDefault();say(m,'');const sv=$('#psave');sv.disabled=true;
-   try{let url=$('#pi').value.trim()||null;
-    if(pending){say(m,'Uploading image…',true);url=await uploadPending()}
-    const row={name:$('#pn').value.trim(),description:$('#pd').value.trim(),price_xcd:parseFloat($('#pp').value),category:$('#pc').value,image_url:url,active:$('#pa').checked};
-    const id=$('#pid').value,sv=$('#ps').value.trim(),editing=id?prods.find(x=>x.id===id):null;
-    if(sv!==''){const n=Number(sv),th=$('#pt').value.trim()===''?5:Number($('#pt').value);
+  f.onsubmit=async e=>{e.preventDefault();say(m,'');const sv=$('#psave');sv.disabled=true;let uploaded=[];
+   try{
+    const row={name:$('#pn').value.trim(),description:$('#pd').value.trim(),price_xcd:parseFloat($('#pp').value),category:$('#pc').value,active:$('#pa').checked};
+    const id=$('#pid').value,svv=$('#ps').value.trim(),editing=id?editCache[id]:null;
+    if(svv!==''){const n=Number(svv),th=$('#pt').value.trim()===''?5:Number($('#pt').value);
      if(!Number.isInteger(n)||n<0||n>1000000)throw new Error('Stock quantity must be a whole number, 0 or more.');
      if(!Number.isInteger(th)||th<0||th>1000000)throw new Error('The low-stock alert level must be a whole number, 0 or more.');
      row.stock_qty=n;row.low_stock_threshold=th}
     else if(editing&&editing.stock_qty!=null)row.stock_qty=null;
-    const r=id?await sb.from('products').update(row).eq('id',id):await sb.from('products').insert({...row,vendor_id:vendor.id});
-    if(r.error){if(pending&&url)await dropOld(url);if(/stock_qty|low_stock/.test(r.error.message||''))throw new Error('Stock tracking needs supabase/analytics.sql to be run in Supabase first (see README.txt). Clear the stock fields to save without it.');throw r.error}
-    if(oldUrl&&oldUrl!==url)await dropOld(oldUrl);
+    let urls=up.urls();
+    if(up.hasNew()){const c=await up.commit(uploadBlob,async u=>dropOld(u),t=>say(m,t,true));urls=c.urls;uploaded=c.uploaded}
+    if(!photosOn)row.image_url=urls[0]||null;
+    const r=id?await sb.from('products').update(row).eq('id',id):await sb.from('products').insert({...row,vendor_id:vendor.id}).select('id').maybeSingle();
+    if(r.error){for(const u of uploaded)await dropOld(u);if(/stock_qty|low_stock/.test(r.error.message||''))throw new Error('Stock tracking needs supabase/analytics.sql to be run in Supabase first (see README.txt). Clear the stock fields to save without it.');throw r.error}
+    const pid=id||(r.data&&r.data.id);
+    if(photosOn&&pid&&(up.dirty()||(!id&&urls.length))){
+     const pr=await sb.rpc('set_product_photos',{p_product:pid,p_urls:urls});
+     if(pr.error){for(const u of uploaded)await dropOld(u);await draw();say($('#pm'),'Your product was saved, but its photos were not: '+(pr.error.message||'unknown error')+'. Open it with Edit and try again.');return}}
+    for(const u of up.removed())await dropOld(u);
     await draw()}
    catch(err){say(m,(err&&err.message)||'Could not save.');sv.disabled=false}};
-  document.querySelectorAll('[data-e]').forEach(b=>b.onclick=()=>{const p=prods.find(x=>x.id===b.dataset.e);$('#pid').value=p.id;$('#pn').value=p.name;$('#pd').value=p.description;$('#pp').value=p.price_xcd;$('#pc').value=p.category;$('#ps').value=p.stock_qty==null?'':p.stock_qty;$('#pt').value=p.low_stock_threshold==null?5:p.low_stock_threshold;$('#pi').value=p.image_url||'';oldUrl=p.image_url||null;if(pending){URL.revokeObjectURL(pending.url);pending=null}$('#upmsg').textContent='';prev();$('#pa').checked=p.active;$('#ftitle').textContent='Edit product';$('#psave').textContent='Save changes';$('#psave').disabled=false;$('#pcancel').hidden=false;f.scrollIntoView()});
-  document.querySelectorAll('[data-d]').forEach(b=>b.onclick=async()=>{if(!confirm('Delete this product?'))return;const r=await sb.from('products').delete().eq('id',b.dataset.d);if(r.error)say(m,r.error.message);else{await dropOld(prods.find(x=>x.id===b.dataset.d).image_url);draw()}});
+  function startEdit(p){editCache[p.id]=p;$('#pid').value=p.id;$('#pn').value=p.name;$('#pd').value=p.description;$('#pp').value=p.price_xcd;$('#pc').value=p.category;$('#ps').value=p.stock_qty==null?'':p.stock_qty;$('#pt').value=p.low_stock_threshold==null?5:p.low_stock_threshold;
+   up.set(photosOn?(p.product_images||[]).map(i=>i.url):(p.image_url?[p.image_url]:[]));
+   $('#pa').checked=p.active;$('#ftitle').textContent='Edit product';$('#psave').textContent='Save changes';$('#psave').disabled=false;$('#pcancel').hidden=false;f.scrollIntoView()}
+  const editCache={};
+  const goEditImpl=async id=>{if(!canEdit)return;showTab('products');let p=prods.find(x=>x.id===id);
+   if(!p){const r=await sb.from('products').select(photosOn?'*,product_images(id,url,position)':'*').eq('id',id).maybeSingle();p=r.data;if(p&&p.product_images)p.product_images.sort((a,b)=>a.position-b.position)}
+   if(p)startEdit(p)};
+  goEditRef=goEditImpl;
+  // ---- product list: server-side paging + search (works for thousands of products) ----
+  const renderList=()=>{const L=$('#plist'),pages_=Math.max(1,Math.ceil(pTotal/PAGE));
+   $('#pcount').textContent=pTotal?(pQuery?pTotal+' match'+(pTotal===1?'':'es'):''):'';
+   L.innerHTML=prods.length?`<table><tr><th>Product</th><th>Price</th><th>Stock</th><th>Status</th><th></th></tr>${prods.map(p=>{const n=(p.product_images||[]).length;return `<tr><td>${p.image_url?`<img class="thumb" src="${esc(p.image_url)}" alt="">`:''}${esc(p.name)}${n>1?` <span class="pcnt${n>maxPh?' over':''}" title="${n} photos">📷 ${n}</span>`:''}<div class="muted">${esc(CATS[p.category]||p.category)}${p.sku?' · SKU '+esc(p.sku):''}</div></td><td>${xcd(p.price_xcd)}</td><td>${stockCell(p)}</td><td>${p.active?'Active':'Hidden'}</td><td>${canEdit?`<button class="btn alt" data-e="${p.id}">Edit</button> <button class="btn" data-d="${p.id}">Delete</button>`:'<span class="muted">View only</span>'}</td></tr>`}).join('')}</table>`:`<p>${pQuery?'No products match your search.':'No products yet.'}</p>`;
+   $('#ppager').innerHTML=pTotal>PAGE?`<button class="btn ghost" id="pprev" ${pPage===0?'disabled':''}>&larr; Previous</button><span>Page ${pPage+1} of ${pages_} · showing ${pPage*PAGE+1}–${pPage*PAGE+prods.length} of ${pTotal}</span><button class="btn ghost" id="pnext" ${pPage>=pages_-1?'disabled':''}>Next &rarr;</button>`:'';
+   const go=async d=>{pPage=Math.max(0,pPage+d);await loadProducts();renderList()};
+   const pv=$('#pprev'),nx=$('#pnext');if(pv)pv.onclick=()=>go(-1);if(nx)nx.onclick=()=>go(1);
+   document.querySelectorAll('[data-e]').forEach(b=>b.onclick=()=>startEdit(prods.find(x=>x.id===b.dataset.e)));
+   document.querySelectorAll('[data-d]').forEach(b=>b.onclick=async()=>{const p=prods.find(x=>x.id===b.dataset.d);if(!confirm('Delete "'+p.name+'"?'))return;const r=await sb.from('products').delete().eq('id',p.id);if(r.error)say(m,r.error.message);else{const us=new Set((p.product_images||[]).map(i=>i.url));if(p.image_url)us.add(p.image_url);for(const u of us)await dropOld(u);draw()}})};
+  renderList();
+  let st=null;const ps=$('#psearch');ps.oninput=()=>{clearTimeout(st);st=setTimeout(async()=>{pQuery=ps.value;pPage=0;await loadProducts();renderList()},250)};
+  // ---- bulk upload ----
+  if(canEdit&&window.CC.bulk){let bm=false;const bb=$('#bulkbox');bb.addEventListener('toggle',()=>{if(bb.open&&!bm){bm=true;
+    window.CC.bulk.mount($('#bulkmount'),{sb,vendor,hasCost:!!(prods[0]&&'cost_price' in prods[0]),upgradeHref:isOwner&&!legacy?'tiers.html':null,
+     getUsage:()=>({used,limit:lim==null?null:lim,tierLabel:TIER_LABEL[tierKey]}),
+     onDone:async()=>{const r=await sb.from('products').select('id',{count:'exact',head:true}).eq('vendor_id',vendor.id);if(r.count!=null)used=r.count;const ul=document.getElementById('usedline');if(ul)ul.innerHTML=usedHtml();await loadProducts();renderList()}})}})}
+  else if(canEdit){$('#bulkwrap').hidden=true}
  };
  await draw();
 }

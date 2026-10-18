@@ -47,13 +47,28 @@ vendor(){const v=vendor(qs.get('id'));if(!v){$('#v').innerHTML='<p>Vendor not fo
 document.title=v.name+' – Carriacou Connect';
 const ps=DATA.products.filter(p=>p.vendorId===v.id);
 $('#v').innerHTML=`<span class="kicker">Vendor</span><h1>${esc(v.name)} ${tierBadge(v.tier)}</h1><p>${esc(v.about)}<br><span class="muted">${esc(v.location)}, Carriacou · ${esc(v.tier)} plan · ${ps.length} of ${DATA.tiers[v.tier]??'unlimited'} product slots used</span></p><div class="grid">${ps.map(card).join('')}</div>`},
-product(){const p=DATA.products.find(x=>x.id===qs.get('id'));if(!p){$('#p').innerHTML='<p>Product not found.</p>';return}
+async product(){const p=DATA.products.find(x=>x.id===qs.get('id'));if(!p){$('#p').innerHTML='<p>Product not found.</p>';return}
 document.title=p.name+' – Carriacou Connect';const v=vendor(p.vendorId),cat=DATA.categories.find(c=>c.id===p.category)||DATA.categories[0];
-$('#p').innerHTML=`<div class="detail"><div><div id="big">${img(p,0,'main-img')}</div><div class="thumbs">${[0,1,2].map(i=>img(p,i,i?'':'on')).join('')}</div></div>
+$('#p').innerHTML=`<div class="detail"><div id="gwrap"></div>
 <div class="buy"><h1>${esc(p.name)}</h1><p class="price">${xcd(p.price)} XCD</p><p>${esc(p.description)}</p>
 <p class="muted">Category: <a href="browse.html?cat=${cat.id}">${esc(cat.name)}</a><br>Sold by <a href="vendor.html?id=${v.id}">${esc(v.name)}</a> ${tierBadge(v.tier)}</p>
 <label>Qty <input id="qty" type="number" min="1" max="99" value="1" style="width:5rem"></label> <button class="btn" id="add">Add to cart</button><p id="msg" role="status"></p></div></div>`;
-document.querySelectorAll('.thumbs img').forEach((t,i)=>t.onclick=()=>{$('#big').innerHTML=img(p,i,'main-img');document.querySelectorAll('.thumbs img').forEach(x=>x.classList.remove('on'));t.classList.add('on')});
+// gallery: real photos (swipe / scroll-snap + thumbnails), else the three placeholder pictures
+const gallery=urls=>{const real=urls.length>0,n=real?urls.length:3;
+ const src=i=>real?urls[i]:svg(p,i),alt=i=>real?`${p.name}, photo ${i+1} of ${n}`:`${p.name} (placeholder image ${i+1})`;
+ $('#gwrap').innerHTML=`<div class="gal"><div class="gal-track" id="gtrack" tabindex="0" role="group" aria-roledescription="carousel" aria-label="Product photos">${Array.from({length:n},(_,i)=>`<div class="gal-slide" role="group" aria-label="Photo ${i+1} of ${n}"><img class="main-img" alt="${esc(alt(i))}" src="${esc(src(i))}" data-fb="${esc(svg(p,i%3))}"${i?' loading="lazy"':''}></div>`).join('')}</div>
+ ${n>1?`<button type="button" class="gal-nav prev" id="gprev" aria-label="Previous photo">‹</button><button type="button" class="gal-nav next" id="gnext" aria-label="Next photo">›</button><span class="gal-count" id="gcount" aria-live="polite">1 / ${n}</span>`:''}</div>
+ ${n>1?`<div class="thumbs" role="group" aria-label="Choose photo">${Array.from({length:n},(_,i)=>`<button type="button" class="thumbbtn${i?'':' on'}" data-i="${i}" aria-label="Show photo ${i+1}"><img alt="" src="${esc(src(i))}" data-fb="${esc(svg(p,i%3))}"></button>`).join('')}</div>`:''}`;
+ const tr=$('#gtrack');if(n<2)return;let cur=0;
+ const mark=i=>{cur=i;document.querySelectorAll('.thumbbtn').forEach((x,j)=>x.classList.toggle('on',j===i));$('#gcount').textContent=(i+1)+' / '+n};
+ const to=i=>{i=Math.max(0,Math.min(n-1,i));tr.scrollTo({left:i*tr.clientWidth,behavior:'smooth'});mark(i)};
+ let raf=0;tr.addEventListener('scroll',()=>{cancelAnimationFrame(raf);raf=requestAnimationFrame(()=>{const i=Math.round(tr.scrollLeft/Math.max(1,tr.clientWidth));if(i!==cur)mark(i)})});
+ document.querySelectorAll('.thumbbtn').forEach(b=>b.onclick=()=>to(+b.dataset.i));
+ $('#gprev').onclick=()=>to(cur-1);$('#gnext').onclick=()=>to(cur+1);
+ tr.addEventListener('keydown',e=>{if(e.key==='ArrowRight'){e.preventDefault();to(cur+1)}else if(e.key==='ArrowLeft'){e.preventDefault();to(cur-1)}})};
+gallery(p.imageUrl?[p.imageUrl]:[]);
+if(DATA.live){try{const sb=await window.CC.client();const r=await sb.from('product_images').select('url,position').eq('product_id',p.id).order('position',{ascending:true});
+ if(!r.error&&r.data&&r.data.length){const urls=r.data.map(x=>x.url).filter(u=>/^https?:\/\//i.test(u));if(urls.length&&(urls.length!==1||urls[0]!==p.imageUrl))gallery(urls)}}catch(e){}}
 $('#add').onclick=()=>{const q=Math.max(1,Math.min(99,parseInt($('#qty').value)||1));addCart(p.id,q);$('#msg').innerHTML='Added to cart. <a href="cart.html">View cart</a>'}},
 cart(){const draw=()=>{const c=getCart(),ids=Object.keys(c).filter(i=>DATA.products.some(p=>p.id===i));
 if(!ids.length){$('#cart').innerHTML='<p>Your cart is empty. <a href="browse.html">Browse products</a></p>';return}
@@ -130,8 +145,11 @@ const d=await jsonP;
 if(!window.CC.configured)return d;
 try{
 const sb=await window.CC.client();if(!sb)return d;
-const [vr,pr]=await Promise.all([sb.from('vendors').select('id,name,description,location,tier').order('name'),sb.from('products').select('id,vendor_id,name,description,price_xcd,category,image_url,featured,created_at').eq('active',true).order('created_at',{ascending:false})]);
+const page=async from=>sb.from('products').select('id,vendor_id,name,description,price_xcd,category,image_url,featured,created_at').eq('active',true).order('created_at',{ascending:false}).order('id',{ascending:true}).range(from,from+999);
+const vr=await sb.from('vendors').select('id,name,description,location,tier').order('name');let pr=await page(0);
 if(vr.error||pr.error)throw (vr.error||pr.error);
+// Supabase returns at most 1000 rows per request: read further pages (up to 10,000 products)
+for(let from=1000;pr.data.length===from&&from<10000;from+=1000){const nx=await page(from);if(nx.error)break;pr={data:pr.data.concat(nx.data)}}
 const cc=Object.fromEntries(d.categories.map(c=>[c.id,c.color]));
 const L=window.CC.TIER_LABEL;
 d.vendors=vr.data.map(v=>({id:v.id,name:v.name,tier:L[v.tier]||'Lite',location:v.location||'',about:v.description||''}));

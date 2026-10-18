@@ -1,0 +1,4 @@
+sku,name,description,category,price_xcd,stock_qty,low_stock_threshold,cost_price,active,image_url
+NUT-100,"Example: Nutmeg, whole (100 g)","Freshly picked Carriacou nutmeg, whole, 100 g bag",food,12.50,40,5,8.00,yes,
+BSK-001,Example: Woven market basket,Hand-woven basket in local palm leaf,crafts,45.00,6,2,28.00,yes,https://example.com/images/basket.jpg
+SUN-250,Example: Reef-safe sunscreen 250 ml,,beauty,32.00,,,,yes,

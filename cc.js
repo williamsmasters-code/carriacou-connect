@@ -20,11 +20,11 @@ const TIER_LABEL={lite:'Lite',standard:'Standard',plus:'Plus+',pro:'Pro',enterpr
 const TIER_LIMIT={lite:10,standard:25,plus:50,pro:null,enterprise:null};
 // ---- plans (v0.9, TEST MODE: no billing). The database (tier_limits table) is the source of truth for limits; this is the display copy. null = unlimited.
 const TIERS=[
- {k:'lite',name:'Lite',tag:'Start small',staff:0,sub:0,products:10,pos:'Basic',bizAnalytics:false,multi:false,support:false,blurb:'For one person running a small shop or side business.'},
- {k:'standard',name:'Standard',tag:'Add a helper',staff:2,sub:0,products:25,pos:'Basic',bizAnalytics:false,multi:false,support:false,blurb:'Owner plus two staff accounts for a growing shop.'},
- {k:'plus',name:'Plus+',tag:'Busy counter',staff:5,sub:0,products:50,pos:'Enhanced',bizAnalytics:false,multi:false,support:false,blurb:'Owner plus five staff, with the enhanced point of sale.'},
- {k:'pro',name:'Pro',tag:'Run a team',staff:5,sub:2,products:null,pos:'Professional',bizAnalytics:true,multi:false,support:false,blurb:'Two sub-admins, five staff, unlimited products and business analytics.'},
- {k:'enterprise',name:'Enterprise',tag:'Island scale',staff:null,sub:null,products:null,pos:'Professional',bizAnalytics:true,multi:true,support:true,blurb:'Variable team size, multiple locations and dedicated support.'}];
+ {k:'lite',photos:1,name:'Lite',tag:'Start small',staff:0,sub:0,products:10,pos:'Basic',bizAnalytics:false,multi:false,support:false,blurb:'For one person running a small shop or side business.'},
+ {k:'standard',photos:1,name:'Standard',tag:'Add a helper',staff:2,sub:0,products:25,pos:'Basic',bizAnalytics:false,multi:false,support:false,blurb:'Owner plus two staff accounts for a growing shop.'},
+ {k:'plus',photos:3,name:'Plus+',tag:'Busy counter',staff:5,sub:0,products:50,pos:'Enhanced',bizAnalytics:false,multi:false,support:false,blurb:'Owner plus five staff, with the enhanced point of sale.'},
+ {k:'pro',photos:3,name:'Pro',tag:'Run a team',staff:5,sub:2,products:null,pos:'Professional',bizAnalytics:true,multi:false,support:false,blurb:'Two sub-admins, five staff, unlimited products and business analytics.'},
+ {k:'enterprise',photos:5,name:'Enterprise',tag:'Island scale',staff:null,sub:null,products:null,pos:'Professional',bizAnalytics:true,multi:true,support:true,blurb:'Variable team size, multiple locations and dedicated support.'}];
 const lim=n=>n==null?'Unlimited':String(n);
 const ROLE_LABEL={admin:'Owner',subadmin:'Sub-admin',staff:'Staff'};
 // what each business role may do (mirrors role_perms() in staff.sql; the database is the real gatekeeper)

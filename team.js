@@ -3,7 +3,7 @@
 (function(){
 const CC=window.CC;if(!CC)return;
 const esc=CC.esc,fdate=CC.fdate;
-const ACTION={invite_created:'Invite created',invite_revoked:'Invite revoked',member_joined:'Joined the team',role_changed:'Role changed',member_suspended:'Access paused',member_reactivated:'Access restored',member_removed:'Removed from the team',member_left:'Left the team',tier_changed:'Plan changed',upgrade_requested:'Upgrade requested',upgrade_request_cancelled:'Upgrade request cancelled',upgrade_approved:'Upgrade approved',upgrade_declined:'Upgrade declined',plan_override_set:'Custom seat limits set',tier_change_reason:'Plan change note'};
+const ACTION={products_bulk:'Bulk product import',invite_created:'Invite created',invite_revoked:'Invite revoked',member_joined:'Joined the team',role_changed:'Role changed',member_suspended:'Access paused',member_reactivated:'Access restored',member_removed:'Removed from the team',member_left:'Left the team',tier_changed:'Plan changed',upgrade_requested:'Upgrade requested',upgrade_request_cancelled:'Upgrade request cancelled',upgrade_approved:'Upgrade approved',upgrade_declined:'Upgrade declined',plan_override_set:'Custom seat limits set',tier_change_reason:'Plan change note'};
 const nice=m=>{m=(m&&m.message)||String(m||'');return /Could not find the function|schema cache|does not exist/i.test(m)?'Teams and plans are not switched on yet (staff.sql has not been run in Supabase).':m};
 const left=(limit,used)=>limit==null?Infinity:Math.max(0,limit-used);
 const lbl=n=>n==null?'unlimited':String(n);
