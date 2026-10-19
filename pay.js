@@ -35,6 +35,8 @@ async wallet(){
  if(!await loadWallets())return;
  const W=()=>wallets.find(w=>w.id===cur);
  let keyTop=uuid(),keySend=uuid(),keyPay=uuid(),prevPay=null,pendingSend=null;
+ const histHtml=hist=>hist.length?hist.map(h=>{const inn=h.direction==='in';const lab={topup_test:'Test top-up',transfer:inn?'Received from':'Sent to',order_payment:inn?'Order payment from':'Order payment to',refund:inn?'Refund from':'Refund to',adjustment:'Adjustment'}[h.type]||h.type;
+    return `<div class="hrow ${inn?'in':'out'}"><div class="hic" aria-hidden="true">${inn?'↓':'↑'}</div><div class="hmid"><b>${esc(lab)}${h.type==='topup_test'?'':' '+esc(h.counterparty||'')}</b><small>${esc(fdate(h.created_at))}${h.note&&h.type!=='topup_test'?' · '+esc(h.note):''}</small></div><div class="hamt">${inn?'+':'-'}${cents(h.amount_cents)}</div></div>`}).join(''):'<div class="empty"><div class="empty-ic" aria-hidden="true">🪙</div><h3>No transactions yet</h3><p>Add some test money to get started.</p></div>';
  async function draw(note){
   const w=W();let hist=[];const hr=await rpc(sb,'wallet_history',{p_wallet:w.id,p_limit:50});if(!hr.error)hist=hr.data||[];
   const isV=w.kind==='vendor',url=base('wallet.html')+'?to='+encodeURIComponent(w.code);
@@ -60,8 +62,7 @@ async wallet(){
   </div>
   ${isV?`<p class="muted">Customers can pay this wallet by order, by entering your wallet code, or with a POS charge code. <a href="pos.html">Open POS</a>. You can move test money to your personal wallet with Send (use their code).</p>`:''}
   <h2>History</h2>
-  <div class="hist" id="hist">${hist.length?hist.map(h=>{const inn=h.direction==='in';const lab={topup_test:'Test top-up',transfer:inn?'Received from':'Sent to',order_payment:inn?'Order payment from':'Order payment to',refund:inn?'Refund from':'Refund to',adjustment:'Adjustment'}[h.type]||h.type;
-    return `<div class="hrow ${inn?'in':'out'}"><div class="hic" aria-hidden="true">${inn?'↓':'↑'}</div><div class="hmid"><b>${esc(lab)}${h.type==='topup_test'?'':' '+esc(h.counterparty||'')}</b><small>${esc(fdate(h.created_at))}${h.note&&h.type!=='topup_test'?' · '+esc(h.note):''}</small></div><div class="hamt">${inn?'+':'-'}${cents(h.amount_cents)}</div></div>`}).join(''):'<div class="empty"><div class="empty-ic" aria-hidden="true">🪙</div><h3>No transactions yet</h3><p>Add some test money to get started.</p></div>'}</div>`;
+  <div class="hist" id="hist">${histHtml(hist)}</div>`;
   const m=$('#wmsg');
   R.querySelectorAll('[data-w]').forEach(b=>b.onclick=()=>{cur=b.dataset.w;draw()});
   $('#cpy').onclick=e=>copy(w.code,e.target);
@@ -106,6 +107,15 @@ async wallet(){
   if(q.get('pay')&&fp&&!draw.did2){draw.did2=1;fp.requestSubmit()}
  }
  await draw();
+ // v1.7 live: money received / refunds / POS payments update the balance and history without touching the forms
+ let lbusy=false;
+ window.CC.live.on(async n=>{if(!n||lbusy||!$('#bal'))return;
+  if(!(['wallet_received','wallet_sync','refund','pos_paid','order_paid'].includes(n.kind)||n.kind==='poll_tick'))return;
+  lbusy=true;try{const before=(W()||{}).balance_cents;const r=await rpc(sb,'ensure_wallets',{});if(r.error||!r.data)return;
+   wallets=r.data.slice().sort((a,b)=>(a.kind==='vendor'?0:1)-(b.kind==='vendor'?0:1));const w=W();if(!w)return;
+   const hr=await rpc(sb,'wallet_history',{p_wallet:w.id,p_limit:50});
+   if(String(w.balance_cents)!==String(before)||n.kind!=='poll_tick'){const b=$('#bal');if(b){b.textContent=cents(w.balance_cents);b.classList.remove('flash');void b.offsetWidth;b.classList.add('flash')}
+    if(!hr.error&&$('#hist'))$('#hist').innerHTML=histHtml(hr.data||[])}}finally{lbusy=false}});
 },
 
 async pos(){
@@ -118,10 +128,12 @@ async pos(){
  if(!v){const vr=await sb.from('vendors').select('id,name').eq('owner_id',user.id).order('created_at').limit(1);v=vr.data&&vr.data[0]}
  if(!v){R.innerHTML=TESTBANNER+'<div class="notice">POS is for vendor businesses and their team. <a href="signup.html">Sign up as a vendor</a>, <a href="dashboard-vendor.html">create your business profile</a>, or <a href="accept-invite.html">join a team with an invite code</a>.</div>';return}
  const pr=await sb.from('products').select('id,name,price_xcd').eq('vendor_id',v.id).eq('active',true).order('name');
- const prods=pr.data||[];const qty={};let active=null,timer=null;
+ const prods=pr.data||[];const qty={};let active=null,timer=null,liveTick=null;
+ // v1.7 live: a 'pos_paid' notification shows PAID at once (the 3 s check stays as a fallback)
+ window.CC.live.on(n=>{if(!n)return;if(n.kind==='pos_paid'&&active&&n.ref_id===active.id&&liveTick)liveTick();else if((n.kind==='pos_paid'&&n.vendor_id===v.id)||n.kind==='poll_tick'){if($('#recent')&&!active)recent()}});
  const total=()=>Object.entries(qty).reduce((s,[id,n])=>{const p=prods.find(x=>x.id===id);return s+(p?Math.round(Number(p.price_xcd)*100)*n:0)},0);
  function form(note){
-  clearInterval(timer);
+  clearInterval(timer);active=null;liveTick=null;
   R.innerHTML=TESTBANNER+`<p class="muted">${esc(v.name)} · Customers pay from their <b>test wallet</b>. Create a charge, show the code or QR, and the customer enters it on their wallet page. ${isOwner?'<a href="wallet.html">My business wallet</a>':'<span>Charges go to the business wallet.</span>'}</p>
   <div id="pm" class="notice${note?' ok':''}" ${note?'':'hidden'} role="status">${esc(note||'')}</div>
   <div class="posgrid"><section class="wcard"><h3>Items</h3>${prods.length?`<div class="posprods">${prods.map(p=>`<div class="pprod"><div><b>${esc(p.name)}</b><small>${cents(Math.round(Number(p.price_xcd)*100))}</small></div><div class="qtyc"><button type="button" data-m="${esc(p.id)}" aria-label="Fewer ${esc(p.name)}">−</button><span id="q-${esc(p.id)}">${qty[p.id]||0}</span><button type="button" data-p="${esc(p.id)}" aria-label="More ${esc(p.name)}">+</button></div></div>`).join('')}</div>`:'<p class="muted">No active products. Enter a custom amount instead.</p>'}</section>
@@ -160,7 +172,7 @@ async pos(){
    const r=await sb.from('pay_requests').select('status').eq('id',ch.id).maybeSingle();const s=r.data&&r.data.status;
    if(s==='paid'){clearInterval(timer);$('#cc').classList.add('paid');$('#cstat').innerHTML='<b>PAID ✓</b> '+cents(ch.amount_cents)+' received in your business wallet (test money).';$('#ccancel').hidden=true;$('#cnew').hidden=false}
    else if(s==='cancelled'||left<=0){clearInterval(timer);$('#cstat').textContent=s==='cancelled'?'This charge was cancelled.':'This charge expired. Create a new one.';$('#ccancel').hidden=true;$('#cnew').hidden=false}};
-  timer=setInterval(tick,3000);tick()}
+  liveTick=tick;timer=setInterval(tick,3000);tick()}
  form();
 }
 };

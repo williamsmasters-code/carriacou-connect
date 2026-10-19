@@ -87,6 +87,19 @@ async consumer(){
   <h3>Notes with ${esc(o.vendors&&o.vendors.name||'the vendor')}</h3><div class="notes-box" id="nbox"></div>
   ${o.status==='placed'?'<p><button class="btn alt" id="ocancel">Cancel this order</button><br><small class="muted">You can cancel until the vendor confirms it.</small></p>':''}<div id="om" class="notice" hidden></div></div>`;
   window.CC.notesWidget($('#nbox'),o,'consumer',{sb,user});
+  // v1.7 live: re-read this order when a notification about it arrives (or on the 30 s fallback tick); keep any unsent note text
+  if(window.CC._dOff)window.CC._dOff();
+  const dsig=x=>[x.status,x.payment_status,x.status_updated_at,x.paid_at].join('|'),sig0=dsig(o);
+  window.CC._dOff=window.CC.live.on(async n=>{
+   if(!$('#opdf')||!n)return;
+   if(!((n.ref_type==='order'&&n.ref_id===o.id&&!/^note_/.test(n.kind||''))||n.kind==='poll_tick'))return;
+   const q=await sb.from('orders').select('status,payment_status,status_updated_at,paid_at').eq('id',o.id).maybeSingle();
+   if(!q.data||dsig(q.data)===sig0||!$('#opdf'))return;
+   const ta=document.querySelector('#nbox textarea'),draft=ta?ta.value:'',foc=!!ta&&document.activeElement===ta;
+   await detail(o.id);
+   const t2=document.querySelector('#nbox textarea');if(t2&&draft){t2.value=draft;t2.dispatchEvent(new Event('input'));if(foc)t2.focus()}
+   const h=document.querySelector('.odetail .ohead');if(h)h.classList.add('flash');
+  });
   $('#opdf').onclick=()=>window.CC.orderPdf?window.CC.orderPdf.order(sb,o,{role:'consumer',vendorName:o.vendors&&o.vendors.name,vendorLocation:o.vendors&&o.vendors.location,sample:!!(o.vendors&&o.vendors.is_sample)},$('#opdf'),$('#opdfm')):say($('#opdfm'),'The PDF tool did not load. Refresh the page and try again.');
   const pb=$('#opay');if(pb)pb.onclick=async()=>{pb.disabled=true;const pr=await sb.rpc('pay_order',{p_order_id:o.id,p_idempotency_key:'ord-'+o.id});
    if(pr.error){say($('#opm'),/pay_order|schema cache|does not exist/i.test(pr.error.message)?'Wallets are not switched on yet (pay.sql has not been run in Supabase).':pr.error.message);pb.disabled=false;return}
@@ -97,15 +110,29 @@ async consumer(){
    detail(o.id)};
  };
  if(oid){await detail(oid);return}
- const r=await sb.from('orders').select('id,order_number,status,total_xcd,created_at,fulfilment,payment_status,vendors(name),order_items(product_name,quantity)').eq('consumer_id',user.id).order('created_at',{ascending:false});
- const rows=r.data||[];
+ const LSEL0='id,order_number,status,total_xcd,created_at,fulfilment,payment_status,vendors(name),order_items(product_name,quantity)';
+ const r=await sb.from('orders').select(LSEL0).eq('consumer_id',user.id).order('created_at',{ascending:false});
+ let rows=r.data||[];
  let ns=await window.CC.noteSummary(sb);
  const act=rows.filter(o=>!['completed','cancelled'].includes(o.status)).length;
+ const actOf=l=>l.filter(o=>!['completed','cancelled'].includes(o.status)).length;
+ const card=o=>`<a class="ocard" data-oid="${esc(o.id)}" href="dashboard-consumer.html?order=${esc(o.id)}"><div><b>${esc(o.order_number)}</b> ${stPill(o.status)} ${window.CC.payPill(o)}<span class="nbx">${window.CC.newBadge(ns[o.id]&&ns[o.id].unread||0)}</span><div class="muted">${esc(o.vendors&&o.vendors.name||'')} · ${esc(fdate(o.created_at))} · ${fnice(o)}</div><div class="muted">${esc((o.order_items||[]).map(i=>i.quantity+' × '+i.product_name).join(', '))}</div></div><div class="price">${xcd(o.total_xcd)}</div></a>`;
  D.innerHTML=`<div class="dtabs" role="tablist"><button class="on" data-t="orders" role="tab">Orders${act?` <b class="nbadge">${act}</b>`:''}</button><button data-t="profile" role="tab">Profile</button></div>
- <section id="t-orders"><h2>Order history</h2>${r.error?'<div class="notice err">Could not load orders: '+esc(r.error.message)+'. Has orders.sql been run in Supabase?</div>':rows.length?`<div class="olist">${rows.map(o=>`<a class="ocard" data-oid="${esc(o.id)}" href="dashboard-consumer.html?order=${esc(o.id)}"><div><b>${esc(o.order_number)}</b> ${stPill(o.status)} ${window.CC.payPill(o)}<span class="nbx">${window.CC.newBadge(ns[o.id]&&ns[o.id].unread||0)}</span><div class="muted">${esc(o.vendors&&o.vendors.name||'')} · ${esc(fdate(o.created_at))} · ${fnice(o)}</div><div class="muted">${esc((o.order_items||[]).map(i=>i.quantity+' × '+i.product_name).join(', '))}</div></div><div class="price">${xcd(o.total_xcd)}</div></a>`).join('')}</div>`:'<div class="empty"><div class="empty-ic" aria-hidden="true">🧺</div><h3>No orders yet</h3><p>When you place an order it shows up here, with live progress.</p><a class="btn" href="browse.html">Browse products</a></div>'}</section>
+ <section id="t-orders"><h2>Order history</h2>${r.error?'<div class="notice err">Could not load orders: '+esc(r.error.message)+'. Has orders.sql been run in Supabase?</div>':rows.length?`<div class="olist">${rows.map(card).join('')}</div>`:'<div class="empty"><div class="empty-ic" aria-hidden="true">🧺</div><h3>No orders yet</h3><p>When you place an order it shows up here, with live progress.</p><a class="btn" href="browse.html">Browse products</a></div>'}</section>
  <section id="t-profile" hidden><h2>My profile</h2><p class="muted">${esc(user.email)} · <a href="account.html">Change password</a></p>
  <form id="pf" class="formcard"><label>Full name<input id="fn" value="${esc(p.full_name||'')}" maxlength="80"></label><label>Phone<input id="ph" value="${esc(p.phone||'')}" maxlength="30"></label><label>Delivery address<textarea id="ad" rows="2" maxlength="300">${esc(p.address||'')}</textarea></label><button class="btn">Save profile</button></form><div id="m1" class="notice" hidden></div></section>`;
- setInterval(async()=>{if(document.hidden)return;ns=await window.CC.noteSummary(sb);document.querySelectorAll('.ocard[data-oid]').forEach(a=>{const e=a.querySelector('.nbx');if(e)e.innerHTML=window.CC.newBadge(ns[a.dataset.oid]&&ns[a.dataset.oid].unread||0)})},window.CC.NOTE_POLL);
+ const noteBadges=async()=>{ns=await window.CC.noteSummary(sb);document.querySelectorAll('.ocard[data-oid]').forEach(a=>{const e=a.querySelector('.nbx');if(e)e.innerHTML=window.CC.newBadge(ns[a.dataset.oid]&&ns[a.dataset.oid].unread||0)})};
+ setInterval(()=>{if(!document.hidden)noteBadges()},window.CC.NOTE_POLL);
+ // v1.7 live: refresh the order list when one of my orders changes (status, payment, refund) or on the 30 s fallback tick
+ const lsig=l=>l.map(o=>o.id+':'+o.status+':'+o.payment_status).join(',');let lastSig=lsig(rows);
+ window.CC.live.on(async n=>{const T=$('#t-orders');if(!T||!n||r.error)return;
+  if(n.ref_type==='order'&&/^note_/.test(n.kind||'')){await noteBadges();return}
+  if(n.ref_type!=='order'&&n.kind!=='poll_tick')return;
+  const r2=await sb.from('orders').select(LSEL0).eq('consumer_id',user.id).order('created_at',{ascending:false});
+  if(r2.error||lsig(r2.data||[])===lastSig)return;lastSig=lsig(r2.data||[]);rows=r2.data||[];
+  const box=T.querySelector('.olist');if(box)box.innerHTML=rows.map(card).join('');
+  const tb=document.querySelector('.dtabs button[data-t=orders]');if(tb){const a=actOf(rows);tb.innerHTML='Orders'+(a?` <b class="nbadge">${a}</b>`:'')}
+  const c=n.ref_id&&T.querySelector('.ocard[data-oid="'+(window.CSS&&CSS.escape?CSS.escape(n.ref_id):n.ref_id)+'"]');if(c)c.classList.add('flash')});
  document.querySelectorAll('.dtabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.dtabs button').forEach(x=>x.classList.toggle('on',x===b));$('#t-orders').hidden=b.dataset.t!=='orders';$('#t-profile').hidden=b.dataset.t!=='profile'});
  $('#pf').onsubmit=async e=>{e.preventDefault();const u=await sb.from('profiles').update({full_name:$('#fn').value.trim()||null,phone:$('#ph').value.trim()||null,address:$('#ad').value.trim()||null}).eq('id',user.id);say($('#m1'),u.error?u.error.message:'Profile saved.',!u.error)};
 },
@@ -130,9 +157,12 @@ async vendordash(){
   if(!me){legacy=true;me={vendor_id:vendor.id,vendor_name:vendor.name,tier:vendor.tier,role:'admin',is_owner:true,status:'active',perms:window.CC.ROLE_PERMS.admin.filter(p=>p!=='team'&&p!=='plan')}}}
  if(!vendor){
   $('#dash').innerHTML='<h2>Start selling</h2><div class="notice">You do not have a business yet. Send a short application and Carriacou Connect will review it before your shop goes live.</div><p><a class="btn" href="apply.html">Sell on Carriacou Connect: apply</a></p>';return}
- if(vendor.status&&!['approved','suspended'].includes(vendor.status)){$('#dash').innerHTML=window.CC.onboarding?window.CC.onboarding.pendingHtml(vendor,vendor.owner_id===user.id):'<div class="notice">This business is waiting for approval. <a href="apply.html">Application status</a></div>';return}
+ if(vendor.status&&!['approved','suspended'].includes(vendor.status)){$('#dash').innerHTML=window.CC.onboarding?window.CC.onboarding.pendingHtml(vendor,vendor.owner_id===user.id):'<div class="notice">This business is waiting for approval. <a href="apply.html">Application status</a></div>';
+  const offP=window.CC.live.on(n=>{if(n&&n.kind==='application_decision'&&n.vendor_id===vendor.id){offP();pages.vendordash()}});return}
  const perms=new Set(me.perms||[]),can=p=>perms.has(p),isOwner=!!me.is_owner;
  const TABS=[['products',can('products_view')],['orders',can('orders_view')],['analytics',can('analytics')],['campaigns',can('products_edit')&&!legacy],['delivery',['admin','subadmin'].includes(me.role)&&!legacy],['team',can('team')&&!legacy]].filter(x=>x[1]).map(x=>x[0]);
+ let liveOff=null;
+ window.addEventListener('hashchange',()=>{const h=location.hash.slice(1);const b=document.querySelector('.dtabs button[data-t="'+h+'"]');if(b&&!b.classList.contains('on'))b.click()});
  let tab=TABS.includes(location.hash.slice(1))?location.hash.slice(1):(TABS[0]||'products'),ofilter='',nsum={},openN=new Set(),nTimer=null,plan=null;
  const stockCell=p=>{if(p.stock_qty==null)return '<span class="muted">Not tracked</span>';const th=p.low_stock_threshold==null?5:p.low_stock_threshold;return p.stock_qty===0?'<span class="stk out">Out of stock</span>':p.stock_qty<=th?'<span class="stk low">'+p.stock_qty+' left (low)</span>':'<span class="stk">'+p.stock_qty+' in stock</span>'};
  let photosOn=null,prods=[],pTotal=0,pPage=0,pQuery='';const PAGE=50;
@@ -159,9 +189,9 @@ async vendordash(){
   const pct=lim?Math.min(100,Math.round(used/lim*100)):0;
   const maxPh=Math.max(1,(plan&&plan.limits&&plan.limits.max_photos)||window.CC.photos.TIER_PHOTOS[tierKey]||1);
   const overPh=plan&&plan.usage&&plan.usage.products_over_photo_limit!=null?plan.usage.products_over_photo_limit:prods.filter(p=>(p.product_images||[]).length>maxPh).length;
-  const ord=can('orders_view')?await sb.from('orders').select('*,order_items(*)').eq('vendor_id',vendor.id).order('created_at',{ascending:false}).limit(200):{data:[]};
+  let ord=can('orders_view')?await sb.from('orders').select('*,order_items(*)').eq('vendor_id',vendor.id).order('created_at',{ascending:false}).limit(200):{data:[]};
   nsum=can('orders_view')?await window.CC.noteSummary(sb):{};
-  const olist=ord.data||[],newN=olist.filter(o=>o.status==='placed').length;
+  let olist=ord.data||[],newN=olist.filter(o=>o.status==='placed').length;
   $('#dash').innerHTML=`<h2>${esc(vendor.name)} <span class="badge t-${esc(TIER_LABEL[tierKey].replace('+',''))}">${esc(TIER_LABEL[tierKey])}</span> <span class="rolebadge r-${esc(me.role)}" title="Your role in this business">${esc(window.CC.ROLE_LABEL[me.role]||me.role)}</span></h2>
   ${acc.length>1?`<p class="vswitch"><label>Business <select id="vsel">${acc.map(a=>`<option value="${esc(a.vendor_id)}"${a.vendor_id===vendor.id?' selected':''}>${esc(a.vendor_name)} (${esc(window.CC.ROLE_LABEL[a.role]||a.role)})</option>`).join('')}</select></label></p>`:''}
   ${vendor.status==='suspended'?`<div class="notice err" role="alert"><b>This business is suspended.</b> Shoppers cannot see it or place new orders. You can still see and finish your existing orders.${vendor.status_reason?' Reason: '+esc(vendor.status_reason):''} Please contact Carriacou Connect support.</div>`:''}
@@ -237,9 +267,30 @@ async vendordash(){
     await draw()});
   };
   drawOrders();showTab(tab);
-  clearInterval(nTimer);nTimer=setInterval(async()=>{if(document.hidden||!document.getElementById('tab-orders'))return;nsum=await window.CC.noteSummary(sb);
+  const noteTick=async()=>{if(!document.getElementById('tab-orders'))return;nsum=await window.CC.noteSummary(sb);
    const T=$('#tab-orders');if(!T)return;T.querySelectorAll('details.notes').forEach(d=>{const x=nsum[d.dataset.oid]||{total:0,unread:0};if(!d.open||!x.unread){d.querySelector('.ncnt').textContent=x.total?'('+x.total+')':'';d.querySelector('.nbx').innerHTML=d.open?'':window.CC.newBadge(x.unread);d.closest('.vorder').classList.toggle('hasnote',!d.open&&x.unread>0)}});
-   const all=Object.entries(nsum).reduce((n,[k,x])=>n+(x.unread||0),0);const tb=$('#tnb');if(tb)tb.innerHTML=all?' <b class="nbadge note" title="Orders with unread notes">💬'+all+'</b>':''},window.CC.NOTE_POLL);
+   const all=Object.entries(nsum).reduce((n,[k,x])=>n+(x.unread||0),0);const tb=$('#tnb');if(tb)tb.innerHTML=all?' <b class="nbadge note" title="Orders with unread notes">💬'+all+'</b>':''};
+  clearInterval(nTimer);nTimer=setInterval(()=>{if(!document.hidden)noteTick()},window.CC.NOTE_POLL);
+  // ---- v1.7 live: new orders and order changes appear without a reload (notification + targeted refetch). Unsent note text is kept.
+  const cssq=x=>window.CSS&&CSS.escape?CSS.escape(x):x;
+  const osig=l=>l.map(o=>o.id+':'+o.status+':'+o.payment_status).join(',');let lastO=osig(olist);
+  const refreshOrders=async hl=>{
+   if(!can('orders_view')||!document.getElementById('tab-orders'))return;
+   const r=await sb.from('orders').select('*,order_items(*)').eq('vendor_id',vendor.id).order('created_at',{ascending:false}).limit(200);
+   if(r.error||osig(r.data||[])===lastO){await noteTick();return}
+   lastO=osig(r.data||[]);ord=r;olist=r.data||[];newN=olist.filter(o=>o.status==='placed').length;nsum=await window.CC.noteSummary(sb);
+   const T=$('#tab-orders'),drafts={};T.querySelectorAll('details.notes').forEach(d=>{const ta=d.querySelector('textarea');if(ta&&ta.value)drafts[d.dataset.oid]=ta.value});
+   const sy=window.scrollY;drawOrders();window.scrollTo(0,sy);
+   const ob=document.querySelector('.dtabs button[data-t=orders]');if(ob){const nb=ob.querySelector('.nbadge:not(.note)');if(nb)nb.remove();const tnb=ob.querySelector('#tnb');if(newN&&tnb)tnb.insertAdjacentHTML('beforebegin',` <b class="nbadge" title="New orders">${newN}</b>`)}
+   setTimeout(()=>{Object.entries(drafts).forEach(([id,v])=>{const d=T.querySelector('details.notes[data-oid="'+cssq(id)+'"] textarea');if(d){d.value=v;d.dispatchEvent(new Event('input'))}})},60);
+   if(hl){const a=T.querySelector('.vorder[data-oid="'+cssq(hl)+'"]');if(a)a.classList.add('flash')}};
+  if(liveOff)liveOff();
+  liveOff=window.CC.live.on(n=>{if(!n)return;
+   if(n.kind==='poll_tick'){refreshOrders(null);return}
+   if(n.vendor_id!==vendor.id)return;
+   if(n.kind==='vendor_status'){draw();return}
+   if(n.ref_type!=='order')return;
+   if(/^note_/.test(n.kind||''))noteTick();else refreshOrders(n.ref_id)});
   // ---- photos (v1.0): several per product, by plan ----
   const folder=vendor.owner_id||user.id;
   const up=window.CC.photos.uploader($('#upl'),{max:maxPh,tier:tierKey,upgradeHref:isOwner&&!legacy?'tiers.html':null});

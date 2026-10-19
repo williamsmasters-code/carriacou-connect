@@ -40,6 +40,16 @@ async function boot(){
    call('admin_set_plan_override',{p_vendor:b.dataset.ov,p_max_staff:ms,p_max_subadmins:ma},'Seat limits saved.')});
  }
  await load();
+ // v1.7 live: new applications / upgrade requests appear without a reload. Never redraw while the admin is typing in a field.
+ const busy=()=>{const a=document.activeElement;return !!a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)&&(R.contains(a)||PA.contains(a))};
+ const appBadge=async()=>{if(!CC.applications)return;const n=await CC.applications.pendingCount(sb);const b=tabsEl.querySelector('[data-t=applications]');if(!b)return;const o=b.querySelector('.nbadge');if(o)o.remove();if(n)b.insertAdjacentHTML('beforeend',' <b class="nbadge" title="Applications waiting">'+n+'</b>')};
+ let again=null;
+ const onLive=n=>{if(!n)return;const apps=n.kind==='admin_application'||n.kind==='poll_tick',reqs=/^admin_(upgrade_request|queue_sync)$/.test(n.kind||'')||n.kind==='poll_tick';
+  if(!apps&&!reqs)return;
+  if(busy()){clearTimeout(again);again=setTimeout(()=>onLive(n),4000);return}
+  if(apps){appBadge();if(tab==='applications'&&CC.applications.refreshList)CC.applications.refreshList()}
+  if(reqs&&tab==='plans')load()};
+ CC.live.on(onLive);
  {const h=location.hash.slice(1);if(['analytics','applications','vendors','customers','settings'].includes(h)){tab=h;await show()}}
 }
 boot().catch(e=>{console.error(e);R.innerHTML='<div class="notice err">Something went wrong. Please refresh.</div>'});

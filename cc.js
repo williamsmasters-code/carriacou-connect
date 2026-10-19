@@ -5,6 +5,9 @@ const configured=/^https:\/\/[a-z0-9-]+\.supabase\.(co|in)\/?$/i.test(cfg.SUPABA
 const CDN='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js';
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let clientP=null;
+// ---- v1.7 live updates: tiny event bus. realtime.js emits notification rows here; pages subscribe with CC.live.on(fn) (returns an unsubscribe function).
+const liveFns=new Set();
+const live={state:'idle',on(fn){liveFns.add(fn);return ()=>liveFns.delete(fn)},emit(n){[...liveFns].forEach(f=>{try{f(n)}catch(e){console.warn('live handler failed',e)}})}};
 // Resolves to a Supabase client, or null when not configured / library failed to load.
 function client(){
  if(!configured)return Promise.resolve(null);
@@ -104,9 +107,10 @@ function notesWidget(box,o,role,opts){
   busy=false;
   if(r.error){er.textContent=fail(r.error);er.hidden=false;sync();return}
   ta.value='';sync();sig='';await load();th.scrollTop=th.scrollHeight;if(opts.onSent)opts.onSent(o.id)};
+  const offLive=live.on(n=>{if(!box.isConnected){offLive();return}if(n&&n.ref_id===o.id&&/^note_/.test(n.kind||''))load()});
  load();
  timer=setInterval(()=>{if(!box.isConnected)return clearInterval(timer);if(!document.hidden)load()},NOTE_POLL);
- return {reload:load,stop:()=>clearInterval(timer)};
+ return {reload:load,stop:()=>{clearInterval(timer);offLive()}};
 }
 // only allow same-site relative page names as a post-login destination
 function safeNext(){const n=new URLSearchParams(location.search).get('next')||'';return /^[a-z0-9-]+\.html(\?[a-z0-9_=&.-]*)?$/i.test(n)?n:''}
@@ -116,13 +120,13 @@ function authLinks(){return '<a href="login.html">Log in</a><a class="pill" href
 function layout(){
  const live=configured;
  const out=live?authLinks():'<a href="login.html">Log in</a>';
- const msg=live?'Preview v1.6 – products labeled SAMPLE are fictional. Wallet payments and plans are TEST MODE only. No real payments or billing.':'Preview v1.1 – all vendors and products are SAMPLE data. Accounts are not switched on yet. No real payments.';
+ const msg=live?'Preview v1.7 – products labeled SAMPLE are fictional. Wallet payments and plans are TEST MODE only. No real payments or billing.':'Preview v1.1 – all vendors and products are SAMPLE data. Accounts are not switched on yet. No real payments.';
  if(!document.querySelector('link[data-cc-fonts]')){const l=document.createElement('link');l.rel='stylesheet';l.dataset.ccFonts='1';l.href='https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,600;0,9..144,800;1,9..144,600&family=Plus+Jakarta+Sans:wght@400;500;700;800&display=swap';document.head.appendChild(l)}
  const m=document.querySelector('main');if(m)m.id='main';
  const home=document.body.dataset.page==='home';
  document.body.insertAdjacentHTML('afterbegin','<a class="skip" href="#main">Skip to content</a><div class="banner">'+msg+'</div><header><div class="row"><a class="logo" href="index.html">'+LOGO+'<div>Carriacou <span>Connect</span><small>Marketplace</small></div></a><nav aria-label="Main"><a href="browse.html">Browse</a><a href="tiers.html">Plans</a><a href="apply.html">Sell</a><a class="cartlink" href="cart.html">Cart<b id="cartCount">0</b></a><span id="authNav">'+out+'</span></nav></div></header>');
  const hasBand=document.querySelector('.band');
- document.body.insertAdjacentHTML('beforeend',(hasBand?'':WAVE('#04202c',false).replace('class="wave-sep"','class="wave-sep foot-wave"'))+'<footer><b>Carriacou Connect®</b><br>by Williams’ Tech · Marketplace v1.6 preview<br><a href="apply.html">Sell on Carriacou Connect</a> · <a href="vendor-terms.html">Vendor terms (draft)</a><br>Sea, reef, spice and sail: made on Carriacou.</footer>');
+ document.body.insertAdjacentHTML('beforeend',(hasBand?'':WAVE('#04202c',false).replace('class="wave-sep"','class="wave-sep foot-wave"'))+'<footer><b>Carriacou Connect®</b><br>by Williams’ Tech · Marketplace v1.7 preview<br><a href="apply.html">Sell on Carriacou Connect</a> · <a href="vendor-terms.html">Vendor terms (draft)</a><br>Sea, reef, spice and sail: made on Carriacou.</footer>');
  if(live)authNav();
  if(!matchMedia('(prefers-reduced-motion: reduce)').matches&&'IntersectionObserver' in window){const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}}),{threshold:.08});window.CC_REVEAL=()=>document.querySelectorAll('.rv:not(.in)').forEach(x=>io.observe(x))}
  else window.CC_REVEAL=()=>document.querySelectorAll('.rv').forEach(x=>x.classList.add('in'));
@@ -136,6 +140,14 @@ async function suspBanner(sb){
  const h=document.querySelector('header');if(!h||document.getElementById('suspBanner'))return;
  h.insertAdjacentHTML('afterend','<div class="notice err susp-banner" id="suspBanner" role="alert"><b>Account suspended.</b> '+esc(st.message)+'</div>');
 }
+// load realtime.js once per page after login and start it (bell, toasts, live refresh)
+function startLive(sb,user){
+ const go=()=>{if(window.CC.rt)window.CC.rt.start(sb,user)};
+ if(window.CC.rt)return go();
+ if(document.querySelector('script[data-cc-rt]'))return;
+ const s=document.createElement('script');s.src='realtime.js';s.dataset.ccRt='1';s.onload=go;s.onerror=()=>console.warn('realtime.js did not load; live updates are off');document.head.appendChild(s);
+ if(!startLive.susp){startLive.susp=1;live.on(n=>{if(n&&/^account_(suspended|reactivated)$/.test(n.kind||'')){const b=document.getElementById('suspBanner');if(b)b.remove();suspBanner(sb)}})}
+}
 async function authNav(){
  const sb=await client();if(!sb)return;
  const render=async user=>{const el=document.getElementById('authNav');if(!el)return;
@@ -143,8 +155,9 @@ async function authNav(){
   let role='consumer',team=false;try{const {data}=await sb.from('profiles').select('role').eq('id',user.id).maybeSingle();if(data)role=data.role}catch(e){}
   if(role!=='vendor'&&role!=='admin'){try{const r=await sb.rpc('my_vendor_access');team=!r.error&&Array.isArray(r.data)&&r.data.length>0}catch(e){}}
   suspBanner(sb);
-  el.innerHTML=`<a href="${role==='vendor'||team?'dashboard-vendor.html':'dashboard-consumer.html'}">${team?'Work dashboard':'Dashboard'}</a>${team?'<a href="dashboard-consumer.html">My orders</a>':''}${role==='admin'?'<a href="admin.html">Admin</a>':''}<a href="wallet.html">Wallet</a><a href="account.html">Account</a><a class="pill" href="#" id="logoutLink">Log out</a>`;
-  document.getElementById('logoutLink').onclick=async e=>{e.preventDefault();await sb.auth.signOut();location.href='index.html'}};
+  el.innerHTML=`<span id="ccBell" class="bellslot"></span><a href="${role==='vendor'||team?'dashboard-vendor.html':'dashboard-consumer.html'}">${team?'Work dashboard':'Dashboard'}</a>${team?'<a href="dashboard-consumer.html">My orders</a>':''}${role==='admin'?'<a href="admin.html">Admin</a>':''}<a href="wallet.html">Wallet</a><a href="account.html">Account</a><a class="pill" href="#" id="logoutLink">Log out</a>`;
+  document.getElementById('logoutLink').onclick=async e=>{e.preventDefault();await sb.auth.signOut();location.href='index.html'};
+  startLive(sb,user)};
  render(await getUser());
  sb.auth.onAuthStateChange((ev)=>{if(ev==='SIGNED_OUT')render(null)});
 }
@@ -157,7 +170,7 @@ function orderLines(o){
  if(o.fulfilment==='delivery'||Number(o.delivery_fee_xcd)>0)L.push({k:'Delivery fee'+(o.delivery_area?' ('+o.delivery_area+')':''),v:Number(o.delivery_fee_xcd)||0});
  if(o.tax_xcd!=null&&Number(o.tax_rate_pct)>0)L.push({k:(o.tax_inclusive?'Includes VAT':'VAT')+' ('+Number(o.tax_rate_pct)+'%)',v:Number(o.tax_xcd)||0,kind:o.tax_inclusive?'info':''});
  L.push({k:'Total',v:Number(o.total_xcd)||0,kind:'total'});return L}
-window.CC={orderLines,acctStatus,PCOLS,PCOLS_BASE,TESTBANNER,cents,toCents,uuid,payPill,noteSummary,newBadge,notesWidget,NOTE_POLL,SLABEL,stPill,fdate,fnice,payText,nextSteps,timeline,safeNext,WAVE,configured,client,esc,getUser,layout,TIER_LABEL,TIER_LIMIT,TIERS,lim,ROLE_LABEL,ROLE_PERMS,
+window.CC={live,orderLines,acctStatus,PCOLS,PCOLS_BASE,TESTBANNER,cents,toCents,uuid,payPill,noteSummary,newBadge,notesWidget,NOTE_POLL,SLABEL,stPill,fdate,fnice,payText,nextSteps,timeline,safeNext,WAVE,configured,client,esc,getUser,layout,TIER_LABEL,TIER_LIMIT,TIERS,lim,ROLE_LABEL,ROLE_PERMS,
  xcd:n=>'EC$'+Number(n).toFixed(2)};
 layout();
 })();

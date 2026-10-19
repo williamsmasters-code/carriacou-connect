@@ -1,4 +1,4 @@
-CARRIACOU CONNECT MARKETPLACE v1.6 (static preview + optional Supabase accounts + TEST-MODE wallets + vendor analytics + plans + team accounts + multi-photo products + bulk upload + Standard analytics + platform analytics + advanced/premium analytics + admin customer management + tax and delivery fees + real vendor onboarding)
+CARRIACOU CONNECT MARKETPLACE v1.7 (static preview + optional Supabase accounts + TEST-MODE wallets + vendor analytics + plans + team accounts + multi-photo products + bulk upload + Standard analytics + platform analytics + advanced/premium analytics + admin customer management + tax and delivery fees + real vendor onboarding + live updates)
 ===================================================
 ALL VENDORS AND PRODUCTS ARE SAMPLE DATA. NO REAL PAYMENTS.
 
@@ -688,3 +688,80 @@ Caveats
 - Terms are a draft. A suspended vendor's open POS charges cannot be paid; wallet transfers directly to a suspended vendor wallet are not blocked.
 - A pending vendor created by a direct browser insert (not via apply) has no application row. Staff of a pending vendor only see a status notice.
 - Seat limits can leave the old owner with no access after a transfer/reassign.
+
+
+v1.7: LIVE UPDATES WITHOUT RELOADING (in-app notifications + Supabase Realtime, free tier)
+==========================================================================================
+New file: supabase/realtime.sql   >>> RUN realtime.sql LAST (after vendor_onboarding.sql) <<<
+Full run order: schema, seed, storage, orders, order_notes, pay, analytics, staff, photos, standard_analytics, platform_analytics,
+advanced_analytics, admin_customers, tax_delivery, vendor_onboarding, realtime.
+Safe to re-run. It only ADDS a table, functions and AFTER triggers named *_rt_*; it does not redefine any earlier function, so re-running
+earlier files never removes it (and re-running it never changes them).
+
+What people see
+- A bell in the header (after logging in) with the unread count, a dropdown (open a notification, mark one read, Mark all read),
+  and pop-up toasts in the corner. The tab title shows "(3) ..." when there are unread notifications. Sound is OFF by default
+  (tick "Sound" in the dropdown; remembered per browser). Toasts are in an aria-live region; the bell has aria-expanded and an
+  aria-label with the unread count; Escape closes the dropdown.
+- Pages refresh themselves when something changes, without a reload:
+  * customer order page: status pill, timeline, payment box (paid / refunded); a note being typed is kept
+  * customer order list: status changes, unread-note badges
+  * vendor dashboard Orders tab: new orders appear highlighted with NEW, status changes by the customer or by another team member,
+    payment and refund changes, note badges; unsent note text and scroll position are kept
+  * order notes threads (both sides): new notes appear at once (the 20 s check stays as a fallback)
+  * wallet: balance and history update when money arrives (transfer, refund, POS payment); the forms are not touched
+  * POS: the charge screen shows PAID as soon as the customer pays (the 3 s check stays as a fallback)
+  * admin: Applications list + tab badge, and the Upgrade requests list on Plans & requests (never redrawn while typing)
+  * suspension banner appears/disappears when the admin suspends or reactivates the account
+
+Who is told what (all written by database triggers; nobody is ever notified about their own action)
+- New order -> business owner + active team members (orders permission). Text: order number, item count, total, pickup/delivery.
+- Order status change by the vendor side -> the customer. Change by the customer (cancel) -> owner + team.
+- Order paid from a test wallet -> owner + team. Refund -> the customer.
+- New order note -> the other side (customer note -> owner + team; vendor note -> customer), with the first 120 characters.
+- Money received in a wallet (transfer) -> the wallet owner (sender shown like the wallet history: "Alice A.").
+- POS charge paid -> the team member who created it + the owner.
+- Vendor application received / resubmitted -> platform admins. Approved / rejected / changes requested -> applicant (with the reason
+  the admin wrote for them). Business suspended / reinstated, ownership given -> the owner.
+- Upgrade request -> platform admins. Approved / declined -> the requester and owner (the admin's internal note is NOT shown).
+- Staff invite accepted -> who sent it + owner.
+- Admin suspends / reactivates / edits a person, or changes their account type -> that person (the admin's reason is NOT shown).
+- "Silent" rows (not shown in the bell) only tell other open screens to refresh, e.g. another team member moved an order.
+
+Privacy and security
+- Table public.notifications: RLS on; people can only SELECT their own rows; no client insert / update / delete. Mark-read only via
+  notif_mark_read(ids) / notif_mark_all_read(), which touch the caller's own rows only. Notification text never contains phone
+  numbers, addresses, emails or wallet codes.
+- Only public.notifications is added to the supabase_realtime publication. orders, order_notes, wallets, transactions and pay_requests
+  are NOT published: the browser re-reads the changed record with the normal RLS-protected queries. Supabase Realtime checks RLS for
+  every postgres_changes event, so a person only receives their own rows. Replica identity stays DEFAULT (primary key), which is enough
+  for INSERT/UPDATE events (we do not use DELETE events).
+- Every trigger catches its own errors: a notification problem can never block an order, a note or a payment.
+
+Retention
+- notifications_cleanup() deletes READ notifications older than 90 days and silent rows older than 2 days. It runs automatically at most
+  once an hour, the next time anyone opens their notifications (notif_list). Unread notifications are kept.
+
+Fallbacks (built in, nothing to set up)
+- If Realtime cannot connect (blocked network, outage): the page asks the database for new notifications every 30 seconds and keeps
+  trying to reconnect (2 s, 4 s, 8 s ... up to 2 minutes). The dropdown footer shows "Live" or "Checking every 30 s".
+  When you come back to a hidden tab it catches up at once.
+- If realtime.sql has not been run yet: no bell is shown, and order pages, the vendor Orders tab, the wallet and the admin queues
+  quietly refresh every 30 seconds instead.
+
+SUPABASE SETTINGS TO CHECK (one time)
+1. Run supabase/realtime.sql in the SQL Editor (last). It adds the table to the supabase_realtime publication for you.
+2. Verify in the dashboard: Database > Publications > supabase_realtime: "notifications" should be switched ON (and nothing else needs
+   to be on for this site). If the publication shows 0 tables and the toggle is off, switch on public.notifications there.
+   Or check with SQL:  select schemaname, tablename from pg_publication_tables where pubname = 'supabase_realtime';
+   Expected: public | notifications
+3. Realtime itself is on by default in every Supabase project (free tier: 200 concurrent connections, 2 million messages per month,
+   far more than this site needs). Leave Realtime Settings > "Allow public access" at its default (ON): the site uses a normal
+   channel, and RLS on the notifications table is what keeps each person's rows private. If that switch is turned off, the site
+   still works but falls back to checking every 30 seconds.
+4. Quick live test: log in as a customer in one browser and as the vendor in another (or a private window). Place an order: the vendor's
+   bell and Orders tab update within a second or two. Accept it: the customer's order page changes to Confirmed without a reload.
+
+New / changed files: supabase/realtime.sql, realtime.js (loaded automatically by cc.js after login); changed cc.js (event bus CC.live,
+bell slot, notes widget listens), auth.js (consumer + vendor dashboards live), pay.js (wallet + POS live), admin.js and applications.js
+(live queues), style.css (bell, dropdown, toasts, highlight). Tests: test/pgrt.mjs, test/mock_rt.js, test/rt_flow.js.

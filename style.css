@@ -413,3 +413,38 @@ details.notes{margin:.7rem 0;border-top:1px dashed #10252e26;padding-top:.5rem}d
 .ckform{max-width:560px}.cklogo img{border-radius:12px;object-fit:cover}
 .xfer{margin-top:1.4rem;padding-top:.6rem;border-top:1px dashed #10252e33}
 @media (max-width:480px){.ck{flex-wrap:wrap}.ck .btn,.ckna{margin-left:2.3rem}.ckpct{font-size:1.4rem}.ap-counts{gap:.3rem}.ap-chipbtn{padding:.3rem .6rem;font-size:.85rem}}
+/* ---- v1.7 live updates: bell, dropdown, toasts, flash ---- */
+.bellslot{position:relative;display:inline-flex;align-items:center}
+.bell{position:relative;display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:50%;border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.08);color:#e8f6f6;cursor:pointer;transition:background .2s,transform .2s}
+.bell:hover,.bell[aria-expanded=true]{background:rgba(255,255,255,.18);color:#fff}
+.bell:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+.bellcount{position:absolute;top:-4px;right:-6px;min-width:20px;height:20px;padding:0 5px;border-radius:99px;background:#ff6b4a;color:#fff;font-size:.72rem;font-weight:800;line-height:20px;text-align:center;box-shadow:0 0 0 2px #04202c}
+.bellpanel{position:absolute;right:0;top:calc(100% + 10px);width:min(380px,92vw);max-height:min(70vh,520px);display:flex;flex-direction:column;background:#fff;color:var(--abyss,#04202c);border-radius:18px;box-shadow:0 24px 60px -18px rgba(4,32,44,.55);border:1px solid #0b728522;overflow:hidden;z-index:60;text-align:left}
+.bellpanel[hidden]{display:none}
+.bphead,.bpfoot{display:flex;align-items:center;justify-content:space-between;gap:.6rem;padding:.7rem .9rem;border-bottom:1px solid #0b728518}
+.bpfoot{border-bottom:0;border-top:1px solid #0b728518;font-size:.85rem}
+.linkbtn{background:none;border:0;color:#0b7285;font-weight:700;cursor:pointer;padding:.2rem;font:inherit;font-size:.85rem}
+.linkbtn:hover{text-decoration:underline}
+.bplist{list-style:none;margin:0;padding:0;overflow-y:auto;flex:1}
+.bpi{display:flex;align-items:flex-start;border-bottom:1px solid #0b728510}
+.bpi a{flex:1;display:flex;gap:.6rem;padding:.65rem .9rem;color:inherit;text-decoration:none;min-width:0}
+.bpi a:hover,.bpi a:focus-visible{background:#f2fbfb}
+.bpi.unread{background:#fff8ea}.bpi.unread b{font-weight:800}
+.bptx{display:flex;flex-direction:column;min-width:0}.bptx b{font-weight:600;font-size:.92rem;overflow-wrap:anywhere}.bptx small{color:#46616b;font-size:.8rem;overflow-wrap:anywhere}
+.bpic{flex:0 0 auto;width:30px;height:30px;border-radius:50%;background:#e6f5f4;display:inline-flex;align-items:center;justify-content:center;font-size:1rem}
+.bpmark{flex:0 0 auto;margin:.6rem .6rem 0 0;width:30px;height:30px;border-radius:50%;border:1px solid #0b728533;background:#fff;color:#0b7285;cursor:pointer;font-weight:800}
+.bpmark:hover{background:#e6f5f4}
+.bpempty{padding:1.2rem .9rem;color:#46616b;font-size:.9rem}
+.bpsnd{display:inline-flex;align-items:center;gap:.35rem;cursor:pointer}.bpstate{color:#0b7285;font-weight:700}
+.toasts{position:fixed;right:1rem;bottom:1rem;z-index:80;display:flex;flex-direction:column;gap:.6rem;width:min(360px,calc(100vw - 2rem));pointer-events:none}
+.toast{pointer-events:auto;display:flex;align-items:flex-start;background:#04202c;color:#fff;border-radius:16px;box-shadow:0 18px 40px -14px rgba(0,0,0,.55);border:1px solid rgba(244,185,66,.45);animation:toastIn .35s ease-out}
+.toast a{flex:1;display:flex;gap:.6rem;padding:.75rem .9rem;color:#fff;text-decoration:none;min-width:0}
+.toast a span:last-child{display:flex;flex-direction:column;min-width:0}.toast small{color:#bfe3e0;overflow-wrap:anywhere}.toast b{overflow-wrap:anywhere}
+.toast .bpic{background:rgba(255,255,255,.12)}
+.toast button{background:none;border:0;color:#bfe3e0;font-size:1.3rem;padding:.45rem .7rem;cursor:pointer}
+@keyframes toastIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+.flash{animation:liveFlash 2.4s ease-out}
+@keyframes liveFlash{0%{box-shadow:0 0 0 4px #f4b942;background-color:#fff3d6}100%{box-shadow:0 0 0 0 transparent}}
+@media(prefers-reduced-motion:reduce){.flash{outline:3px solid #f4b942;outline-offset:2px}}
+@media(max-width:640px){.bellpanel{position:fixed;left:.5rem;right:.5rem;width:auto;max-height:65vh}.toasts{right:.5rem;left:.5rem;bottom:.5rem;width:auto}}
+@media(max-width:640px){#authNav{flex-wrap:wrap;justify-content:center;gap:.5rem 1rem;margin-left:0}}

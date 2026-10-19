@@ -85,7 +85,11 @@ async function mount(el,sb){
    if(!confirm((d.owner_id?'Reassign ':'Assign ')+d.name+' to '+em+'?'))return;
    act('admin_assign_owner',{p_vendor:id,p_email:em,p_reason:r,p_new_name:g('#o-name')?g('#o-name').value.trim()||null:null},d.owner_id?'Owner reassigned.':'Owner assigned. This business is now a real vendor.')};
  }
+ cur={el,list,my};
  if(S.open)detail();else shell();
 }
-CC.applications={mount,pendingCount:async sb=>{try{const r=await sb.rpc('admin_app_list',{p_q:null,p_status:'pending',p_limit:1,p_offset:0});return r.error?0:(r.data.total||0)}catch(e){return 0}}};
+let cur=null;
+// v1.7 live: refresh the list only (never while an application is open, so nothing being typed is lost)
+const refreshList=()=>{if(cur&&cur.my===seq&&!S.open&&cur.el.isConnected&&cur.el.querySelector('#ap-res'))return cur.list();return null};
+CC.applications={mount,refreshList,pendingCount:async sb=>{try{const r=await sb.rpc('admin_app_list',{p_q:null,p_status:'pending',p_limit:1,p_offset:0});return r.error?0:(r.data.total||0)}catch(e){return 0}}};
 })();
