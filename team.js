@@ -38,7 +38,7 @@ function mount(box,o){
   <section><h3>Invite someone</h3>${noTeam?upsell():inviteForm(staffLeft,subLeft)}${newInvite?inviteBox(newInvite):''}</section>
   <section><h3>Open invites</h3><p class="muted">The invite code is shown only once, when you create it, so a lost invite cannot be shown again: revoke it and create a new one.</p>${data.invites.length?'<div class="invites">'+data.invites.map(i=>`<div class="irow${i.expired?' exp':''}"><div><b>${esc(i.email)}</b> <span class="rolebadge r-${esc(i.role)}">${esc(CC.ROLE_LABEL[i.role])}</span><small>${i.expired?'Expired':'Expires'} ${esc(fdate(i.expires_at))} (${esc(inDays(i.expires_at))})</small></div><button class="btn ghost sm" data-rev="${esc(i.id)}" type="button">Revoke</button></div>`).join('')+'</div>':'<p class="muted">No open invites.</p>'}</section>
   ${transferSection()}
-  <details class="permtable"><summary>What can each role do?</summary>${perms()}</details>
+  <details class="permtable"><summary><span class="sumt">What can each role do?</span><span class="sumh">Staff · Sub-admin · Owner</span><span class="chev" aria-hidden="true"></span></summary>${perms()}</details>
   <details class="auditbox" id="aud"><summary>Activity log</summary><div id="audbody"><p class="muted">Loading…</p></div></details>`;
   wire();
  }
@@ -68,9 +68,21 @@ function mount(box,o){
    <div class="mact">${canEditRole?`<button class="btn ghost sm" data-susp="${esc(m.id)}" data-to="${m.status==='suspended'?'active':'suspended'}" type="button">${m.status==='suspended'?'Restore access':'Pause access'}</button> <button class="btn ghost sm danger" data-rm="${esc(m.id)}" data-name="${esc(m.name)}" type="button">Remove</button>`:''}</div></div>`;
  }
  function perms(){
+  // v1.7.1: display only. The real permission checks live in the database (role_perms() in staff.sql).
   const rows=[['Orders: see and update','orders_view',1,1,1],['Order notes to customers','notes',1,1,1],['POS charges','pos',1,1,1],['See all products','products_view',1,1,1],['Add, edit, delete products','products_edit',0,1,1],['Refund wallet-paid orders','refunds',0,1,1],['Analytics','analytics',0,1,1],['Team, invites and activity log','team',0,0,1],['Request plan upgrades','plan',0,0,1],['Business wallet (send, top up) and business profile',null,0,0,1]];
-  const y='<span class="yes" aria-label="Yes">✓</span>',n='<span class="no" aria-label="No">–</span>';
-  return '<div class="tblwrap"><table class="ptab"><tr><th>Action</th><th>Staff</th><th>Sub-admin</th><th>Owner</th></tr>'+rows.map(r=>`<tr><td>${esc(r[0])}</td><td>${r[2]?y:n}</td><td>${r[3]?y:n}</td><td>${r[4]?y:n}</td></tr>`).join('')+'</table></div><p class="muted">Sub-admin seats exist on Pro and Enterprise only.</p>';
+  const sv=(d)=>`<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+  const IC={staff:'<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/>',subadmin:'<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/>',admin:'<path d="M3 8l4 4 5-7 5 7 4-4-2 11H5z"/>',
+   orders:'<path d="M6 2h12l2 5H4z"/><path d="M4 7v13h16V7"/><path d="M9 11h6"/>',products:'<path d="M12 2l9 5-9 5-9-5z"/><path d="M3 12l9 5 9-5"/><path d="M3 17l9 5 9-5"/>',money:'<rect x="2" y="6" width="20" height="13" rx="2"/><circle cx="12" cy="12.5" r="3"/><path d="M6 10v5M18 10v5"/>',team:'<circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 20c0-3 3-5 6-5s6 2 6 5M15 15c3 0 6 1.5 6 4.5"/>'};
+  const CHK='<path d="M5 12l5 5L20 7"/>';
+  const ROLES=[{k:'staff',i:2,n:'Staff',tag:'Front counter & orders'},{k:'subadmin',i:3,n:'Sub-admin',tag:'Runs the shop day to day'},{k:'admin',i:4,n:'Owner',tag:'Full control of the business'}];
+  const GROUPS=[['orders','Orders & sales',[0,1,2]],['products','Products',[3,4]],['money','Money & insights',[5,6]],['team','Team & business',[7,8,9]]];
+  const tot=rows.length,cnt=r=>rows.filter(x=>x[r.i]).length;
+  const yes=r=>`<span class="pp yes r-${r.k}">${sv(CHK)}<span>Allowed</span></span>`,no='<span class="pp no"><span aria-hidden="true">–</span><span class="sr">Not allowed</span></span>';
+  const head=ROLES.map(r=>{const c=cnt(r),pc=Math.round(c/tot*100);return `<th scope="col" class="rh rh-${r.k}"><span class="rhc"><span class="rhi">${sv(IC[r.k])}</span><b>${esc(r.n)}</b><small>${esc(r.tag)}</small><span class="cap" role="img" aria-label="${c} of ${tot} permissions"><span class="capbar"><span style="width:${pc}%"></span></span><span class="capn">${c}/${tot}</span></span></span></th>`}).join('');
+  const body=GROUPS.map(([g,label,ix])=>`<tbody class="pg pg-${g}"><tr class="pgh"><th scope="rowgroup" colspan="4"><span class="pgi">${sv(IC[g])}</span>${esc(label)}</th></tr>${ix.map(i=>{const r=rows[i];return `<tr class="pr" tabindex="0"><th scope="row">${esc(r[0])}</th>${ROLES.map(R=>`<td data-role="${esc(R.n)}">${r[R.i]?yes(R):no}</td>`).join('')}</tr>`}).join('')}</tbody>`).join('');
+  const cards=ROLES.map(r=>{const c=cnt(r);return `<section class="rcard rh-${r.k}"><header class="rhc"><span class="rhi">${sv(IC[r.k])}</span><b>${esc(r.n)}</b><small>${esc(r.tag)}</small><span class="cap" role="img" aria-label="${c} of ${tot} permissions"><span class="capbar"><span style="width:${Math.round(c/tot*100)}%"></span></span><span class="capn">${c}/${tot}</span></span></header><ul>${rows.map(x=>`<li class="${x[r.i]?'ok':'nope'}">${x[r.i]?yes(r):no}<span>${esc(x[0])}</span></li>`).join('')}</ul></section>`}).join('');
+  return `<div class="rolesgrid"><table class="ptab rtab"><caption class="sr">Permissions for each business role</caption><thead><tr><th scope="col" class="rh0">What they can do</th>${head}</tr></thead>${body}</table></div><div class="rcards">${cards}</div>
+   <p class="infochip"><span aria-hidden="true">${sv('<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>')}</span>Sub-admin seats exist on <b>Pro</b> and <b>Enterprise</b> only.</p>`;
  }
  function transferSection(){
   const c=(data.members||[]).filter(m=>!m.is_owner&&m.status==='active');
