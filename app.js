@@ -73,13 +73,28 @@ gallery(p.imageUrl?[p.imageUrl]:[]);
 if(DATA.live){try{const sb=await window.CC.client();const r=await sb.from('product_images').select('url,position').eq('product_id',p.id).order('position',{ascending:true});
  if(!r.error&&r.data&&r.data.length){const urls=r.data.map(x=>x.url).filter(u=>/^https?:\/\//i.test(u));if(urls.length&&(urls.length!==1||urls[0]!==p.imageUrl))gallery(urls)}}catch(e){}}
 $('#add').onclick=()=>{const q=Math.max(1,Math.min(99,parseInt($('#qty').value)||1));addCart(p.id,q);$('#msg').innerHTML='Added to cart. <a href="cart.html">View cart</a>'}},
-cart(){const draw=()=>{const c=getCart(),ids=Object.keys(c).filter(i=>DATA.products.some(p=>p.id===i));
-if(!ids.length){$('#cart').innerHTML='<p>Your cart is empty. <a href="browse.html">Browse products</a></p>';return}
-let sum=0;const rows=ids.map(i=>{const p=DATA.products.find(x=>x.id===i),t=p.price*c[i];sum+=t;return`<tr><td><a href="product.html?id=${i}">${esc(p.name)}</a><div class="muted">${esc(vendor(p.vendorId).name)}</div></td><td>${xcd(p.price)}</td><td><input type="number" min="1" max="99" value="${c[i]}" data-id="${i}"></td><td>${xcd(t)}</td><td><button class="btn alt" data-rm="${i}" aria-label="Remove">✕</button></td></tr>`}).join('');
-$('#cart').innerHTML=`<table><tr><th>Item</th><th>Price</th><th>Qty</th><th>Total</th><th></th></tr>${rows}</table><h2>Subtotal: ${xcd(sum)} XCD</h2><p class="muted">Delivery fees and tax (if the vendor charges them) are worked out at checkout. No real payments. At checkout you can pay the vendor yourself on pickup or delivery, or use your TEST wallet (play money only).</p><button class="btn" id="co">Checkout</button><div id="conote"></div>`;
-document.querySelectorAll('input[data-id]').forEach(e=>e.onchange=()=>{const c=getCart();c[e.dataset.id]=Math.max(1,Math.min(99,parseInt(e.value)||1));saveCart(c);draw()});
-document.querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>{const c=getCart();delete c[b.dataset.rm];saveCart(c);draw()});
-$('#co').onclick=()=>{if(DATA.live){location.href='checkout.html'}else $('#conote').innerHTML='<div class="notice"><strong>Ordering needs accounts, which are not switched on in this preview.</strong><br>In live mode you sign in, choose pickup or delivery and place your order. You pay the vendor on pickup or delivery. Online payment (Carriacou Connect Pay) is coming later.</div>'}};draw()},
+cart(){const VC=['#0b7285','#7a2e8e','#e8590c','#2f9e44','#c2255c','#1c7ed6'];
+const draw=()=>{const c=getCart(),ids=Object.keys(c).filter(i=>DATA.products.some(p=>p.id===i));const R=$('#cart');
+if(!ids.length){R.innerHTML=`<section class="cartempty"><div class="ce-art" aria-hidden="true"><svg viewBox="0 0 120 90"><path d="M8 70q26-14 52 0t52 0" stroke="#9fe3dc" stroke-width="4" fill="none"/><path d="M30 26h66l-8 30H40z" fill="#f4b942"/><path d="M22 18h10l10 40h44" stroke="#04202c" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="46" cy="66" r="5" fill="#04202c"/><circle cx="82" cy="66" r="5" fill="#04202c"/></svg></div><h2>Your cart is empty</h2><p class="muted">Spices, crafts, fresh catch and island services are waiting in the Marketplace.</p><a class="btn" href="browse.html">Browse the Marketplace</a></section>`;return}
+const groups={};ids.forEach(i=>{const p=DATA.products.find(x=>x.id===i);(groups[p.vendorId]=groups[p.vendorId]||[]).push(p)});
+let sum=0,count=0;const vids=Object.keys(groups);
+const row=p=>{const q=c[p.id],t=p.price*q;sum+=t;count+=q;return `<li class="ci"><a class="ci-img" href="product.html?id=${p.id}" tabindex="-1" aria-hidden="true">${img(p,0,'ci-ph')}</a>
+ <div class="ci-main"><a class="ci-name" href="product.html?id=${p.id}">${esc(p.name)}</a><span class="ci-unit">${xcd(p.price)} each</span></div>
+ <div class="ci-qty" role="group" aria-label="Quantity of ${esc(p.name)}"><button type="button" data-dec="${p.id}" aria-label="One less"${q<=1?' disabled':''}>−</button><input type="number" min="1" max="99" value="${q}" data-id="${p.id}" aria-label="Quantity"><button type="button" data-inc="${p.id}" aria-label="One more"${q>=99?' disabled':''}>+</button></div>
+ <b class="ci-tot">${xcd(t)}</b><button type="button" class="ci-rm" data-rm="${p.id}" aria-label="Remove ${esc(p.name)}" title="Remove">✕</button></li>`};
+const body=vids.map((vid,k)=>{const v=vendor(vid);let vs=0;const items=groups[vid].map(p=>{const before=sum;const h=row(p);vs+=sum-before;return h}).join('');
+ return `<section class="cgroup" style="--vc:${VC[k%VC.length]}"><div class="cg-head"><span class="cg-dot" aria-hidden="true">${esc((v.name||'?').slice(0,1))}</span><div><a href="vendor.html?id=${esc(vid)}">${esc(v.name)}</a><small>${groups[vid].length} item${groups[vid].length===1?'':'s'} · separate order</small></div><b>${xcd(vs)}</b></div><ul class="cilist">${items}</ul></section>`}).join('');
+R.innerHTML=`<div class="cartlay"><div class="cartitems">${vids.length>1?`<p class="cg-info">Items from <b>${vids.length} businesses</b>: checkout places one order with each.</p>`:''}${body}</div>
+<aside class="cartsum" aria-label="Order summary"><span class="kicker">Order summary</span><div class="cs-row"><span>Items</span><b>${count}</b></div><div class="cs-row"><span>Businesses</span><b>${vids.length}</b></div><div class="cs-row cs-sub"><span>Subtotal</span><b>${xcd(sum)} <small>XCD</small></b></div>
+<p class="cs-note">🚚 Delivery fees and VAT (if the business charges them) are worked out at checkout.</p><p class="cs-note cs-test">🧪 Pay the vendor on pickup or delivery, or use your <b>TEST wallet</b> (play money only). No real payments.</p>
+<button class="btn cs-go" id="co">Checkout →</button><a class="cs-more" href="browse.html">← Continue shopping in the Marketplace</a><div id="conote"></div></aside></div>`;
+const set=(id,q)=>{const c=getCart();c[id]=Math.max(1,Math.min(99,q));saveCart(c);draw();const f=document.querySelector(`input[data-id="${id}"]`);if(f)f.focus()};
+R.querySelectorAll('input[data-id]').forEach(e=>e.onchange=()=>set(e.dataset.id,parseInt(e.value)||1));
+R.querySelectorAll('[data-inc]').forEach(b=>b.onclick=()=>set(b.dataset.inc,(getCart()[b.dataset.inc]||1)+1));
+R.querySelectorAll('[data-dec]').forEach(b=>b.onclick=()=>set(b.dataset.dec,(getCart()[b.dataset.dec]||1)-1));
+R.querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>{const c=getCart();delete c[b.dataset.rm];saveCart(c);draw()});
+$('#co').onclick=()=>{if(DATA.live){location.href='checkout.html'}else $('#conote').innerHTML='<div class="notice"><strong>Ordering needs accounts, which are not switched on in this preview.</strong><br>In live mode you sign in, choose pickup or delivery and place your order. You pay the vendor on pickup or delivery. Online payment (Carriacou Connect Pay) is coming later.</div>'}};
+draw();addEventListener('storage',e=>{if(e.key===KEY)draw()})},
 async checkout(){
 const root=$('#co');
 const payNote='<div class="notice"><strong>No real payments.</strong> Choose to pay the vendor yourself on pickup or delivery, or try Carriacou Connect Pay with your <b>test wallet</b> (play money only).</div>';
