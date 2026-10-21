@@ -97,7 +97,7 @@ async wallet(){
     if(!r.data.ok){say(m,'We could not find that charge. Check the code.');return}
     if(r.data.status!=='open'){say(m,'This charge is '+r.data.status+'.');return}
     if(Number(r.data.amount_cents)>Number(w.balance_cents)){say(m,'The charge is '+cents(r.data.amount_cents)+' but your test balance is '+cents(w.balance_cents)+'. Add test money first.');return}
-    prevPay={code,d:r.data};cf.hidden=false;cf.className='notice';cf.innerHTML='Pay <b>'+cents(r.data.amount_cents)+'</b> to <b>'+esc(r.data.vendor_name)+'</b>'+(r.data.note?' ('+esc(r.data.note)+')':'')+'?'+(Array.isArray(r.data.items)&&r.data.items.length?'<ul>'+r.data.items.slice(0,20).map(i=>'<li>'+esc((i.qty||1)+' × '+(i.name||'item'))+'</li>').join('')+'</ul>':'')+'<br>Press the button again to confirm.';$('#pgo').textContent='Confirm and pay (test)';return}
+    prevPay={code,d:r.data};cf.hidden=false;cf.className='notice';cf.innerHTML='Pay <b>'+cents(r.data.amount_cents)+'</b> to <b>'+esc(r.data.vendor_name)+'</b>'+(r.data.note?' ('+esc(r.data.note)+')':'')+'?'+(r.data.tax_cents>0?'<br><small>'+(r.data.tax_inclusive?'Includes VAT ':'Plus VAT ')+esc(Number(r.data.tax_rate_pct))+'%: '+cents(r.data.tax_cents)+'</small>':'')+(Array.isArray(r.data.items)&&r.data.items.length?'<ul>'+r.data.items.slice(0,20).map(i=>'<li>'+esc((i.qty||1)+' × '+(i.name||'item'))+'</li>').join('')+'</ul>':'')+'<br>Press the button again to confirm.';$('#pgo').textContent='Confirm and pay (test)';return}
    $('#pgo').disabled=true;const r=await rpc(sb,'pay_charge',{p_code:code,p_idempotency_key:keyPay,p_from_wallet:w.id});
    if(r.error){say(m,fixErr(r.error));$('#pgo').disabled=false;return}
    if(!r.data.ok){say(m,'We could not find that charge.');$('#pgo').disabled=false;return}
@@ -151,7 +151,7 @@ async pos(){
    const amt=total()+(custom||0);if(amt<1){say(m,'Pick items or enter an amount first.');return}
    $('#cgo').disabled=true;const r=await rpc(sb,'create_charge',{p_amount_cents:amt,p_note:$('#cnote').value.trim()||null,p_items:items,p_vendor_id:v.id});
    if(r.error){say(m,fixErr(r.error));$('#cgo').disabled=false;return}
-   for(const k of Object.keys(qty))delete qty[k];show(r.data)};
+   for(const k of Object.keys(qty))delete qty[k];const ch=r.data;try{const q=await sb.from('pay_requests').select('amount_cents,base_cents,tax_cents,tax_rate_pct,tax_inclusive').eq('id',ch.id).maybeSingle();if(q.data&&!q.error)Object.assign(ch,q.data)}catch(e){}show(ch)};
   recent();
  }
  async function recent(){const r=await sb.from('pay_requests').select('id,code,amount_cents,note,status,expires_at,created_at').eq('vendor_id',v.id).order('created_at',{ascending:false}).limit(15);const el=$('#recent');if(!el)return;
@@ -160,7 +160,7 @@ async pos(){
   el.innerHTML=(r.data||[]).length?'<div class="hist">'+r.data.map(x=>`<div class="hrow ${st(x)==='paid'?'in':''}"><div class="hic" aria-hidden="true">${st(x)==='paid'?'✓':'·'}</div><div class="hmid"><b>${esc(x.code)}</b> <span class="pp pp-${st(x)==='paid'?'paid':'unpaid'}">${esc(st(x))}</span><small>${esc(fdate(x.created_at))}${x.note?' · '+esc(x.note):''}</small></div><div class="hamt">${cents(x.amount_cents)}</div></div>`).join('')+'</div>':'<p class="muted">No charges yet.</p>'}
  function show(ch){
   active=ch;const url=base('wallet.html')+'?pay='+encodeURIComponent(ch.code);
-  R.innerHTML=TESTBANNER+`<div class="wcard chargecard" id="cc"><span class="kicker">Charge ready</span><div class="bigbal">${cents(ch.amount_cents)}</div>
+  R.innerHTML=TESTBANNER+`<div class="wcard chargecard" id="cc"><span class="kicker">Charge ready</span><div class="bigbal">${cents(ch.amount_cents)}</div>${ch.tax_cents>0?`<p class="muted">${ch.tax_inclusive?'Includes VAT':'Price '+cents(ch.base_cents)+' plus VAT'} ${esc(Number(ch.tax_rate_pct))}%: ${cents(ch.tax_cents)}</p>`:''}
    <div class="qrbox">${qrSvg(url,200)}</div><div class="wcode"><span class="muted">Charge code</span><code>${esc(ch.code)}</code><button class="btn ghost sm" id="ccpy" type="button">Copy</button></div>
    <p id="cstat" class="cstat" role="status">Waiting for the customer to pay… <span id="cleft"></span></p>
    <p class="muted">The customer opens <b>Wallet</b>, enters this code (or scans the QR) and confirms. Test money only.</p>

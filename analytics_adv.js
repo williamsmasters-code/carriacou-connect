@@ -300,14 +300,15 @@ async function build(el,o,prem,keys,saved){
  // ---------- data export ----------
  add('export',async b=>{
   b.innerHTML=`<p class="muted">Every order in <b>${esc(from)}</b> to <b>${esc(to)}</b>, including cancelled and refunded ones, with a status column. Customer phone numbers and addresses are not included. Up to 20,000 orders per file. API access is not available yet.</p>
-  <p>${mk('dxo','Orders CSV','btn')} ${mk('dxi','Order lines CSV','btn')}</p>${msgBox('dxm')}`;
+  <p>${mk('dxo','Orders CSV','btn')} ${mk('dxi','Order lines CSV','btn')} ${mk('dxp','POS charges CSV','btn')}</p>${msgBox('dxm')}`;
   const m=b.querySelector('#dxm');let cache=null;
   const run=(id,fn)=>b.querySelector(id).onclick=async ev=>{const btn=ev.currentTarget;btn.disabled=true;m.hidden=true;
-   try{cache=cache||await call('vendor_data_export',a);if(!cache.orders.length){m.className='notice';m.textContent='No orders in this date range.';m.hidden=false}else{fn(cache);m.className='notice ok';m.textContent='File created.'+(cache.truncated?' Only the first '+cache.limit+' orders are included; choose a shorter range.':'');m.hidden=false}}
+   try{cache=cache||await call('vendor_data_export',a);if(!cache.orders.length&&!(cache.pos_charges||[]).length){m.className='notice';m.textContent='No orders in this date range.';m.hidden=false}else{fn(cache);m.className='notice ok';m.textContent='File created.'+(cache.truncated?' Only the first '+cache.limit+' orders are included; choose a shorter range.':'');m.hidden=false}}
    catch(e){m.className='notice err';m.textContent=nice(e).msg||'Could not create the file';m.hidden=false}finally{btn.disabled=false}};
   const GD=new Intl.DateTimeFormat('en-GB',{timeZone:TZ,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false});
-  run('#dxo',X=>dl('CC-orders-'+from+'_to_'+to+'.csv',csv(['Order','Date (Grenada)','Status','Payment status','Payment method','Fulfilment','Customer','Subtotal (EC$)','Discount (EC$)','Delivery (EC$)','Total (EC$)','Campaign code'],X.orders.map(x=>[x.order,GD.format(new Date(x.at)),x.status,x.payment_status,x.method,x.fulfilment,x.customer||'',x.subtotal_xcd,x.discount_xcd,x.delivery_xcd,x.total_xcd,x.campaign_code||'']),[7,8,9,10])));
+  run('#dxo',X=>dl('CC-orders-'+from+'_to_'+to+'.csv',csv(['Order','Date (Grenada)','Status','Payment status','Payment method','Fulfilment','Customer','Subtotal (EC$)','Discount (EC$)','Delivery (EC$)','Total (EC$)','VAT (EC$)','VAT rate %','VAT included in prices','Campaign code'],X.orders.map(x=>[x.order,GD.format(new Date(x.at)),x.status,x.payment_status,x.method,x.fulfilment,x.customer||'',x.subtotal_xcd,x.discount_xcd,x.delivery_xcd,x.total_xcd,x.tax_xcd==null?'':x.tax_xcd,x.tax_rate_pct==null?'':x.tax_rate_pct,x.tax_inclusive==null?'':(x.tax_inclusive?'yes':'no'),x.campaign_code||'']),[7,8,9,10,11])));
   run('#dxi',X=>dl('CC-order-lines-'+from+'_to_'+to+'.csv',csv(['Order','Product','Quantity','Unit price (EC$)','Line total (EC$)','Unit cost (EC$)'],X.items.map(x=>[x.order,x.product,x.quantity,x.unit_price_xcd,x.line_total_xcd,x.unit_cost_xcd==null?'':x.unit_cost_xcd]),[3,4,5])));
+  run('#dxp',X=>dl('CC-pos-charges-'+from+'_to_'+to+'.csv',csv(['Charge','Date (Grenada)','Note','Total paid (EC$)','VAT (EC$)','VAT rate %','VAT included in price'],(X.pos_charges||[]).map(x=>[x.code,GD.format(new Date(x.at)),x.note||'',x.total_xcd,x.tax_xcd==null?'':x.tax_xcd,x.tax_rate_pct==null?'':x.tax_rate_pct,x.tax_inclusive==null?'':(x.tax_inclusive?'yes':'no')]),[3,4])));
  });
 
  // ---------- customize (Enterprise) ----------
