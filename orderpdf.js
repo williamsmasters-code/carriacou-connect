@@ -20,7 +20,9 @@ function clean(s){
 const money=n=>CC.cents(Math.round((Number(n)||0)*100));
 function dt(d){try{const x=new Date(d);if(isNaN(x))return String(d||'');const p=n=>String(n).padStart(2,'0');return x.getFullYear()+'-'+p(x.getMonth()+1)+'-'+p(x.getDate())+' '+p(x.getHours())+':'+p(x.getMinutes())}catch(e){return ''}}
 function fname(base){return String(base||'order').replace(/[^A-Za-z0-9._-]+/g,'_').slice(0,60)+'.pdf'}
-const payStatusLabel=o=>({paid:'Paid',refunded:'Refunded',unpaid:'Unpaid'})[o.payment_status]||(o.payment_status?String(o.payment_status):'Not recorded');
+const isOffP=o=>o.payment_method!=='pay_with_wallet'&&o.payment_status==='unpaid'&&o.offline_status!=null;
+const dueOf=o=>Math.max(0,(Number(o.total_xcd)||0)-(Number(o.amount_paid_xcd)||0));
+const payStatusLabel=o=>isOffP(o)?({paid:'Paid in full',partial:'Partial',unpaid:'Unpaid'})[o.offline_status]:({paid:'Paid',refunded:'Refunded',unpaid:'Unpaid'})[o.payment_status]||(o.payment_status?String(o.payment_status):'Not recorded');
 const isWallet=o=>o.payment_method==='pay_with_wallet';
 
 // small layout helper around a jsPDF document
@@ -101,7 +103,7 @@ async function buildOrder(o,ex){
  const y3=P.S.y;
  const addr=o.fulfilment==='delivery'?((o.delivery_address||'-')+(o.delivery_area?'\nArea: '+o.delivery_area:'')):('Collect from '+(ex.vendorName||'the vendor')+(ex.vendorLocation?', '+ex.vendorLocation:''));
  h1=P.kv(o.fulfilment==='delivery'?'Delivery address':'Pickup',addr,M,colW);
- h2=P.kv('Payment',CC.payText(o).replace(/ \(TEST, play money\)/,'')+(test?' - TEST MODE (play money)':'')+'\nStatus: '+payStatusLabel(o)+(test&&o.payment_status==='paid'?' (TEST MODE)':'')+(o.paid_at?'\nPaid '+dt(o.paid_at):''),M+CW/2+8,colW);P.S.y=y3+Math.max(h1,h2)+6;
+ h2=P.kv('Payment',CC.payText(o).replace(/ \(TEST, play money\)/,'')+(test?' - TEST MODE (play money)':'')+'\nStatus: '+payStatusLabel(o)+(test&&o.payment_status==='paid'?' (TEST MODE)':'')+(o.paid_at?'\nPaid '+dt(o.paid_at):'')+(isOffP(o)?'\nPaid so far: '+money(o.amount_paid_xcd)+' - Balance due: '+money(dueOf(o)):''),M+CW/2+8,colW);P.S.y=y3+Math.max(h1,h2)+6;
  if(o.notes){P.h2('Order instructions');P.para(o.notes,M,CW,10)}
  // items
  P.h2('Items');
@@ -114,6 +116,7 @@ async function buildOrder(o,ex){
  const tl=(a,b,bold)=>{P.font(bold?12:10,bold?'bold':'normal',bold?P.NAVY:P.INK);P.d.text(a,lx,P.S.y+11);P.d.text(b,tx,P.S.y+11,{align:'right'});P.S.y+=bold?20:15};
  OL.filter(l=>l.kind!=='total'&&l.kind!=='info').forEach(l=>tl(l.k,(l.v<0?'- ':'')+money(Math.abs(l.v))));
  d.setDrawColor(...P.NAVY);d.setLineWidth(1);d.line(lx,P.S.y+1,tx,P.S.y+1);P.S.y+=5;tl('Total (XCD)',money(o.total_xcd),true);
+ if(isOffP(o)){tl('Paid so far',money(o.amount_paid_xcd));tl('Balance due (XCD)',money(dueOf(o)),true)}
  OL.filter(l=>l.kind==='info').forEach(l=>{P.font(9,'normal',P.GREY);d.text(l.k.replace('Includes VAT','Total includes VAT')+': '+money(l.v),tx,P.S.y+9,{align:'right'});P.S.y+=14});
  if(o.vendor_vat_number){P.font(9,'normal',P.GREY);d.text('Vendor VAT number: '+clean(o.vendor_vat_number),tx,P.S.y+9,{align:'right'});P.S.y+=14}
  if(test){P.font(8,'bold',[180,90,0]);d.text('TEST MODE - paid with play money, no real funds',tx,P.S.y+8,{align:'right'});P.S.y+=14}
@@ -142,7 +145,7 @@ async function buildSummary(list,ex){
  header(P,'Vendor order summary',null);
  P.font(14,'bold',P.NAVY);d.text(clean(ex.vendorName||'Vendor'),M,P.S.y+8);P.S.y+=20;
  P.font(9,'normal',P.GREY);d.text(clean(list.length+' order'+(list.length===1?'':'s')+(ex.filterLabel?' - filter: '+ex.filterLabel:'')),M,P.S.y+8);P.S.y+=20;
- const rows=list.map(o=>[o.order_number,dt(o.created_at),CC.SLABEL[o.status]||o.status,(o.contact_name||'-'),(o.fulfilment==='delivery'?'Delivery':'Pickup'),(isWallet(o)?'Wallet (TEST) ':'')+payStatusLabel(o),vatCell(o),money(o.total_xcd)]);
+ const rows=list.map(o=>[o.order_number,dt(o.created_at),CC.SLABEL[o.status]||o.status,(o.contact_name||'-'),(o.fulfilment==='delivery'?'Delivery':'Pickup'),(isWallet(o)?'Wallet (TEST) ':'')+payStatusLabel(o)+(isOffP(o)&&o.offline_status!=='unpaid'&&dueOf(o)>0?' '+dueOf(o).toFixed(2)+' due':''),vatCell(o),money(o.total_xcd)]);
  if(!rows.length)rows.push(['(no orders)','','','','','','','']);
  table(P,[{t:'Order',w:.12},{t:'Date',w:.15},{t:'Status',w:.11},{t:'Customer',w:.14},{t:'Fulfil.',w:.08},{t:'Payment',w:.11},{t:'VAT (EC$)',w:.16,align:'right'},{t:'Total',w:.13,align:'right'}],rows,{size:8});
  const live=list.filter(o=>o.status!=='cancelled');const sum=live.reduce((a,o)=>a+Math.round((Number(o.total_xcd)||0)*100),0);
@@ -150,6 +153,7 @@ async function buildSummary(list,ex){
  const vIn=live.reduce((a,o)=>a+(Number(o.tax_xcd)>0&&o.tax_inclusive?Math.round(Number(o.tax_xcd)*100):0),0),vOn=live.reduce((a,o)=>a+(Number(o.tax_xcd)>0&&!o.tax_inclusive?Math.round(Number(o.tax_xcd)*100):0),0);
  P.font(10,'bold',P.NAVY);d.text('VAT total of non-cancelled orders (XCD)',M,P.S.y+10);d.text(CC.cents(vIn+vOn),M+CW,P.S.y+10,{align:'right'});P.S.y+=14;
  P.font(8,'normal',P.GREY);d.text(clean('Included in prices: '+CC.cents(vIn)+' · added on top: '+CC.cents(vOn)+(live.some(o=>o.tax_xcd==null)?' · orders placed before tax was recorded count as 0':'')),M,P.S.y+8);P.S.y+=12;
+ {const off=live.filter(isOffP);if(off.length){const pd=off.reduce((a,o)=>a+Math.round((Number(o.amount_paid_xcd)||0)*100),0),du=off.reduce((a,o)=>a+Math.round(dueOf(o)*100),0);P.font(10,'bold',P.NAVY);d.text('Pay on pickup/delivery: collected / balance due (XCD)',M,P.S.y+10);d.text(CC.cents(pd)+' / '+CC.cents(du),M+CW,P.S.y+10,{align:'right'});P.S.y+=14}}
  P.font(8,'normal',P.GREY);d.text(clean(live.length+' of '+list.length+' orders counted; cancelled orders excluded.'),M,P.S.y+8);
  const test=list.some(isWallet);
  footers(P,ex.sample||test);

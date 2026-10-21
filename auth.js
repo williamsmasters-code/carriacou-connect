@@ -83,17 +83,19 @@ async consumer(){
   <h3>Items</h3><table><tr><th>Item</th><th>Price</th><th>Qty</th><th>Total</th></tr>${items.map(i=>`<tr><td>${esc(i.product_name)}</td><td>${xcd(i.unit_price_xcd)}</td><td>${i.quantity}</td><td>${xcd(i.line_total_xcd!=null?i.line_total_xcd:i.unit_price_xcd*i.quantity)}</td></tr>`).join('')}</table>
   <div class="obreak">${window.CC.orderLines(o).map(l=>`<div class="oline${l.kind==='total'?' total2':''}${l.kind==='info'?' info':''}"><span>${esc(l.k)}</span><span>${l.v<0?'- ':''}${xcd(Math.abs(l.v))}${l.kind==='total'?' XCD':''}</span></div>`).join('')}${o.vendor_vat_number?`<div class="muted"><small>Vendor VAT number: ${esc(o.vendor_vat_number)}</small></div>`:''}</div>
   <div class="info-grid"><div><b>${fnice(o)}</b><br>${esc(payText(o))} ${window.CC.payPill(o,true)}</div><div><b>Contact</b><br>${esc(o.contact_name||'')} ${esc(o.contact_phone||'')}</div>${o.fulfilment==='delivery'?`<div><b>Deliver to</b><br>${esc(o.delivery_address||'')}</div>`:`<div><b>Collect from</b><br>${esc(o.vendors&&o.vendors.name||'')}${o.vendors&&o.vendors.location?', '+esc(o.vendors.location):''}</div>`}</div>
-  ${o.payment_status==='unpaid'&&!['cancelled','completed'].includes(o.status)?`<div class="paybox">${window.CC.TESTBANNER}<p>Pay <b>${window.CC.cents(Math.round(o.total_xcd*100))}</b> now from your test wallet (play money), or pay the vendor on ${o.fulfilment==='delivery'?'delivery':'pickup'}.</p><button class="btn alt" id="opay">Pay with wallet (test)</button> <a class="btn ghost" href="wallet.html">Open wallet</a><div id="opm" class="notice" hidden role="alert"></div></div>`:o.payment_status==='paid'?`<div class="paybox ok">${window.CC.TESTBANNER}<p><b>Paid</b> ${window.CC.cents(Math.round(o.total_xcd*100))} from your test wallet${o.paid_at?' on '+esc(fdate(o.paid_at)):''}. Play money, no real funds.</p></div>`:o.payment_status==='refunded'?`<div class="paybox">${window.CC.TESTBANNER}<p><b>Refunded</b> to your test wallet. Play money, no real funds.</p></div>`:''}
+  <div id="offpay"></div>
+  ${o.payment_status==='unpaid'&&!(Number(o.amount_paid_xcd)>0)&&!['cancelled','completed'].includes(o.status)?`<div class="paybox">${window.CC.TESTBANNER}<p>Pay <b>${window.CC.cents(Math.round(o.total_xcd*100))}</b> now from your test wallet (play money), or pay the vendor on ${o.fulfilment==='delivery'?'delivery':'pickup'}.</p><button class="btn alt" id="opay">Pay with wallet (test)</button> <a class="btn ghost" href="wallet.html">Open wallet</a><div id="opm" class="notice" hidden role="alert"></div></div>`:o.payment_status==='paid'?`<div class="paybox ok">${window.CC.TESTBANNER}<p><b>Paid</b> ${window.CC.cents(Math.round(o.total_xcd*100))} from your test wallet${o.paid_at?' on '+esc(fdate(o.paid_at)):''}. Play money, no real funds.</p></div>`:o.payment_status==='refunded'?`<div class="paybox">${window.CC.TESTBANNER}<p><b>Refunded</b> to your test wallet. Play money, no real funds.</p></div>`:''}
   <h3>Notes with ${esc(o.vendors&&o.vendors.name||'the vendor')}</h3><div class="notes-box" id="nbox"></div>
   ${o.status==='placed'?'<p><button class="btn alt" id="ocancel">Cancel this order</button><br><small class="muted">You can cancel until the vendor confirms it.</small></p>':''}<div id="om" class="notice" hidden></div></div>`;
   window.CC.notesWidget($('#nbox'),o,'consumer',{sb,user});
+  if(window.CC.offpay)window.CC.offpay.customerBox($('#offpay'),o,{sb});
   // v1.7 live: re-read this order when a notification about it arrives (or on the 30 s fallback tick); keep any unsent note text
   if(window.CC._dOff)window.CC._dOff();
-  const dsig=x=>[x.status,x.payment_status,x.status_updated_at,x.paid_at].join('|'),sig0=dsig(o);
+  const dsig=x=>[x.status,x.payment_status,x.status_updated_at,x.paid_at,x.amount_paid_xcd].join('|'),sig0=dsig(o);
   window.CC._dOff=window.CC.live.on(async n=>{
    if(!$('#opdf')||!n)return;
    if(!((n.ref_type==='order'&&n.ref_id===o.id&&!/^note_/.test(n.kind||''))||n.kind==='poll_tick'))return;
-   const q=await sb.from('orders').select('status,payment_status,status_updated_at,paid_at').eq('id',o.id).maybeSingle();
+   const q=await sb.from('orders').select('*').eq('id',o.id).maybeSingle();
    if(!q.data||dsig(q.data)===sig0||!$('#opdf'))return;
    const ta=document.querySelector('#nbox textarea'),draft=ta?ta.value:'',foc=!!ta&&document.activeElement===ta;
    await detail(o.id);
@@ -114,7 +116,7 @@ async consumer(){
  };
  if(oid){await detail(oid);return}
  const LSEL0='id,order_number,status,total_xcd,created_at,fulfilment,payment_status,vendors(name),order_items(product_name,quantity)';
- const r=await sb.from('orders').select(LSEL0).eq('consumer_id',user.id).order('created_at',{ascending:false});
+ const LSEL=LSEL0+',payment_method,offline_status,amount_paid_xcd';let r=await sb.from('orders').select(LSEL).eq('consumer_id',user.id).order('created_at',{ascending:false});window.CC._lsel=LSEL;if(r.error){window.CC._lsel=LSEL0;r=await sb.from('orders').select(LSEL0).eq('consumer_id',user.id).order('created_at',{ascending:false})}
  let rows=r.data||[];
  let ns=await window.CC.noteSummary(sb);
  const act=rows.filter(o=>!['completed','cancelled'].includes(o.status)).length;
@@ -127,11 +129,11 @@ async consumer(){
  const noteBadges=async()=>{ns=await window.CC.noteSummary(sb);document.querySelectorAll('.ocard[data-oid]').forEach(a=>{const e=a.querySelector('.nbx');if(e)e.innerHTML=window.CC.newBadge(ns[a.dataset.oid]&&ns[a.dataset.oid].unread||0)})};
  setInterval(()=>{if(!document.hidden)noteBadges()},window.CC.NOTE_POLL);
  // v1.7 live: refresh the order list when one of my orders changes (status, payment, refund) or on the 30 s fallback tick
- const lsig=l=>l.map(o=>o.id+':'+o.status+':'+o.payment_status).join(',');let lastSig=lsig(rows);
+ const lsig=l=>l.map(o=>o.id+':'+o.status+':'+o.payment_status+':'+(o.amount_paid_xcd||0)).join(',');let lastSig=lsig(rows);
  window.CC.live.on(async n=>{const T=$('#t-orders');if(!T||!n||r.error)return;
   if(n.ref_type==='order'&&/^note_/.test(n.kind||'')){await noteBadges();return}
   if(n.ref_type!=='order'&&n.kind!=='poll_tick')return;
-  const r2=await sb.from('orders').select(LSEL0).eq('consumer_id',user.id).order('created_at',{ascending:false});
+  const r2=await sb.from('orders').select(window.CC._lsel||LSEL0).eq('consumer_id',user.id).order('created_at',{ascending:false});
   if(r2.error||lsig(r2.data||[])===lastSig)return;lastSig=lsig(r2.data||[]);rows=r2.data||[];
   const box=T.querySelector('.olist');if(box)box.innerHTML=rows.map(card).join('');
   const tb=document.querySelector('.dtabs button[data-t=orders]');if(tb){const a=actOf(rows);tb.innerHTML='Orders'+(a?` <b class="nbadge">${a}</b>`:'')}
@@ -166,7 +168,7 @@ async vendordash(){
  const TABS=[['products',can('products_view')],['orders',can('orders_view')],['analytics',can('analytics')],['campaigns',can('products_edit')&&!legacy],['delivery',['admin','subadmin'].includes(me.role)&&!legacy],['team',can('team')&&!legacy]].filter(x=>x[1]).map(x=>x[0]);
  let liveOff=null;
  window.addEventListener('hashchange',()=>{const h=location.hash.slice(1);const b=document.querySelector('.dtabs button[data-t="'+h+'"]');if(b&&!b.classList.contains('on'))b.click()});
- let tab=TABS.includes(location.hash.slice(1))?location.hash.slice(1):(TABS[0]||'products'),ofilter='',nsum={},openN=new Set(),nTimer=null,plan=null;
+ let tab=TABS.includes(location.hash.slice(1))?location.hash.slice(1):(TABS[0]||'products'),ofilter='',pfilter='',nsum={},openN=new Set(),nTimer=null,plan=null;
  const stockCell=p=>{if(p.stock_qty==null)return '<span class="muted">Not tracked</span>';const th=p.low_stock_threshold==null?5:p.low_stock_threshold;return p.stock_qty===0?'<span class="stk out">Out of stock</span>':p.stock_qty<=th?'<span class="stk low">'+p.stock_qty+' left (low)</span>':'<span class="stk">'+p.stock_qty+' in stock</span>'};
  let photosOn=null,prods=[],pTotal=0,pPage=0,pQuery='';const PAGE=50;
  const loadProducts=async()=>{
@@ -234,16 +236,19 @@ async vendordash(){
   document.querySelectorAll('.dtabs button').forEach(b=>b.onclick=()=>showTab(b.dataset.t));
   const {stPill,fdate,fnice,payText,nextSteps}=window.CC;
   const drawOrders=()=>{const T=$('#tab-orders');
-   const list=olist.filter(o=>!ofilter||o.status===ofilter);
+   const pst=o=>window.CC.offpay?window.CC.offpay.state(o):(o.payment_status||'unpaid');
+   const list=olist.filter(o=>(!ofilter||o.status===ofilter)&&(!pfilter||pst(o)===pfilter));const pc=k=>olist.filter(o=>pst(o)===k).length;
    const cnt=k=>olist.filter(o=>o.status===k).length;
    T.innerHTML=`<h3>Incoming orders</h3>${ord.error?'<div class="notice err">Could not load orders: '+esc(ord.error.message)+'. Has orders.sql been run in Supabase?</div>':''}
    <div class="ofilter" role="group" aria-label="Filter by status"><button data-f="" class="${ofilter===''?'on':''}">All (${olist.length})</button>${Object.keys(window.CC.SLABEL).map(k=>`<button data-f="${k}" class="${ofilter===k?'on':''}">${esc(window.CC.SLABEL[k])} (${cnt(k)})</button>`).join('')}</div>
+   <div class="ofilter pfilter" role="group" aria-label="Filter by payment"><span class="muted">Payment:</span><button data-pf="" class="${pfilter===''?'on':''}">Any</button>${[['unpaid','Unpaid'],['partial','Partial'],['paid','Paid']].map(([k,l])=>`<button data-pf="${k}" class="pf-${k} ${pfilter===k?'on':''}">${l} (${pc(k)})</button>`).join('')}</div>
    <div id="omsg" class="notice" hidden role="alert"></div>
    ${olist.length?`<p class="pdfrow"><button class="btn ghost" id="vsumpdf" type="button">Export these ${list.length} order${list.length===1?'':'s'} (PDF)</button></p>`:''}
    ${list.length?list.map(o=>`<article class="vorder${o.status==='placed'?' isnew':''}" data-oid="${esc(o.id)}"><div class="ohead"><div><b>${esc(o.order_number)}</b> ${stPill(o.status)} ${window.CC.payPill(o,true)}${o.status==='placed'?' <span class="newtag">NEW</span>':''}<div class="muted">${esc(fdate(o.created_at))} · ${fnice(o)} · ${esc(payText(o))}</div></div><div class="price">${xcd(o.total_xcd)}</div></div>
     <ul class="oitems">${(o.order_items||[]).map(i=>`<li>${i.quantity} × ${esc(i.product_name)} <span class="muted">@ ${xcd(i.unit_price_xcd)}</span></li>`).join('')}</ul>
     ${(Number(o.delivery_fee_xcd)>0||Number(o.discount_xcd)>0||(o.tax_xcd!=null&&Number(o.tax_rate_pct)>0))?`<div class="obreak vbreak">${window.CC.orderLines(o).filter(l=>l.kind!=='total').map(l=>`<div class="oline${l.kind==='info'?' info':''}"><span>${esc(l.k)}</span><span>${l.v<0?'- ':''}${xcd(Math.abs(l.v))}</span></div>`).join('')}</div>`:''}
     <div class="info-grid"><div><b>Customer</b><br>${esc(o.contact_name||'(no name)')}<br><a href="tel:${esc((o.contact_phone||'').replace(/[^0-9+]/g,''))}">${esc(o.contact_phone||'')}</a></div>${o.fulfilment==='delivery'?`<div><b>Deliver to</b><br>${esc(o.delivery_address||'')}</div>`:'<div><b>Pickup</b><br>Customer will collect</div>'}</div>
+    ${window.CC.offpay&&window.CC.offpay.isOff(o)?`<div class="offpay" data-oid="${esc(o.id)}"></div>`:''}
     <details class="notes" data-oid="${esc(o.id)}"><summary>💬 Notes <span class="ncnt"></span><span class="nbx"></span></summary><div class="notes-box"></div></details>
     <div class="oacts"><button class="btn ghost" data-pdf="${esc(o.id)}" type="button">Download PDF</button>${o.payment_status==='paid'&&can('refunds')?`<button class="btn ghost" data-refund="${esc(o.id)}">Refund (test)</button>`:''}${(can('orders_update')?nextSteps(o).filter(([to])=>!(to==='cancelled'&&o.payment_status==='paid'&&!can('refunds'))):[]).map(([to,lbl])=>`<button class="btn ${to==='cancelled'?'ghost':''}" data-o="${o.id}" data-to="${to}">${esc(lbl)}</button>`).join('')||`<span class="muted">${o.payment_status==='paid'&&!can('refunds')&&nextSteps(o).length?'Cancelling a wallet-paid order refunds it: ask the owner or a sub-admin.':'No further actions.'}</span>`}</div></article>`).join(''):`<div class="empty"><div class="empty-ic" aria-hidden="true">📦</div><h3>${olist.length?'No orders with this status':'No orders yet'}</h3><p>${olist.length?'Try another filter.':'New orders from shoppers will appear here.'}</p></div>`}`;
    const badges=()=>{let tot=0;T.querySelectorAll('details.notes').forEach(d=>{const x=nsum[d.dataset.oid]||{total:0,unread:0};tot+=x.unread;
@@ -259,6 +264,8 @@ async vendordash(){
     const rr=await sb.rpc('refund_order',{p_order_id:o.id});await draw();tab='orders';showTab('orders');
     if(rr.error)say($('#omsg'),rr.error.message)});
    T.querySelectorAll('[data-f]').forEach(b=>b.onclick=()=>{ofilter=b.dataset.f;drawOrders()});
+   T.querySelectorAll('[data-pf]').forEach(b=>b.onclick=()=>{pfilter=b.dataset.pf;drawOrders()});
+   if(window.CC.offpay)window.CC.offpay.vendorMount(T,list,{sb,can,onChange:async()=>{await draw();tab='orders';showTab('orders')}});
    const pdfMsg=T.querySelector('#omsg'),noPdf=()=>say(pdfMsg,'The PDF tool did not load. Refresh the page and try again.');
    T.querySelectorAll('[data-pdf]').forEach(b=>b.onclick=()=>{const o=olist.find(x=>x.id===b.dataset.pdf);if(!o)return;if(!window.CC.orderPdf)return noPdf();window.CC.orderPdf.order(sb,o,{role:'vendor',vendorName:vendor.name,vendorLocation:vendor.location,sample:!!vendor.is_sample},b,pdfMsg)});
    const vs=T.querySelector('#vsumpdf');if(vs)vs.onclick=()=>window.CC.orderPdf?window.CC.orderPdf.summary(list,{vendorName:vendor.name,sample:!!vendor.is_sample,filterLabel:ofilter?window.CC.SLABEL[ofilter]:''},vs,pdfMsg):noPdf();
@@ -276,7 +283,7 @@ async vendordash(){
   clearInterval(nTimer);nTimer=setInterval(()=>{if(!document.hidden)noteTick()},window.CC.NOTE_POLL);
   // ---- v1.7 live: new orders and order changes appear without a reload (notification + targeted refetch). Unsent note text is kept.
   const cssq=x=>window.CSS&&CSS.escape?CSS.escape(x):x;
-  const osig=l=>l.map(o=>o.id+':'+o.status+':'+o.payment_status).join(',');let lastO=osig(olist);
+  const osig=l=>l.map(o=>o.id+':'+o.status+':'+o.payment_status+':'+(o.amount_paid_xcd||0)).join(',');let lastO=osig(olist);
   const refreshOrders=async hl=>{
    if(!can('orders_view')||!document.getElementById('tab-orders'))return;
    const r=await sb.from('orders').select('*,order_items(*)').eq('vendor_id',vendor.id).order('created_at',{ascending:false}).limit(200);

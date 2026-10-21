@@ -45,7 +45,7 @@ const TESTBANNER='<div class="testbanner" role="note"><b>TEST MODE</b> - play mo
 const cents=n=>{n=Number(n)||0;const neg=n<0;n=Math.abs(Math.round(n));return (neg?'-':'')+'EC$'+Math.floor(n/100).toLocaleString('en-US')+'.'+String(n%100).padStart(2,'0')};
 const toCents=v=>{const m=String(v==null?'':v).trim().replace(/^EC?\$/i,'').replace(/,/g,'').match(/^(\d{1,7})(?:\.(\d{1,2}))?$/);return m?parseInt(m[1],10)*100+parseInt((m[2]||'0').padEnd(2,'0'),10):null};
 const uuid=()=>(window.crypto&&crypto.randomUUID)?crypto.randomUUID():'k'+Date.now().toString(36)+Math.random().toString(36).slice(2,12);
-const payPill=(o,always)=>!o.payment_status?'':o.payment_status==='paid'?'<span class="pp pp-paid">Paid (test)</span>':o.payment_status==='refunded'?'<span class="pp pp-ref">Refunded (test)</span>':always?'<span class="pp pp-unpaid">Unpaid</span>':'';
+const payPill=(o,always)=>!o.payment_status?'':(o.payment_method&&o.payment_method!=='pay_with_wallet'&&o.payment_status==='unpaid'&&o.offline_status)?(o.offline_status==='paid'?'<span class="pp pp-paid">Paid</span>':o.offline_status==='partial'?'<span class="pp pp-part">Partial · '+cents(Math.round((Number(o.total_xcd)-Number(o.amount_paid_xcd))*100))+' due</span>':always?'<span class="pp pp-unpaid">Unpaid · '+cents(Math.round(Number(o.total_xcd)*100))+' due</span>':''):o.payment_status==='paid'?'<span class="pp pp-paid">Paid (test)</span>':o.payment_status==='refunded'?'<span class="pp pp-ref">Refunded (test)</span>':always?'<span class="pp pp-unpaid">Unpaid</span>':'';
 // where may a vendor move an order next? (mirrors the database trigger; the database is the real gatekeeper)
 function nextSteps(o){
  const d=o.fulfilment==='delivery';
@@ -141,22 +141,22 @@ let payDlgOpen=false;
 function confirmPay(o){if(payDlgOpen)return Promise.resolve(false);payDlgOpen=true;
  return new Promise(res=>{const prev=document.activeElement;const after=o.balanceCents==null?null:Number(o.balanceCents)-Number(o.amountCents);
   const w=document.createElement('div');w.className='paydlg-wrap';w.innerHTML=`<div class="paydlg" role="dialog" aria-modal="true" aria-labelledby="pdT" aria-describedby="pdD">
-   <div class="pd-top"><span class="pd-ic" aria-hidden="true">💳</span><div><span class="pd-k">Confirm payment · TEST MODE</span><h2 id="pdT">${esc(o.title||'Confirm payment')}</h2></div></div>
-   <div id="pdD"><div class="pd-amt"><span>You pay</span><b>${cents(o.amountCents)}</b>${o.vat?`<small>${esc(o.vat)}</small>`:''}</div>
+   <div class="pd-top"><span class="pd-ic" aria-hidden="true">${esc(o.icon||'💳')}</span><div><span class="pd-k">${esc(o.kicker||'Confirm payment · TEST MODE')}</span><h2 id="pdT">${esc(o.title||'Confirm payment')}</h2></div></div>
+   <div id="pdD">${o.amountCents==null?'':`<div class="pd-amt"><span>${esc(o.amountLabel||'You pay')}</span><b>${cents(o.amountCents)}</b>${o.vat?`<small>${esc(o.vat)}</small>`:''}</div>`}${o.bodyHtml||''}
    <dl class="pd-rows">${(o.rows||[]).map(([k,v])=>`<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}
    ${o.balanceCents!=null?`<div><dt>Wallet balance now</dt><dd>${cents(o.balanceCents)}</dd></div><div class="pd-after${after<0?' neg':''}"><dt>Balance after payment</dt><dd>${cents(after)}</dd></div>`:''}</dl>
-   <p class="pd-note">Play money only. No real funds move.</p><p class="pd-err" role="alert" hidden></p></div>
+   <p class="pd-note">${esc(o.note==null?'Play money only. No real funds move.':o.note)}</p><p class="pd-err" role="alert" hidden></p></div>
    <div class="pd-btns"><button type="button" class="btn ghost" data-pd="no">Cancel</button><button type="button" class="btn" data-pd="yes"${after!=null&&after<0?' disabled':''}>${esc(o.confirmText||'Confirm pay')}</button></div></div>`;
   document.body.appendChild(w);document.body.classList.add('pd-open');
   const yes=w.querySelector('[data-pd=yes]'),no=w.querySelector('[data-pd=no]'),er=w.querySelector('.pd-err');let busy=false;
   const close=v=>{if(busy&&!v)return;document.removeEventListener('keydown',key,true);w.remove();document.body.classList.remove('pd-open');payDlgOpen=false;try{prev&&prev.focus()}catch(e){}res(v)};
-  const key=e=>{if(e.key==='Escape'){e.preventDefault();close(false)}else if(e.key==='Tab'){const f=[...w.querySelectorAll('button:not([disabled])')];if(!f.length){e.preventDefault();return}const i=f.indexOf(document.activeElement);if(e.shiftKey&&i<=0){e.preventDefault();f[f.length-1].focus()}else if(!e.shiftKey&&i===f.length-1){e.preventDefault();f[0].focus()}else if(i<0){e.preventDefault();f[0].focus()}}};
+  const key=e=>{if(e.key==='Escape'){e.preventDefault();close(false)}else if(e.key==='Tab'){const f=[...w.querySelectorAll('button:not([disabled]),input,select,textarea')];if(!f.length){e.preventDefault();return}const i=f.indexOf(document.activeElement);if(e.shiftKey&&i<=0){e.preventDefault();f[f.length-1].focus()}else if(!e.shiftKey&&i===f.length-1){e.preventDefault();f[0].focus()}else if(i<0){e.preventDefault();f[0].focus()}}};
   document.addEventListener('keydown',key,true);
   w.addEventListener('mousedown',e=>{if(e.target===w&&!busy)close(false)});no.onclick=()=>close(false);
-  yes.onclick=async()=>{if(busy)return;busy=true;yes.disabled=true;no.disabled=true;const t=yes.textContent;yes.textContent='Paying…';er.hidden=true;
-   let r;try{r=o.onConfirm?await o.onConfirm():null}catch(e){r=(e&&e.message)||'The payment did not go through.'}
+  yes.onclick=async()=>{if(busy)return;busy=true;yes.disabled=true;no.disabled=true;const t=yes.textContent;yes.textContent=o.busyText||'Paying…';er.hidden=true;
+   let r;try{r=o.onConfirm?await o.onConfirm(w):null}catch(e){r=(e&&e.message)||'The payment did not go through.'}
    busy=false;if(r){er.textContent=r;er.hidden=false;yes.textContent=t;yes.disabled=false;no.disabled=false;yes.focus();return}close(true)};
-  (yes.disabled?no:yes).focus()})}
+  (w.querySelector('[data-pd-focus]')||(yes.disabled?no:yes)).focus()})}
 function layout(){
  const live=configured;
  const out=live?authLinks():'<a href="login.html">Sign in</a>';

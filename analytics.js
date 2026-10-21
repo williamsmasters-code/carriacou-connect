@@ -34,21 +34,24 @@ function csvCell(v,numeric){
 const POSRE=/PAY-[A-Z2-9]{4}-[A-Z2-9]{4}/;
 async function taxFor(sb,vendor,rows){const TX={orders:{},pos:{}};if(!sb||!vendor)return TX;
  const refs=[...new Set(rows.filter(r=>r.kind==='order'&&r.ref).map(r=>r.ref))],codes=[...new Set(rows.filter(r=>r.kind==='wallet').map(r=>((r.note||'').match(POSRE)||[])[0]).filter(Boolean))];
- try{for(let i=0;i<refs.length;i+=200){const q=await sb.from('orders').select('order_number,tax_xcd,tax_rate_pct,tax_inclusive').eq('vendor_id',vendor.id).in('order_number',refs.slice(i,i+200));(q.data||[]).forEach(o=>TX.orders[o.order_number]=o)}}catch(e){}
+ try{for(let i=0;i<refs.length;i+=200){const q=await sb.from('orders').select('*').eq('vendor_id',vendor.id).in('order_number',refs.slice(i,i+200));(q.data||[]).forEach(o=>TX.orders[o.order_number]=o)}}catch(e){}
  try{for(let i=0;i<codes.length;i+=200){const q=await sb.from('pay_requests').select('code,tax_cents,tax_rate_pct,tax_inclusive').eq('vendor_id',vendor.id).in('code',codes.slice(i,i+200));(q.data||[]).forEach(c=>TX.pos[c.code]=c)}}catch(e){}
  return TX}
 function vatOf(r,TX){TX=TX||{orders:{},pos:{}};
  if(r.kind==='order'){const o=TX.orders[r.ref];if(!o||o.tax_xcd==null)return ['0.00','',''];return [Number(o.tax_xcd).toFixed(2),o.tax_rate_pct==null?'':String(Number(o.tax_rate_pct)),Number(o.tax_xcd)>0?(o.tax_inclusive?'included':'added'):'']}
  const code=((r.note||'').match(POSRE)||[])[0];if(!code)return ['','',''];const c=TX.pos[code];
  if(!c||c.tax_cents==null)return ['0.00','',''];const sg=Number(r.amount_xcd)<0?-1:1;return [(sg*Number(c.tax_cents)/100).toFixed(2),c.tax_rate_pct==null?'':String(Number(c.tax_rate_pct)),Number(c.tax_cents)>0?(c.tax_inclusive?'included':'added'):'']}
+// v1.13: amount paid / balance due per order (wallet-paid = total; offline = ledger sum; cancelled/refunded = blank)
+function paidOf(r,TX){if(r.kind!=='order')return ['',''];const o=(TX&&TX.orders||{})[r.ref];if(!o||o.status==='cancelled'||o.payment_status==='refunded')return ['',''];const t=Number(o.total_xcd)||0;
+ const p=o.payment_status==='paid'?t:(Number(o.amount_paid_xcd)||0);return [p.toFixed(2),Math.max(0,t-p).toFixed(2)]}
 function toCsv(rows,TX){
- const head=['Date (Grenada time)','Day','Type','Reference','Method / kind','Status','Amount (EC$)','VAT (EC$)','VAT rate %','VAT included or added','Note'];
+ const head=['Date (Grenada time)','Day','Type','Reference','Method / kind','Status','Amount (EC$)','VAT (EC$)','VAT rate %','VAT included or added','Amount paid (EC$)','Balance due (EC$)','Note'];
  const lines=[head.map(h=>csvCell(h)).join(',')];
  rows.forEach(r=>{
   const type=r.kind==='order'?'Order':'Wallet (test)';
   const how=r.kind==='order'?(METHOD[r.method]||r.method):(WTYPE[r.method]||r.method);
   const st=r.kind==='order'?(SLAB()[r.status]||r.status)+(r.payment_status&&r.payment_status!=='unpaid'?' / '+r.payment_status:''):(r.status==='in'?'money in':'money out');
-  lines.push([csvCell(fmtT.format(new Date(r.at))),csvCell(r.day),csvCell(type),csvCell(r.ref),csvCell(how),csvCell(st),csvCell(Number(r.amount_xcd).toFixed(2),true),...(v=>[csvCell(v[0],!!v[0]),csvCell(v[1],!!v[1]),csvCell(v[2])])(vatOf(r,TX)),csvCell(r.note)].join(','));
+  lines.push([csvCell(fmtT.format(new Date(r.at))),csvCell(r.day),csvCell(type),csvCell(r.ref),csvCell(how),csvCell(st),csvCell(Number(r.amount_xcd).toFixed(2),true),...(v=>[csvCell(v[0],!!v[0]),csvCell(v[1],!!v[1]),csvCell(v[2])])(vatOf(r,TX)),...(v=>[csvCell(v[0],!!v[0]),csvCell(v[1],!!v[1])])(paidOf(r,TX)),csvCell(r.note)].join(','));
  });
  return '\ufeff'+lines.join('\r\n')+'\r\n';
 }
