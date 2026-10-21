@@ -135,6 +135,28 @@ function navMenu(){const b=document.getElementById('navBtn'),m=document.getEleme
  m.addEventListener('click',e=>{if(e.target.closest('a'))set(false)});
  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.body.classList.contains('navopen')){set(false);b.focus()}});
  matchMedia('(min-width:901px)').addEventListener('change',e=>{if(e.matches)set(false)})}
+// v1.11: in-page payment confirmation. confirmPay({title,rows:[[label,value]],amountCents,vat:'Includes VAT 15%: EC$6.52',balanceCents,confirmText,onConfirm})
+// Resolves true after onConfirm succeeded (dialog shows "Paying…" and stays locked meanwhile), false on cancel. onConfirm may return an error string to show and stay open.
+let payDlgOpen=false;
+function confirmPay(o){if(payDlgOpen)return Promise.resolve(false);payDlgOpen=true;
+ return new Promise(res=>{const prev=document.activeElement;const after=o.balanceCents==null?null:Number(o.balanceCents)-Number(o.amountCents);
+  const w=document.createElement('div');w.className='paydlg-wrap';w.innerHTML=`<div class="paydlg" role="dialog" aria-modal="true" aria-labelledby="pdT" aria-describedby="pdD">
+   <div class="pd-top"><span class="pd-ic" aria-hidden="true">💳</span><div><span class="pd-k">Confirm payment · TEST MODE</span><h2 id="pdT">${esc(o.title||'Confirm payment')}</h2></div></div>
+   <div id="pdD"><div class="pd-amt"><span>You pay</span><b>${cents(o.amountCents)}</b>${o.vat?`<small>${esc(o.vat)}</small>`:''}</div>
+   <dl class="pd-rows">${(o.rows||[]).map(([k,v])=>`<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}
+   ${o.balanceCents!=null?`<div><dt>Wallet balance now</dt><dd>${cents(o.balanceCents)}</dd></div><div class="pd-after${after<0?' neg':''}"><dt>Balance after payment</dt><dd>${cents(after)}</dd></div>`:''}</dl>
+   <p class="pd-note">Play money only. No real funds move.</p><p class="pd-err" role="alert" hidden></p></div>
+   <div class="pd-btns"><button type="button" class="btn ghost" data-pd="no">Cancel</button><button type="button" class="btn" data-pd="yes"${after!=null&&after<0?' disabled':''}>${esc(o.confirmText||'Confirm pay')}</button></div></div>`;
+  document.body.appendChild(w);document.body.classList.add('pd-open');
+  const yes=w.querySelector('[data-pd=yes]'),no=w.querySelector('[data-pd=no]'),er=w.querySelector('.pd-err');let busy=false;
+  const close=v=>{if(busy&&!v)return;document.removeEventListener('keydown',key,true);w.remove();document.body.classList.remove('pd-open');payDlgOpen=false;try{prev&&prev.focus()}catch(e){}res(v)};
+  const key=e=>{if(e.key==='Escape'){e.preventDefault();close(false)}else if(e.key==='Tab'){const f=[...w.querySelectorAll('button:not([disabled])')];if(!f.length){e.preventDefault();return}const i=f.indexOf(document.activeElement);if(e.shiftKey&&i<=0){e.preventDefault();f[f.length-1].focus()}else if(!e.shiftKey&&i===f.length-1){e.preventDefault();f[0].focus()}else if(i<0){e.preventDefault();f[0].focus()}}};
+  document.addEventListener('keydown',key,true);
+  w.addEventListener('mousedown',e=>{if(e.target===w&&!busy)close(false)});no.onclick=()=>close(false);
+  yes.onclick=async()=>{if(busy)return;busy=true;yes.disabled=true;no.disabled=true;const t=yes.textContent;yes.textContent='Paying…';er.hidden=true;
+   let r;try{r=o.onConfirm?await o.onConfirm():null}catch(e){r=(e&&e.message)||'The payment did not go through.'}
+   busy=false;if(r){er.textContent=r;er.hidden=false;yes.textContent=t;yes.disabled=false;no.disabled=false;yes.focus();return}close(true)};
+  (yes.disabled?no:yes).focus()})}
 function layout(){
  const live=configured;
  const out=live?authLinks():'<a href="login.html">Sign in</a>';
@@ -204,7 +226,7 @@ function orderLines(o){
  if(o.fulfilment==='delivery'||Number(o.delivery_fee_xcd)>0)L.push({k:'Delivery fee'+(o.delivery_area?' ('+o.delivery_area+')':''),v:Number(o.delivery_fee_xcd)||0});
  if(o.tax_xcd!=null&&Number(o.tax_rate_pct)>0)L.push({k:(o.tax_inclusive?'Includes VAT':'VAT')+' ('+Number(o.tax_rate_pct)+'%)',v:Number(o.tax_xcd)||0,kind:o.tax_inclusive?'info':''});
  L.push({k:'Total',v:Number(o.total_xcd)||0,kind:'total'});return L}
-window.CC={setRole,cartBadge,live,orderLines,acctStatus,PCOLS,PCOLS_BASE,TESTBANNER,cents,toCents,uuid,payPill,noteSummary,newBadge,notesWidget,NOTE_POLL,SLABEL,stPill,fdate,fnice,payText,nextSteps,timeline,safeNext,WAVE,configured,client,esc,getUser,layout,TIER_LABEL,TIER_LIMIT,TIERS,lim,ROLE_LABEL,ROLE_PERMS,
+window.CC={confirmPay,setRole,cartBadge,live,orderLines,acctStatus,PCOLS,PCOLS_BASE,TESTBANNER,cents,toCents,uuid,payPill,noteSummary,newBadge,notesWidget,NOTE_POLL,SLABEL,stPill,fdate,fnice,payText,nextSteps,timeline,safeNext,WAVE,configured,client,esc,getUser,layout,TIER_LABEL,TIER_LIMIT,TIERS,lim,ROLE_LABEL,ROLE_PERMS,
  xcd:n=>'EC$'+Number(n).toFixed(2)};
 layout();
 })();

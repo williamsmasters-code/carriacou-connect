@@ -134,7 +134,7 @@ const anyDel=()=>opts?Object.values(plan).some(p=>p.fulfilment==='delivery'):f.f
 const syncUI=()=>{planFrom();$('#adl').hidden=!anyDel();if(opts)Object.keys(byV).forEach(v=>{const a=f.querySelector('[data-area="'+v+'"]');if(a)a.hidden=!(plan[v].fulfilment==='delivery'&&opts[v].delivery_model==='zones'&&(opts[v].delivery_zones||[]).length>0)});
  if(wal){const w=$('#wnote');w.hidden=!payWallet();if(payWallet()){const short=Number(wal.balance_cents)<totalCents;$('#wnt').innerHTML=short?' Your test balance is too low for this order. <a href="wallet.html">Add play money in your wallet</a>, then come back.':' Your order is placed and paid straight away from your test wallet. No real money is used.'}$('#cgo').textContent=payWallet()?'Place order and pay with test wallet':'Place order';const wo=$('#wtot');if(wo)wo.textContent=window.CC.cents(totalCents)}};
 let qseq=0;
-const renderSummary=q=>{totalCents=Math.round(Number(q.grand_total_xcd)*100);
+let lastQ=null;const renderSummary=q=>{lastQ=q;totalCents=Math.round(Number(q.grand_total_xcd)*100);
  $('#sumbox').innerHTML=q.orders.map(x=>{const ls=lines.filter(l=>l.p.vendorId===x.vendor_id);
   return `<div class="osum"><h3>${esc(x.vendor_name)} <span class="ft">· ${x.fulfilment==='delivery'?'delivery':'pickup'}</span></h3>${ls.map(l=>`<div class="oline"><span>${l.q} × ${esc(l.p.name)}</span><span>${xcd(l.p.price*l.q)}</span></div>`).join('')}
   <div class="oline sub"><span>Subtotal</span><span>${xcd(x.subtotal_xcd)}</span></div>
@@ -174,6 +174,11 @@ f.onsubmit=async e=>{e.preventDefault();say('');planFrom();
  if(ph.length<7){say('Please enter a contact phone number the vendor can reach.');$('#cp').focus();return}
  if(ful==='delivery'&&ad.length<5){say('Please enter your delivery address.');$('#ca').focus();return}
  if(payWallet()&&Number(wal.balance_cents)<totalCents){say('Your test wallet balance ('+window.CC.cents(wal.balance_cents)+') is lower than the order total ('+window.CC.cents(totalCents)+'). Add play money in your wallet first.');return}
+ if(payWallet()){const qs=(lastQ&&lastQ.orders)||[];const vat=qs.reduce((t,x)=>t+(Number(x.tax_rate_pct)>0?Math.round(Number(x.tax_xcd)*100):0),0);
+  const go=await window.CC.confirmPay({title:'Place order and pay',amountCents:totalCents,balanceCents:Number(wal.balance_cents),
+   vat:vat>0?(qs.every(x=>x.tax_inclusive||!(Number(x.tax_rate_pct)>0))?'Includes VAT: ':'VAT: ')+window.CC.cents(vat):'',
+   rows:[['Vendor'+(qs.length>1?'s':''),qs.length?qs.map(x=>x.vendor_name).join(', '):Object.keys(byV).map(id=>(DATA.vendors.find(v=>v.id===id)||{name:'Vendor'}).name).join(', ')],['Order number','Given when the order is placed'],['Paid from','Your test wallet']],confirmText:'Confirm pay'});
+  if(!go)return}
  const btn=$('#cgo');btn.disabled=true;btn.textContent='Placing order…';
  const oargs={p_cart:cartJson(),p_fulfilment:ful,p_contact_phone:ph,p_delivery_address:ful==='delivery'?ad:null,p_notes:$('#cnote').value.trim()||null,p_contact_name:$('#cn').value.trim()||null};
  const typed=$('#cpc').value.trim();

@@ -101,9 +101,12 @@ async consumer(){
    const h=document.querySelector('.odetail .ohead');if(h)h.classList.add('flash');
   });
   $('#opdf').onclick=()=>window.CC.orderPdf?window.CC.orderPdf.order(sb,o,{role:'consumer',vendorName:o.vendors&&o.vendors.name,vendorLocation:o.vendors&&o.vendors.location,sample:!!(o.vendors&&o.vendors.is_sample)},$('#opdf'),$('#opdfm')):say($('#opdfm'),'The PDF tool did not load. Refresh the page and try again.');
-  const pb=$('#opay');if(pb)pb.onclick=async()=>{pb.disabled=true;const pr=await sb.rpc('pay_order',{p_order_id:o.id,p_idempotency_key:'ord-'+o.id});
-   if(pr.error){say($('#opm'),/pay_order|schema cache|does not exist/i.test(pr.error.message)?'Wallets are not switched on yet (pay.sql has not been run in Supabase).':pr.error.message);pb.disabled=false;return}
-   detail(o.id)};
+  const pb=$('#opay');if(pb)pb.onclick=async()=>{pb.disabled=true;let bal=null;try{const wr=await sb.rpc('ensure_wallets');const w=!wr.error&&Array.isArray(wr.data)&&wr.data.find(x=>x.kind==='user');if(w)bal=Number(w.balance_cents)}catch(e){}
+   const amt=Math.round(Number(o.total_xcd)*100),tl=window.CC.orderLines(o).find(l=>/VAT/.test(l.k));
+   const okp=await window.CC.confirmPay({title:'Pay order '+o.order_number,amountCents:amt,vat:tl?tl.k+': '+window.CC.cents(Math.round(tl.v*100)):'',balanceCents:bal,
+    rows:[['Order',o.order_number],['Vendor',(o.vendors&&o.vendors.name)||'Vendor'],['Paid from','Your test wallet']],confirmText:'Confirm pay',
+    onConfirm:async()=>{const pr=await sb.rpc('pay_order',{p_order_id:o.id,p_idempotency_key:'ord-'+o.id});if(pr.error)return /pay_order|schema cache|does not exist/i.test(pr.error.message)?'Wallets are not switched on yet (pay.sql has not been run in Supabase).':pr.error.message;return null}});
+   pb.disabled=false;if(okp)detail(o.id)};
   const cb=$('#ocancel');if(cb)cb.onclick=async()=>{if(!confirm('Cancel order '+o.order_number+'?'))return;cb.disabled=true;
    const u=await sb.from('orders').update({status:'cancelled'}).eq('id',o.id).select('id');
    if(u.error||!(u.data&&u.data.length)){say($('#om'),u.error?u.error.message:'The vendor has already confirmed this order, so it can no longer be cancelled.');cb.disabled=false;return}

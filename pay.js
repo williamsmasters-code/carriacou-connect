@@ -92,12 +92,17 @@ async wallet(){
    pendingSend=null;await refresh('Sent '+cents(a)+' to '+(r.data.to_label||'the wallet')+'.')};
   ['sto','samt'].forEach(id=>$('#'+id).addEventListener('input',()=>{pendingSend=null;$('#sconf').hidden=true;$('#sgo').textContent='Review and send'}));
   const fp=$('#fpay');
-  if(fp){fp.onsubmit=async e=>{e.preventDefault();const code=$('#pcode').value.trim(),cf=$('#pconf');if(!code){say(m,'Enter the charge code.');return}say(m,'');
+  if(fp){fp.onsubmit=async e=>{e.preventDefault();if(document.body.classList.contains('pd-open'))return;const code=$('#pcode').value.trim(),cf=$('#pconf');if(!code){say(m,'Enter the charge code.');return}say(m,'');
    if(!prevPay||prevPay.code!==code){const r=await rpc(sb,'charge_preview',{p_code:code});if(r.error){say(m,fixErr(r.error));return}
     if(!r.data.ok){say(m,'We could not find that charge. Check the code.');return}
     if(r.data.status!=='open'){say(m,'This charge is '+r.data.status+'.');return}
     if(Number(r.data.amount_cents)>Number(w.balance_cents)){say(m,'The charge is '+cents(r.data.amount_cents)+' but your test balance is '+cents(w.balance_cents)+'. Add test money first.');return}
-    prevPay={code,d:r.data};cf.hidden=false;cf.className='notice';cf.innerHTML='Pay <b>'+cents(r.data.amount_cents)+'</b> to <b>'+esc(r.data.vendor_name)+'</b>'+(r.data.note?' ('+esc(r.data.note)+')':'')+'?'+(r.data.tax_cents>0?'<br><small>'+(r.data.tax_inclusive?'Includes VAT ':'Plus VAT ')+esc(Number(r.data.tax_rate_pct))+'%: '+cents(r.data.tax_cents)+'</small>':'')+(Array.isArray(r.data.items)&&r.data.items.length?'<ul>'+r.data.items.slice(0,20).map(i=>'<li>'+esc((i.qty||1)+' × '+(i.name||'item'))+'</li>').join('')+'</ul>':'')+'<br>Press the button again to confirm.';$('#pgo').textContent='Confirm and pay (test)';return}
+    const D=r.data;const ok2=await window.CC.confirmPay({title:'Pay '+D.vendor_name,amountCents:Number(D.amount_cents),balanceCents:Number(w.balance_cents),
+     vat:D.tax_cents>0?(D.tax_inclusive?'Includes VAT ':'Plus VAT ')+Number(D.tax_rate_pct)+'%: '+cents(D.tax_cents):'',
+     rows:[['Charge code',D.code],['Vendor',D.vendor_name]].concat(D.note?[['Note',D.note]]:[]).concat(Array.isArray(D.items)&&D.items.length?[['Items',D.items.slice(0,8).map(i=>(i.qty||1)+' × '+(i.name||'item')).join(', ')]]:[]),confirmText:'Confirm pay',
+     onConfirm:async()=>{const r2=await rpc(sb,'pay_charge',{p_code:code,p_idempotency_key:keyPay,p_from_wallet:w.id});if(r2.error)return fixErr(r2.error);if(!r2.data.ok)return 'We could not find that charge.';return null}});
+    if(!ok2){say(m,'Payment cancelled. Nothing was paid.');return}
+    history.replaceState(null,'',location.pathname);await refresh('Paid '+cents(D.amount_cents)+' (test money).');return}
    $('#pgo').disabled=true;const r=await rpc(sb,'pay_charge',{p_code:code,p_idempotency_key:keyPay,p_from_wallet:w.id});
    if(r.error){say(m,fixErr(r.error));$('#pgo').disabled=false;return}
    if(!r.data.ok){say(m,'We could not find that charge.');$('#pgo').disabled=false;return}
