@@ -32,7 +32,7 @@ async signup(){
   const {data,error}=await c.sb.auth.signUp({email:f.email.value.trim(),password:f.password.value,options:{data:{role,full_name:f.fullname.value.trim()},emailRedirectTo:location.origin+location.pathname.replace(/[^/]*$/,'')+'login.html'+(role==='vendor'&&!NX()?'?next=apply.html':NX()?'?next='+encodeURIComponent(NX()):'')}});
   if(error){say(msg,error.message);btn.disabled=false;return}
   if(data.session){location.href=NX()||(role==='vendor'?'apply.html':home({role}))}
-  else{f.hidden=true;say(msg,'Almost done! Check your email and click the confirmation link, then log in. '+(role==='vendor'?'After you log in you will fill in the Sell application.':''),true);msg.insertAdjacentHTML('beforeend',' <a href="login.html'+(NX()?'?next='+encodeURIComponent(NX()):role==='vendor'?'?next=apply.html':'')+'">Go to login</a>')}}
+  else{f.hidden=true;say(msg,'Almost done! Check your email and click the confirmation link, then sign in. '+(role==='vendor'?'After you sign in you will fill in the Sell application.':''),true);msg.insertAdjacentHTML('beforeend',' <a href="login.html'+(NX()?'?next='+encodeURIComponent(NX()):role==='vendor'?'?next=apply.html':'')+'">Go to login</a>')}}
 },
 async login(){
  if(!configured)return offline();
@@ -44,7 +44,7 @@ async login(){
   const {error}=await c.sb.auth.signInWithPassword({email:f.email.value.trim(),password:f.password.value});
   if(error){say(msg,error.message);btn.disabled=false;return}
   const st=await window.CC.acctStatus(c.sb);
-  if(st.suspended){say(msg,st.message+' You are logged in, so you can still browse and manage your profile.');const go=document.createElement('a');go.className='btn alt';go.id='suspgo';go.textContent='Continue';go.href=NX()||'browse.html';msg.insertAdjacentElement('afterend',go);return}
+  if(st.suspended){say(msg,st.message+' You are signed in, so you can still browse and manage your profile.');const go=document.createElement('a');go.className='btn alt';go.id='suspgo';go.textContent='Continue';go.href=NX()||'browse.html';msg.insertAdjacentElement('afterend',go);return}
   const c2=await ctx();location.href=NX()||home(c2.profile)};
  $('#forgot').onclick=async e=>{e.preventDefault();const em=f.email.value.trim();if(!em){say(msg,'Type your email above first.');return}
   const {error}=await c.sb.auth.resetPasswordForEmail(em,{redirectTo:location.origin+location.pathname.replace(/[^/]*$/,'')+'account.html'});

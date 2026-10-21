@@ -562,3 +562,7 @@ header .row>.rolechip{margin-right:auto}@media(max-width:640px){header .row>.rol
 @media(max-width:380px){.nb-t{display:none}.navbtn{padding:.45rem .65rem}.mktbtn{padding:.4rem .7rem!important}.cartlink{font-size:.88rem}}
 
 @media(min-width:901px){nav{gap:.4rem 1.05rem}#authNav{gap:1rem}header .row{gap:.6rem 1rem}}
+/* v1.10.1 no sideways scroll on product pages: long unbreakable titles (e.g. "Computer/Tablet/Phone") and big photos */
+.detail{grid-template-columns:minmax(0,1fr)}@media(min-width:800px){.detail{grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr)}}
+.detail>*{min-width:0;max-width:100%}.detail h1,.detail h2,.card h3,main h1{overflow-wrap:anywhere}
+.gal,.gal-track,.gal-slide{min-width:0;max-width:100%}.gal-slide img,.main-img{max-width:100%;object-fit:cover}

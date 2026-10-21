@@ -65,7 +65,7 @@ async function boot(){
  const sb=await CC.client();if(!sb){R.innerHTML='<h1>Sell on Carriacou Connect</h1><div class="notice">Accounts are not switched on in this preview.</div>';return}
  const user=await CC.getUser();
  const intro='<span class="kicker">For businesses in Carriacou, Petite Martinique and Grenada</span><h1>Sell on Carriacou Connect</h1><p class="lead">Tell us about your business. We review every application before your shop is shown to shoppers. It is free to apply, and plans are in test mode (nothing is billed).</p><ol class="apsteps"><li><b>Apply</b> with your business details</li><li><b>We review</b> and approve, or ask for changes</li><li><b>Set up</b> your products, delivery and tax, then go live</li></ol>';
- if(!user){R.innerHTML=intro+'<div class="notice">To apply you need an account. Your application is linked to it so you can check its status.</div><p class="apcta"><a class="btn" href="signup.html?next=apply.html">Create an account</a> <a class="btn ghost" href="login.html?next=apply.html">Log in</a></p><p class="muted"><a href="vendor-terms.html">Read the Vendor Terms (draft)</a></p>';return}
+ if(!user){R.innerHTML=intro+'<div class="notice">To apply you need an account. Your application is linked to it so you can check its status.</div><p class="apcta"><a class="btn" href="signup.html?next=apply.html">Create an account</a> <a class="btn ghost" href="login.html?next=apply.html">Sign in</a></p><p class="muted"><a href="vendor-terms.html">Read the Vendor Terms (draft)</a></p>';return}
  const draw=async(flash,wantNew)=>{
   const r=await sb.rpc('my_applications');
   if(r.error){R.innerHTML='<h1>Sell on Carriacou Connect</h1><div class="notice err">'+esc(nice(r.error))+'</div>';return}

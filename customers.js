@@ -55,7 +55,7 @@ async function mount(el,sb){
   const diff=h=>{const b=h.details&&h.details.before||{},a=h.details&&h.details.after||{};return Object.keys(a).map(k=>`${esc(fld[k]||k)}: <s>${esc(b[k]==null?'(blank)':b[k])}</s> → <b>${esc(a[k]==null?'(blank)':a[k])}</b>`).join('; ')};
   el.innerHTML=`<p><button class="btn ghost sm" id="cu-back">← All customers</button></p><div id="cu-msg" role="alert">${flash?`<div class="notice ok">${esc(flash)}</div>`:''}</div>
   <div class="cu-head"><h2>${esc(d.name||'(no name)')} ${chip(d.status)}</h2><p class="muted">${esc(ROLE[d.role]||d.role)} · joined ${esc(CC.fdate(d.joined))}</p></div>
-  ${sus?`<div class="notice err">Suspended${d.suspended_at?' on '+esc(CC.fdate(d.suspended_at)):''}. Reason: <b>${esc(d.reason||'')}</b>. This person cannot place orders, check out or use their wallet. They will see a message when they log in or check out.</div>`:''}
+  ${sus?`<div class="notice err">Suspended${d.suspended_at?' on '+esc(CC.fdate(d.suspended_at)):''}. Reason: <b>${esc(d.reason||'')}</b>. This person cannot place orders, check out or use their wallet. They will see a message when they sign in or check out.</div>`:''}
   <div class="kpis cu-kpis"><div class="kpi"><span>Orders</span><b>${o.count}</b><small>${o.cancelled} cancelled</small></div><div class="kpi"><span>Order value</span><b>${esc(money(o.sales_xcd))}</b><small>not cancelled or refunded</small></div><div class="kpi"><span>Wallet (play money)</span><b>${w.exists?esc(CC.cents(w.balance_cents)):'None'}</b><small>read-only</small></div><div class="kpi"><span>Last order</span><b class="cu-sm">${o.last_order_at?esc(CC.fdate(o.last_order_at)):'—'}</b></div></div>
   <div class="cu-grid">
   <section class="cu-card"><h3>Profile</h3><form id="cu-edit" novalidate>
@@ -70,7 +70,7 @@ async function mount(el,sb){
    <p>${sus?'This account is <b>suspended</b>.':'This account is <b>active</b>.'}</p>
    <form id="cu-status" novalidate><label>${sus?'Reason for reactivating':'Reason for suspending'}<input id="s-reason" maxlength="300" required placeholder="${sus?'e.g. Appeal accepted':'e.g. Repeated fake orders'}"></label>
    <button class="btn ${sus?'':'danger'}" type="submit">${sus?'Reactivate account':'Suspend account'}</button></form>
-   <p class="muted">Suspending stops new orders, checkout, wallet payments, transfers and top-ups straight away, even if they are already logged in. Money owed back to them (refunds) still goes through. Nothing is deleted.</p>
+   <p class="muted">Suspending stops new orders, checkout, wallet payments, transfers and top-ups straight away, even if they are already signed in. Money owed back to them (refunds) still goes through. Nothing is deleted.</p>
    <h3>Role</h3><form id="cu-role-f" novalidate><label>Account type<select id="r-role"><option value="consumer"${d.role==='consumer'?' selected':''}>Customer</option><option value="vendor"${d.role==='vendor'?' selected':''}>Vendor account</option></select></label>
    <label>Reason<input id="r-reason" maxlength="300" required placeholder="e.g. Opening a shop"></label><button class="btn ghost" type="submit">Change role</button></form>
    <p class="muted">${d.businesses.length?'Owns: '+d.businesses.map(b=>esc(b.name)).join(', ')+'. Hand over or remove the business before making them a customer.':'Admin rights cannot be given from this page.'}</p></section></div>

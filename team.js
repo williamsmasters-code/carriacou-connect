@@ -50,7 +50,7 @@ function mount(box,o){
    <button class="btn" ${full?'disabled':''}>Create invite link</button>${full?`<p class="err-text">All seats on your ${esc(T.name)} plan are used. Remove someone or <a href="tiers.html">upgrade</a>.</p>`:''}
    <p class="muted">No email is sent. You get a link and a code to share yourself. It only works for that email address, once, for 7 days. The person signs up or logs in with that email first.</p></form>`;
  }
- const mailto=(i,link)=>'mailto:'+encodeURIComponent(i.email).replace(/%40/g,'@')+'?subject='+encodeURIComponent('Join '+vendor.name+' on Carriacou Connect')+'&body='+encodeURIComponent('Hello,\n\nYou are invited to join '+vendor.name+' on Carriacou Connect as '+(CC.ROLE_LABEL[i.role]||i.role)+'.\n\n1. Log in or sign up with THIS email address: '+i.email+'\n2. Open this link: '+link+'\n   (or enter the code '+i.code+' on the Accept invite page)\n\nThe invite works once and expires '+fdate(i.expires_at)+'.\n');
+ const mailto=(i,link)=>'mailto:'+encodeURIComponent(i.email).replace(/%40/g,'@')+'?subject='+encodeURIComponent('Join '+vendor.name+' on Carriacou Connect')+'&body='+encodeURIComponent('Hello,\n\nYou are invited to join '+vendor.name+' on Carriacou Connect as '+(CC.ROLE_LABEL[i.role]||i.role)+'.\n\n1. Sign in or sign up with THIS email address: '+i.email+'\n2. Open this link: '+link+'\n   (or enter the code '+i.code+' on the Accept invite page)\n\nThe invite works once and expires '+fdate(i.expires_at)+'.\n');
  function inviteBox(i){
   const link=location.origin+location.pathname.replace(/[^/]*$/,'')+'accept-invite.html#code='+encodeURIComponent(i.code);
   return `<div class="invbox" role="status"><b>Invite ready for ${esc(i.email)}</b> as ${esc(CC.ROLE_LABEL[i.role])}

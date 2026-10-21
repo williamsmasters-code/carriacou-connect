@@ -53,7 +53,7 @@ function mount(box,o){
   </div>
   <div id="cdex" class="notice" role="note"></div>
   <button class="btn" id="cdsave" type="submit">Save settings</button>
-  <p class="muted"><small>${S.saved?'Settings saved '+esc(CC.fdate(S.updated_at))+'. ':'Nothing saved yet: customers currently see free pickup and free delivery and no tax. '}Changes are logged in your Team activity log. Summary for your records, not tax advice: check rates with the Inland Revenue Division.</small></p>
+  <p class="muted"><small>${S.saved?'Settings saved '+esc(CC.fdate(S.updated_at))+'. ':'Nothing saved yet: customers currently see free pickup and free delivery and no tax. '}Changes are signed in your Team activity log. Summary for your records, not tax advice: check rates with the Inland Revenue Division.</small></p>
   </form>`;
   wire();sync();
  }
