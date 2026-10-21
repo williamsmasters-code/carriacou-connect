@@ -29,14 +29,26 @@ function csvCell(v,numeric){
  if(/^[=+\-@\t\r\u0009\u000d\uff1d\uff0b\uff0d\uff20]/.test(s.replace(/^[ \u00a0]+/,'')))s="'"+s;      // =, +, -, @, tab, CR (and full-width forms) after optional spaces
  return '"'+s.replace(/"/g,'""')+'"';
 }
-function toCsv(rows){
- const head=['Date (Grenada time)','Day','Type','Reference','Method / kind','Status','Amount (EC$)','Note'];
+// v1.10.2: VAT columns from the order / POS-charge snapshots (TX: {orders:{CC-...:{tax_xcd,tax_rate_pct,tax_inclusive}}, pos:{PAY-...:{tax_cents,...}}}).
+// Older orders/charges without a snapshot: VAT 0.00 and blank rate. Wallet order payments repeat an order already listed: VAT left blank (no double count).
+const POSRE=/PAY-[A-Z2-9]{4}-[A-Z2-9]{4}/;
+async function taxFor(sb,vendor,rows){const TX={orders:{},pos:{}};if(!sb||!vendor)return TX;
+ const refs=[...new Set(rows.filter(r=>r.kind==='order'&&r.ref).map(r=>r.ref))],codes=[...new Set(rows.filter(r=>r.kind==='wallet').map(r=>((r.note||'').match(POSRE)||[])[0]).filter(Boolean))];
+ try{for(let i=0;i<refs.length;i+=200){const q=await sb.from('orders').select('order_number,tax_xcd,tax_rate_pct,tax_inclusive').eq('vendor_id',vendor.id).in('order_number',refs.slice(i,i+200));(q.data||[]).forEach(o=>TX.orders[o.order_number]=o)}}catch(e){}
+ try{for(let i=0;i<codes.length;i+=200){const q=await sb.from('pay_requests').select('code,tax_cents,tax_rate_pct,tax_inclusive').eq('vendor_id',vendor.id).in('code',codes.slice(i,i+200));(q.data||[]).forEach(c=>TX.pos[c.code]=c)}}catch(e){}
+ return TX}
+function vatOf(r,TX){TX=TX||{orders:{},pos:{}};
+ if(r.kind==='order'){const o=TX.orders[r.ref];if(!o||o.tax_xcd==null)return ['0.00','',''];return [Number(o.tax_xcd).toFixed(2),o.tax_rate_pct==null?'':String(Number(o.tax_rate_pct)),Number(o.tax_xcd)>0?(o.tax_inclusive?'included':'added'):'']}
+ const code=((r.note||'').match(POSRE)||[])[0];if(!code)return ['','',''];const c=TX.pos[code];
+ if(!c||c.tax_cents==null)return ['0.00','',''];const sg=Number(r.amount_xcd)<0?-1:1;return [(sg*Number(c.tax_cents)/100).toFixed(2),c.tax_rate_pct==null?'':String(Number(c.tax_rate_pct)),Number(c.tax_cents)>0?(c.tax_inclusive?'included':'added'):'']}
+function toCsv(rows,TX){
+ const head=['Date (Grenada time)','Day','Type','Reference','Method / kind','Status','Amount (EC$)','VAT (EC$)','VAT rate %','VAT included or added','Note'];
  const lines=[head.map(h=>csvCell(h)).join(',')];
  rows.forEach(r=>{
   const type=r.kind==='order'?'Order':'Wallet (test)';
   const how=r.kind==='order'?(METHOD[r.method]||r.method):(WTYPE[r.method]||r.method);
   const st=r.kind==='order'?(SLAB()[r.status]||r.status)+(r.payment_status&&r.payment_status!=='unpaid'?' / '+r.payment_status:''):(r.status==='in'?'money in':'money out');
-  lines.push([csvCell(fmtT.format(new Date(r.at))),csvCell(r.day),csvCell(type),csvCell(r.ref),csvCell(how),csvCell(st),csvCell(Number(r.amount_xcd).toFixed(2),true),csvCell(r.note)].join(','));
+  lines.push([csvCell(fmtT.format(new Date(r.at))),csvCell(r.day),csvCell(type),csvCell(r.ref),csvCell(how),csvCell(st),csvCell(Number(r.amount_xcd).toFixed(2),true),...(v=>[csvCell(v[0],!!v[0]),csvCell(v[1],!!v[1]),csvCell(v[2])])(vatOf(r,TX)),csvCell(r.note)].join(','));
  });
  return '\ufeff'+lines.join('\r\n')+'\r\n';
 }
@@ -116,7 +128,7 @@ async function mount(el,o){
   wire();
   {const sx=document.createElement('div');sx.id='anstd';box.appendChild(sx);if(CC.analyticsStd)CC.analyticsStd.mount(sx,{sb,vendor,plan:o.plan,isOwner:o.isOwner,perms:o.perms||[],from:state.from,to:state.to,onUpgrade:o.onUpgrade,onEdit});else sx.innerHTML='<div class="notice err">Standard analytics did not load. Refresh the page.</div>'}
   {const ax=document.createElement('div');ax.id='anadv';box.appendChild(ax);if(CC.analyticsAdv)CC.analyticsAdv.mount(ax,{sb,vendor,plan:o.plan,isOwner:o.isOwner,perms:o.perms||[],from:state.from,to:state.to,onUpgrade:o.onUpgrade});else ax.innerHTML='<div class="notice err">Advanced analytics did not load. Refresh the page.</div>'}
-  const cb=box.querySelector('#ancsv');if(cb)cb.onclick=()=>download('CC-transactions-'+state.from+'_to_'+state.to+'.csv',toCsv(rows));
+  const cb=box.querySelector('#ancsv');if(cb)cb.onclick=async()=>{cb.disabled=true;let TX;try{TX=await taxFor(sb,vendor,rows)}finally{cb.disabled=false}download('CC-transactions-'+state.from+'_to_'+state.to+'.csv',toCsv(rows,TX))};
   box.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>onEdit&&onEdit(b.dataset.edit));
  }
  function wire(){

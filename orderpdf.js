@@ -133,6 +133,8 @@ async function buildOrder(o,ex){
  return {doc:d,filename:fname(on)};
 }
 
+// VAT cell for summary tables (v1.10.2): "6.52 incl. 15%" / "5.00 + 15%"; no snapshot or no VAT -> "-".
+function vatCell(o){if(o.tax_xcd==null||!(Number(o.tax_xcd)>0))return '-';return (Number(o.tax_xcd)||0).toFixed(2)+(o.tax_inclusive?' incl ':' added ')+Number(o.tax_rate_pct)+'%'}
 // ---- vendor summary of the orders currently shown ----
 async function buildSummary(list,ex){
  const JsPDF=await lib();
@@ -140,11 +142,14 @@ async function buildSummary(list,ex){
  header(P,'Vendor order summary',null);
  P.font(14,'bold',P.NAVY);d.text(clean(ex.vendorName||'Vendor'),M,P.S.y+8);P.S.y+=20;
  P.font(9,'normal',P.GREY);d.text(clean(list.length+' order'+(list.length===1?'':'s')+(ex.filterLabel?' - filter: '+ex.filterLabel:'')),M,P.S.y+8);P.S.y+=20;
- const rows=list.map(o=>[o.order_number,dt(o.created_at),CC.SLABEL[o.status]||o.status,(o.contact_name||'-'),(o.fulfilment==='delivery'?'Delivery':'Pickup'),(isWallet(o)?'Wallet (TEST) ':'')+payStatusLabel(o),money(o.total_xcd)]);
- if(!rows.length)rows.push(['(no orders)','','','','','','']);
- table(P,[{t:'Order',w:.13},{t:'Date',w:.17},{t:'Status',w:.12},{t:'Customer',w:.19},{t:'Fulfil.',w:.1},{t:'Payment',w:.14},{t:'Total',w:.15,align:'right'}],rows,{size:8});
+ const rows=list.map(o=>[o.order_number,dt(o.created_at),CC.SLABEL[o.status]||o.status,(o.contact_name||'-'),(o.fulfilment==='delivery'?'Delivery':'Pickup'),(isWallet(o)?'Wallet (TEST) ':'')+payStatusLabel(o),vatCell(o),money(o.total_xcd)]);
+ if(!rows.length)rows.push(['(no orders)','','','','','','','']);
+ table(P,[{t:'Order',w:.12},{t:'Date',w:.15},{t:'Status',w:.11},{t:'Customer',w:.14},{t:'Fulfil.',w:.08},{t:'Payment',w:.11},{t:'VAT (EC$)',w:.16,align:'right'},{t:'Total',w:.13,align:'right'}],rows,{size:8});
  const live=list.filter(o=>o.status!=='cancelled');const sum=live.reduce((a,o)=>a+Math.round((Number(o.total_xcd)||0)*100),0);
- P.need(40);P.S.y+=6;P.font(11,'bold',P.NAVY);d.text('Total of non-cancelled orders (XCD)',M,P.S.y+11);d.text(CC.cents(sum),M+CW,P.S.y+11,{align:'right'});P.S.y+=18;
+ P.need(60);P.S.y+=6;P.font(11,'bold',P.NAVY);d.text('Total of non-cancelled orders (XCD)',M,P.S.y+11);d.text(CC.cents(sum),M+CW,P.S.y+11,{align:'right'});P.S.y+=18;
+ const vIn=live.reduce((a,o)=>a+(Number(o.tax_xcd)>0&&o.tax_inclusive?Math.round(Number(o.tax_xcd)*100):0),0),vOn=live.reduce((a,o)=>a+(Number(o.tax_xcd)>0&&!o.tax_inclusive?Math.round(Number(o.tax_xcd)*100):0),0);
+ P.font(10,'bold',P.NAVY);d.text('VAT total of non-cancelled orders (XCD)',M,P.S.y+10);d.text(CC.cents(vIn+vOn),M+CW,P.S.y+10,{align:'right'});P.S.y+=14;
+ P.font(8,'normal',P.GREY);d.text(clean('Included in prices: '+CC.cents(vIn)+' · added on top: '+CC.cents(vOn)+(live.some(o=>o.tax_xcd==null)?' · orders placed before tax was recorded count as 0':'')),M,P.S.y+8);P.S.y+=12;
  P.font(8,'normal',P.GREY);d.text(clean(live.length+' of '+list.length+' orders counted; cancelled orders excluded.'),M,P.S.y+8);
  const test=list.some(isWallet);
  footers(P,ex.sample||test);
