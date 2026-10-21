@@ -127,6 +127,14 @@ function setRole(r,shop){const b=document.body;b.className=b.className.replace(/
  const h=document.getElementById('roleHero');if(h&&shop&&b.dataset.page==='vendordash'){const s=h.querySelector('.rh-shop');if(s)s.textContent=shop}}
 function roleHero(){const pg=document.body.dataset.page,H=HERO[pg];if(!H)return;const h1=document.querySelector('main>h1');if(!h1)return;
  h1.insertAdjacentHTML('beforebegin','<section class="rolehero rh-'+pg+'" id="roleHero"><div class="rh-ic" aria-hidden="true">'+H.i+'</div><div><span class="rh-k">'+H.k+'</span><h1>'+H.t+'</h1><p>'+H.s+' <b class="rh-shop"></b></p>'+(pg==='consumer'?'<a class="rh-sell" href="apply.html">Have something to sell? Become a vendor →</a>':'')+'</div></section>');h1.remove()}
+// v1.10: phone menu. Up to 900px the role links live in a sheet opened by the Menu button; Marketplace, Cart and bell stay in the bar.
+function navMenu(){const b=document.getElementById('navBtn'),m=document.getElementById('navMore'),sc=document.getElementById('navScrim');if(!b||!m)return;
+ if(sc)document.body.appendChild(sc);
+ const set=o=>{document.body.classList.toggle('navopen',o);b.setAttribute('aria-expanded',o?'true':'false');if(sc)sc.hidden=!o;if(o){const h=document.querySelector('header');if(h)m.style.top=Math.max(8,h.getBoundingClientRect().bottom+8)+'px';const f=m.querySelector('a');if(f)f.focus()}};
+ b.onclick=()=>set(!document.body.classList.contains('navopen'));if(sc)sc.onclick=()=>set(false);
+ m.addEventListener('click',e=>{if(e.target.closest('a'))set(false)});
+ document.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.body.classList.contains('navopen')){set(false);b.focus()}});
+ matchMedia('(min-width:901px)').addEventListener('change',e=>{if(e.matches)set(false)})}
 function layout(){
  const live=configured;
  const out=live?authLinks():'<a href="login.html">Sign in</a>';
@@ -134,8 +142,8 @@ function layout(){
  if(!document.querySelector('link[data-cc-fonts]')){const l=document.createElement('link');l.rel='stylesheet';l.dataset.ccFonts='1';l.href='https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,600;0,9..144,800;1,9..144,600&family=Plus+Jakarta+Sans:wght@400;500;700;800&display=swap';document.head.appendChild(l)}
  const m=document.querySelector('main');if(m)m.id='main';
  const home=document.body.dataset.page==='home';
- document.body.insertAdjacentHTML('afterbegin','<a class="skip" href="#main">Skip to content</a><div class="banner">'+msg+'</div><header><div class="row"><a class="logo" href="index.html">'+LOGO+'<div>Carriacou <span>Connect</span><small>Marketplace</small></div></a><span id="roleChip" class="rolechip rc-guest">Guest</span><nav aria-label="Main"><a class="mktbtn'+(/browse\.html$/.test(location.pathname)||document.body.dataset.page==='browse'?' on" aria-current="page':'')+'" href="browse.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9l1.5-5h15L21 9M3 9h18M3 9v1a3 3 0 006 0 3 3 0 006 0 3 3 0 006 0V9M5 13v7h14v-7"/></svg>Marketplace</a><span id="roleNav"><a href="tiers.html">Plans</a><a href="apply.html">Sell</a></span><a class="cartlink" href="cart.html">Cart<b id="cartCount">0</b></a><span id="authNav">'+out+'</span></nav></div></header>');
- roleHero();setRole('guest');cartBadge();if(!window.CC_CART_WIRED){window.CC_CART_WIRED=1;addEventListener('storage',e=>{if(!e.key||e.key==='cconnect_cart_v1')cartBadge()});addEventListener('pageshow',cartBadge)}
+ document.body.insertAdjacentHTML('afterbegin','<a class="skip" href="#main">Skip to content</a><div class="banner">'+msg+'</div><header><div class="row"><a class="logo" href="index.html">'+LOGO+'<div>Carriacou <span>Connect</span><small>Marketplace</small></div></a><span id="roleChip" class="rolechip rc-guest">Guest</span><nav aria-label="Main"><a class="mktbtn'+(/browse\.html$/.test(location.pathname)||document.body.dataset.page==='browse'?' on" aria-current="page':'')+'" href="browse.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9l1.5-5h15L21 9M3 9h18M3 9v1a3 3 0 006 0 3 3 0 006 0 3 3 0 006 0V9M5 13v7h14v-7"/></svg>Marketplace</a><a class="cartlink" href="cart.html">Cart<b id="cartCount">0</b></a><span id="bellWrap"></span><button type="button" class="navbtn" id="navBtn" aria-expanded="false" aria-controls="navMore"><span class="nb-bars" aria-hidden="true"><i></i><i></i><i></i></span><span class="nb-t">Menu</span></button><div id="navMore" class="navmore"><span id="roleNav"><a href="tiers.html">Plans</a><a href="apply.html">Sell</a></span><span id="authNav">'+out+'</span></div></nav><div class="navscrim" id="navScrim" hidden></div></div></header>');
+ navMenu();roleHero();setRole('guest');cartBadge();if(!window.CC_CART_WIRED){window.CC_CART_WIRED=1;addEventListener('storage',e=>{if(!e.key||e.key==='cconnect_cart_v1')cartBadge()});addEventListener('pageshow',cartBadge)}
  const hasBand=document.querySelector('.band');
  document.body.insertAdjacentHTML('beforeend',(hasBand?'':WAVE('#04202c',false).replace('class="wave-sep"','class="wave-sep foot-wave"'))+'<footer><b>Carriacou Connect®</b><br>by Williams’ Tech · Marketplace v1.7 preview<br><a href="apply.html">Sell on Carriacou Connect</a> · <a href="vendor-terms.html">Vendor terms (draft)</a><br>Sea, reef, spice and sail: made on Carriacou.</footer>');
  if(live)authNav();
@@ -164,10 +172,11 @@ const RKEY='cc_role_v1';
 const DASH={customer:['dashboard-consumer.html','My orders'],vendor:['dashboard-vendor.html','Vendor studio'],staff:['dashboard-vendor.html','Team studio'],admin:['admin.html','Admin']};
 function paintNav(r,shop){const el=document.getElementById('authNav'),rn=document.getElementById('roleNav');if(!el)return;
  setRole(r,shop);
- if(r==='guest'){if(rn)rn.innerHTML='<a href="tiers.html">Plans</a><a href="apply.html">Sell</a>';el.innerHTML=authLinks();return}
+ if(r==='guest'){const bw=document.getElementById('bellWrap');if(bw)bw.innerHTML='';if(rn)rn.innerHTML='<a href="tiers.html">Plans</a><a href="apply.html">Sell</a>';el.innerHTML=authLinks();return}
  if(rn)rn.innerHTML=r==='vendor'?'<a href="tiers.html">Plans</a>':'';
  const d=DASH[r],here=location.pathname.split('/').pop()===d[0];
- el.innerHTML='<span id="ccBell" class="bellslot"></span><a class="dashlink'+(here?' on':'')+'" href="'+d[0]+'">'+d[1]+'</a>'+(r==='admin'||r==='staff'?'<a href="dashboard-consumer.html">My orders</a>':'')+'<a href="wallet.html">Wallet</a><a href="account.html">Account</a><a class="pill" href="#" id="logoutLink">Log out</a>'}
+ const bw=document.getElementById('bellWrap');if(bw&&!document.getElementById('ccBell'))bw.innerHTML='<span id="ccBell" class="bellslot"></span>';
+ el.innerHTML='<a class="dashlink'+(here?' on':'')+'" href="'+d[0]+'">'+d[1]+'</a>'+(r==='admin'||r==='staff'?'<a href="dashboard-consumer.html">My orders</a>':'')+'<a href="wallet.html">Wallet</a><a href="account.html">Account</a><a class="pill" href="#" id="logoutLink">Log out</a>'}
 document.addEventListener('click',async e=>{const a=e.target.closest&&e.target.closest('#logoutLink');if(!a)return;e.preventDefault();try{localStorage.removeItem(RKEY)}catch(x){}const sb=await client();if(sb)await sb.auth.signOut();location.href='index.html'});
 async function authNav(){
  let cached=null;try{cached=JSON.parse(localStorage.getItem(RKEY))}catch(e){}

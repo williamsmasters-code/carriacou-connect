@@ -531,9 +531,34 @@ body[class*=role-] .dtabs button.on{background:var(--ra);color:#fff}
 #roleNav{display:contents}#roleNav>a{color:#e8f6f6;text-decoration:none;font-weight:600;font-size:.95rem;padding:.35rem .1rem}#roleNav>a:hover{color:#fff}
 #authNav>a.dashlink{color:#fff;font-weight:800}#authNav>a.dashlink.on::after{transform:scaleX(1);background:var(--ra2)}
 .rh-sell{display:inline-block;margin-top:.55rem;font-size:.85rem;font-weight:700;color:#fff;opacity:.88;text-decoration:underline;text-underline-offset:3px}.rh-sell:hover{color:#fff;opacity:1}
-@media(max-width:640px){header{padding:.4rem .5rem}header .row{gap:.35rem;justify-content:flex-start}.logo{font-size:1.05rem}.logo svg{width:28px;height:28px}
- nav{flex-wrap:nowrap;overflow-x:auto;justify-content:flex-start;gap:.9rem;width:100%;scrollbar-width:none;padding-bottom:.15rem;-webkit-mask-image:linear-gradient(90deg,#000 88%,#0000)}nav::-webkit-scrollbar{display:none}
- nav a,#authNav>*{white-space:nowrap;flex:none}#authNav{display:flex;align-items:center;gap:.9rem;margin-left:0;flex:none}
- .rolechip{margin-left:auto;font-size:.72rem;padding:.22rem .6rem}.mktbtn{padding:.35rem .8rem!important}#authNav .pill{padding:.35rem .9rem}}
 
 header .row>.rolechip{margin-right:auto}@media(max-width:640px){header .row>.rolechip{margin-right:0}}
+
+/* v1.10 nav: desktop inline, phone sheet */
+.navmore{display:contents}#roleNav>a{order:1}.cartlink{order:2}#bellWrap{order:3;display:inline-flex}#authNav{order:4;display:inline-flex;align-items:center;gap:1.2rem}
+.navbtn{display:none}.navscrim{display:none}
+@media(max-width:900px){
+ header{padding:.45rem .6rem}header .row{gap:.4rem .5rem;justify-content:space-between}.logo{font-size:1.02rem}.logo svg{width:28px;height:28px}.logo small{display:none}
+ .rolechip{font-size:.72rem;padding:.22rem .6rem}.rolechip small{display:none}
+ nav{width:100%;flex-wrap:nowrap;justify-content:space-between;gap:.5rem}
+ .mktbtn{padding:.4rem .85rem!important;font-size:.92rem}.cartlink{font-size:.92rem}
+ .navbtn{order:5;display:inline-flex;align-items:center;gap:.45rem;margin-left:auto;background:#ffffff1a;color:#fff;border:1.5px solid #ffffff4d;border-radius:99px;padding:.38rem .8rem;font:700 .9rem var(--body);cursor:pointer}
+ .navbtn:hover,body.navopen .navbtn{background:var(--ra2);border-color:var(--ra2)}
+ .nb-bars{display:grid;gap:3px}.nb-bars i{display:block;width:16px;height:2px;border-radius:2px;background:currentColor;transition:transform .25s,opacity .2s}
+ body.navopen .nb-bars i:nth-child(1){transform:translateY(5px) rotate(45deg)}body.navopen .nb-bars i:nth-child(2){opacity:0}body.navopen .nb-bars i:nth-child(3){transform:translateY(-5px) rotate(-45deg)}
+ .navmore{display:none;position:fixed;z-index:60;left:.6rem;right:.6rem;top:7rem;max-height:calc(100vh - 9rem);overflow:auto;padding:1rem;border-radius:24px;
+  background:linear-gradient(160deg,#04202c,color-mix(in srgb,var(--ra) 55%,#04202c));border:1.5px solid #ffffff2e;box-shadow:0 24px 50px -12px #000a;
+  grid-template-columns:1fr 1fr;gap:.55rem}
+ body.navopen .navmore{display:grid;animation:navin .22s cubic-bezier(.2,.8,.2,1)}
+ @keyframes navin{from{opacity:0;transform:translateY(-8px) scale(.98)}to{opacity:1;transform:none}}
+ .navmore #roleNav,.navmore #authNav{display:contents}
+ .navmore a{display:flex!important;align-items:center;justify-content:center;min-height:2.9rem;padding:.55rem .7rem!important;border-radius:16px;background:#ffffff14;border:1px solid #ffffff26;color:#fff!important;font-weight:700;text-align:center;text-decoration:none}
+ .navmore a::after{display:none}.navmore a:hover{background:#ffffff26}
+ body.navopen header{z-index:70}.navmore a{order:2}
+ .navmore a.dashlink{order:0;grid-column:1/-1;background:linear-gradient(135deg,var(--ra),var(--ra2));border-color:transparent;font-size:1.02rem}
+ .navmore a.pill{order:9;grid-column:1/-1;background:linear-gradient(135deg,var(--gold),#ff9d4a);color:var(--abyss)!important;border:0}
+ .navscrim:not([hidden]){display:block;position:fixed;inset:0;z-index:55;background:#04202c66;-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px)}
+}
+@media(max-width:380px){.nb-t{display:none}.navbtn{padding:.45rem .65rem}.mktbtn{padding:.4rem .7rem!important}.cartlink{font-size:.88rem}}
+
+@media(min-width:901px){nav{gap:.4rem 1.05rem}#authNav{gap:1rem}header .row{gap:.6rem 1rem}}
