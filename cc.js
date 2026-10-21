@@ -116,7 +116,7 @@ function notesWidget(box,o,role,opts){
 function safeNext(){const n=new URLSearchParams(location.search).get('next')||'';return /^[a-z0-9-]+\.html(\?[a-z0-9_=&.-]*)?$/i.test(n)?n:''}
 const LOGO='<svg viewBox="0 0 48 48" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f4b942"/><stop offset="1" stop-color="#ff6b4a"/></linearGradient></defs><circle cx="24" cy="24" r="23" fill="#0b7285"/><circle cx="33" cy="15" r="6" fill="url(#lg)"/><path d="M24 9 L36 31 H24Z M22 13 L11 31 H22Z" fill="#fff"/><path d="M8 34h32l-4 6H12z" fill="#f4b942"/><path d="M4 41q5-3 10 0t10 0 10 0 10 0" stroke="#9fe3dc" stroke-width="2" fill="none"/></svg>';
 const WAVE=(fill,flip)=>'<svg class="wave-sep" viewBox="0 0 1440 90" preserveAspectRatio="none" aria-hidden="true" style="height:clamp(34px,6vw,80px)'+(flip?';transform:scaleY(-1)':'')+'"><path fill="'+fill+'" d="M0 50 C180 100 320 0 540 40 S900 100 1100 40 1340 10 1440 50 V90 H0Z"/></svg>';
-function authLinks(){return '<a href="login.html">Log in</a><a class="pill" href="signup.html">Sign up</a>'}
+function authLinks(){return '<a href="login.html">Sign in</a><a class="pill" href="signup.html">Sign up</a>'}
 // v1.7.1: every page's header shows the same cart count (cart lives in localStorage key cconnect_cart_v1, same for guests and logged-in users)
 function cartBadge(){let n=0;try{const c=JSON.parse(localStorage.getItem('cconnect_cart_v1'))||{};n=Object.values(c).reduce((a,b)=>a+(Number(b)||0),0)}catch(e){}const el=document.getElementById('cartCount');if(el){el.textContent=n;el.setAttribute('aria-label',n+' item'+(n===1?'':'s')+' in cart')}}
 // v1.8: role identity. body.role-* drives accent colours; header chip names the role; dashboards get a role hero.
@@ -126,15 +126,15 @@ function setRole(r,shop){const b=document.body;b.className=b.className.replace(/
  const c=document.getElementById('roleChip');if(c){const u=ROLEUI[r]||ROLEUI.guest;c.className='rolechip rc-'+r;c.innerHTML='<i aria-hidden="true">'+u.i+'</i>'+esc(u.t)+(shop?'<small>'+esc(shop)+'</small>':'');c.title='Signed in as '+u.t+(shop?' · '+shop:'')}
  const h=document.getElementById('roleHero');if(h&&shop&&b.dataset.page==='vendordash'){const s=h.querySelector('.rh-shop');if(s)s.textContent=shop}}
 function roleHero(){const pg=document.body.dataset.page,H=HERO[pg];if(!H)return;const h1=document.querySelector('main>h1');if(!h1)return;
- h1.insertAdjacentHTML('beforebegin','<section class="rolehero rh-'+pg+'" id="roleHero"><div class="rh-ic" aria-hidden="true">'+H.i+'</div><div><span class="rh-k">'+H.k+'</span><h1>'+H.t+'</h1><p>'+H.s+' <b class="rh-shop"></b></p></div></section>');h1.remove()}
+ h1.insertAdjacentHTML('beforebegin','<section class="rolehero rh-'+pg+'" id="roleHero"><div class="rh-ic" aria-hidden="true">'+H.i+'</div><div><span class="rh-k">'+H.k+'</span><h1>'+H.t+'</h1><p>'+H.s+' <b class="rh-shop"></b></p>'+(pg==='consumer'?'<a class="rh-sell" href="apply.html">Have something to sell? Become a vendor →</a>':'')+'</div></section>');h1.remove()}
 function layout(){
  const live=configured;
- const out=live?authLinks():'<a href="login.html">Log in</a>';
+ const out=live?authLinks():'<a href="login.html">Sign in</a>';
  const msg=live?'Preview v1.7 – products labeled SAMPLE are fictional. Wallet payments and plans are TEST MODE only. No real payments or billing.':'Preview v1.1 – all vendors and products are SAMPLE data. Accounts are not switched on yet. No real payments.';
  if(!document.querySelector('link[data-cc-fonts]')){const l=document.createElement('link');l.rel='stylesheet';l.dataset.ccFonts='1';l.href='https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,600;0,9..144,800;1,9..144,600&family=Plus+Jakarta+Sans:wght@400;500;700;800&display=swap';document.head.appendChild(l)}
  const m=document.querySelector('main');if(m)m.id='main';
  const home=document.body.dataset.page==='home';
- document.body.insertAdjacentHTML('afterbegin','<a class="skip" href="#main">Skip to content</a><div class="banner">'+msg+'</div><header><div class="row"><a class="logo" href="index.html">'+LOGO+'<div>Carriacou <span>Connect</span><small>Marketplace</small></div></a><nav aria-label="Main"><a class="mktbtn'+(/browse\.html$/.test(location.pathname)||document.body.dataset.page==='browse'?' on" aria-current="page':'')+'" href="browse.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9l1.5-5h15L21 9M3 9h18M3 9v1a3 3 0 006 0 3 3 0 006 0 3 3 0 006 0V9M5 13v7h14v-7"/></svg>Marketplace</a><span id="roleChip" class="rolechip rc-guest">Guest</span><a href="tiers.html">Plans</a><a href="apply.html">Sell</a><a class="cartlink" href="cart.html">Cart<b id="cartCount">0</b></a><span id="authNav">'+out+'</span></nav></div></header>');
+ document.body.insertAdjacentHTML('afterbegin','<a class="skip" href="#main">Skip to content</a><div class="banner">'+msg+'</div><header><div class="row"><a class="logo" href="index.html">'+LOGO+'<div>Carriacou <span>Connect</span><small>Marketplace</small></div></a><span id="roleChip" class="rolechip rc-guest">Guest</span><nav aria-label="Main"><a class="mktbtn'+(/browse\.html$/.test(location.pathname)||document.body.dataset.page==='browse'?' on" aria-current="page':'')+'" href="browse.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9l1.5-5h15L21 9M3 9h18M3 9v1a3 3 0 006 0 3 3 0 006 0 3 3 0 006 0V9M5 13v7h14v-7"/></svg>Marketplace</a><span id="roleNav"><a href="tiers.html">Plans</a><a href="apply.html">Sell</a></span><a class="cartlink" href="cart.html">Cart<b id="cartCount">0</b></a><span id="authNav">'+out+'</span></nav></div></header>');
  roleHero();setRole('guest');cartBadge();if(!window.CC_CART_WIRED){window.CC_CART_WIRED=1;addEventListener('storage',e=>{if(!e.key||e.key==='cconnect_cart_v1')cartBadge()});addEventListener('pageshow',cartBadge)}
  const hasBand=document.querySelector('.band');
  document.body.insertAdjacentHTML('beforeend',(hasBand?'':WAVE('#04202c',false).replace('class="wave-sep"','class="wave-sep foot-wave"'))+'<footer><b>Carriacou Connect®</b><br>by Williams’ Tech · Marketplace v1.7 preview<br><a href="apply.html">Sell on Carriacou Connect</a> · <a href="vendor-terms.html">Vendor terms (draft)</a><br>Sea, reef, spice and sail: made on Carriacou.</footer>');
@@ -159,17 +159,29 @@ function startLive(sb,user){
  const s=document.createElement('script');s.src='realtime.js';s.dataset.ccRt='1';s.onload=go;s.onerror=()=>console.warn('realtime.js did not load; live updates are off');document.head.appendChild(s);
  if(!startLive.susp){startLive.susp=1;live.on(n=>{if(n&&/^account_(suspended|reactivated)$/.test(n.kind||'')){const b=document.getElementById('suspBanner');if(b)b.remove();suspBanner(sb)}})}
 }
+// v1.8.1: role-specific nav. Last role cached (cc_role_v1) and painted at once to avoid a Guest flash, then verified.
+const RKEY='cc_role_v1';
+const DASH={customer:['dashboard-consumer.html','My orders'],vendor:['dashboard-vendor.html','Vendor studio'],staff:['dashboard-vendor.html','Team studio'],admin:['admin.html','Admin']};
+function paintNav(r,shop){const el=document.getElementById('authNav'),rn=document.getElementById('roleNav');if(!el)return;
+ setRole(r,shop);
+ if(r==='guest'){if(rn)rn.innerHTML='<a href="tiers.html">Plans</a><a href="apply.html">Sell</a>';el.innerHTML=authLinks();return}
+ if(rn)rn.innerHTML=r==='vendor'?'<a href="tiers.html">Plans</a>':'';
+ const d=DASH[r],here=location.pathname.split('/').pop()===d[0];
+ el.innerHTML='<span id="ccBell" class="bellslot"></span><a class="dashlink'+(here?' on':'')+'" href="'+d[0]+'">'+d[1]+'</a>'+(r==='admin'||r==='staff'?'<a href="dashboard-consumer.html">My orders</a>':'')+'<a href="wallet.html">Wallet</a><a href="account.html">Account</a><a class="pill" href="#" id="logoutLink">Log out</a>'}
+document.addEventListener('click',async e=>{const a=e.target.closest&&e.target.closest('#logoutLink');if(!a)return;e.preventDefault();try{localStorage.removeItem(RKEY)}catch(x){}const sb=await client();if(sb)await sb.auth.signOut();location.href='index.html'});
 async function authNav(){
+ let cached=null;try{cached=JSON.parse(localStorage.getItem(RKEY))}catch(e){}
+ if(cached&&DASH[cached.r])paintNav(cached.r,cached.shop||'');
  const sb=await client();if(!sb)return;
- const render=async user=>{const el=document.getElementById('authNav');if(!el)return;
-  if(!user){el.innerHTML=authLinks();setRole('guest');return}
+ const render=async user=>{
+  if(!user){try{localStorage.removeItem(RKEY)}catch(e){}paintNav('guest');return}
   let role='consumer',team=false;try{const {data}=await sb.from('profiles').select('role').eq('id',user.id).maybeSingle();if(data)role=data.role}catch(e){}
   if(role!=='vendor'&&role!=='admin'){try{const r=await sb.rpc('my_vendor_access');team=!r.error&&Array.isArray(r.data)&&r.data.length>0}catch(e){}}
   suspBanner(sb);
   let shop='';if(role==='vendor'){try{const v=await sb.from('vendors').select('name').eq('owner_id',user.id).limit(1);if(v.data&&v.data[0])shop=v.data[0].name}catch(e){}}
-  setRole(role==='admin'?'admin':role==='vendor'?'vendor':team?'staff':'customer',shop);
-  el.innerHTML=`<span id="ccBell" class="bellslot"></span><a href="${role==='vendor'||team?'dashboard-vendor.html':'dashboard-consumer.html'}">${team?'Work dashboard':'Dashboard'}</a>${team?'<a href="dashboard-consumer.html">My orders</a>':''}${role==='admin'?'<a href="admin.html">Admin</a>':''}<a href="wallet.html">Wallet</a><a href="account.html">Account</a><a class="pill" href="#" id="logoutLink">Log out</a>`;
-  document.getElementById('logoutLink').onclick=async e=>{e.preventDefault();await sb.auth.signOut();location.href='index.html'};
+  const r=role==='admin'?'admin':role==='vendor'?'vendor':team?'staff':'customer';
+  if(!cached||cached.uid!==user.id||cached.r!==r||(cached.shop||'')!==shop||!document.getElementById('ccBell'))paintNav(r,shop);
+  try{localStorage.setItem(RKEY,JSON.stringify({uid:user.id,r,shop}))}catch(e){}
   startLive(sb,user)};
  render(await getUser());
  sb.auth.onAuthStateChange((ev)=>{if(ev==='SIGNED_OUT')render(null)});

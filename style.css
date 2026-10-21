@@ -526,3 +526,14 @@ body[class*=role-] header{border-bottom:3px solid var(--ra2)}
 .rh-shop:not(:empty)::before{content:"· "}
 body[class*=role-] .dtabs button.on{background:var(--ra);color:#fff}
 @media(max-width:640px){.rolehero{padding:1rem;gap:.8rem}.rh-ic{width:3rem;height:3rem;font-size:1.6rem}.rolechip small{display:none}}
+
+/* v1.8.1 role nav + compact phone header */
+#roleNav{display:contents}#roleNav>a{color:#e8f6f6;text-decoration:none;font-weight:600;font-size:.95rem;padding:.35rem .1rem}#roleNav>a:hover{color:#fff}
+#authNav>a.dashlink{color:#fff;font-weight:800}#authNav>a.dashlink.on::after{transform:scaleX(1);background:var(--ra2)}
+.rh-sell{display:inline-block;margin-top:.55rem;font-size:.85rem;font-weight:700;color:#fff;opacity:.88;text-decoration:underline;text-underline-offset:3px}.rh-sell:hover{color:#fff;opacity:1}
+@media(max-width:640px){header{padding:.4rem .5rem}header .row{gap:.35rem;justify-content:flex-start}.logo{font-size:1.05rem}.logo svg{width:28px;height:28px}
+ nav{flex-wrap:nowrap;overflow-x:auto;justify-content:flex-start;gap:.9rem;width:100%;scrollbar-width:none;padding-bottom:.15rem;-webkit-mask-image:linear-gradient(90deg,#000 88%,#0000)}nav::-webkit-scrollbar{display:none}
+ nav a,#authNav>*{white-space:nowrap;flex:none}#authNav{display:flex;align-items:center;gap:.9rem;margin-left:0;flex:none}
+ .rolechip{margin-left:auto;font-size:.72rem;padding:.22rem .6rem}.mktbtn{padding:.35rem .8rem!important}#authNav .pill{padding:.35rem .9rem}}
+
+header .row>.rolechip{margin-right:auto}@media(max-width:640px){header .row>.rolechip{margin-right:0}}
