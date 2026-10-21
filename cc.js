@@ -119,6 +119,14 @@ const WAVE=(fill,flip)=>'<svg class="wave-sep" viewBox="0 0 1440 90" preserveAsp
 function authLinks(){return '<a href="login.html">Log in</a><a class="pill" href="signup.html">Sign up</a>'}
 // v1.7.1: every page's header shows the same cart count (cart lives in localStorage key cconnect_cart_v1, same for guests and logged-in users)
 function cartBadge(){let n=0;try{const c=JSON.parse(localStorage.getItem('cconnect_cart_v1'))||{};n=Object.values(c).reduce((a,b)=>a+(Number(b)||0),0)}catch(e){}const el=document.getElementById('cartCount');if(el){el.textContent=n;el.setAttribute('aria-label',n+' item'+(n===1?'':'s')+' in cart')}}
+// v1.8: role identity. body.role-* drives accent colours; header chip names the role; dashboards get a role hero.
+const ROLEUI={guest:{t:'Guest',i:'👋'},customer:{t:'Customer',i:'🛍️'},vendor:{t:'Vendor',i:'🏪'},staff:{t:'Vendor team',i:'🧑‍🍳'},admin:{t:'Admin',i:'🛡️'}};
+const HERO={consumer:{k:'Customer space',t:'My dashboard',s:'Your orders, receipts and wallet in one place.',i:'🛍️'},vendordash:{k:'Vendor studio',t:'Vendor dashboard',s:'Run your shop: products, orders, analytics and team.',i:'🏪'},admin:{k:'Platform control',t:'Platform admin',s:'Plans, vendors, customers and platform settings.',i:'🛡️'}};
+function setRole(r,shop){const b=document.body;b.className=b.className.replace(/\brole-\w+/g,'').trim();b.classList.add('role-'+r);
+ const c=document.getElementById('roleChip');if(c){const u=ROLEUI[r]||ROLEUI.guest;c.className='rolechip rc-'+r;c.innerHTML='<i aria-hidden="true">'+u.i+'</i>'+esc(u.t)+(shop?'<small>'+esc(shop)+'</small>':'');c.title='Signed in as '+u.t+(shop?' · '+shop:'')}
+ const h=document.getElementById('roleHero');if(h&&shop&&b.dataset.page==='vendordash'){const s=h.querySelector('.rh-shop');if(s)s.textContent=shop}}
+function roleHero(){const pg=document.body.dataset.page,H=HERO[pg];if(!H)return;const h1=document.querySelector('main>h1');if(!h1)return;
+ h1.insertAdjacentHTML('beforebegin','<section class="rolehero rh-'+pg+'" id="roleHero"><div class="rh-ic" aria-hidden="true">'+H.i+'</div><div><span class="rh-k">'+H.k+'</span><h1>'+H.t+'</h1><p>'+H.s+' <b class="rh-shop"></b></p></div></section>');h1.remove()}
 function layout(){
  const live=configured;
  const out=live?authLinks():'<a href="login.html">Log in</a>';
@@ -126,8 +134,8 @@ function layout(){
  if(!document.querySelector('link[data-cc-fonts]')){const l=document.createElement('link');l.rel='stylesheet';l.dataset.ccFonts='1';l.href='https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,600;0,9..144,800;1,9..144,600&family=Plus+Jakarta+Sans:wght@400;500;700;800&display=swap';document.head.appendChild(l)}
  const m=document.querySelector('main');if(m)m.id='main';
  const home=document.body.dataset.page==='home';
- document.body.insertAdjacentHTML('afterbegin','<a class="skip" href="#main">Skip to content</a><div class="banner">'+msg+'</div><header><div class="row"><a class="logo" href="index.html">'+LOGO+'<div>Carriacou <span>Connect</span><small>Marketplace</small></div></a><nav aria-label="Main"><a href="browse.html">Browse</a><a href="tiers.html">Plans</a><a href="apply.html">Sell</a><a class="cartlink" href="cart.html">Cart<b id="cartCount">0</b></a><span id="authNav">'+out+'</span></nav></div></header>');
- cartBadge();if(!window.CC_CART_WIRED){window.CC_CART_WIRED=1;addEventListener('storage',e=>{if(!e.key||e.key==='cconnect_cart_v1')cartBadge()});addEventListener('pageshow',cartBadge)}
+ document.body.insertAdjacentHTML('afterbegin','<a class="skip" href="#main">Skip to content</a><div class="banner">'+msg+'</div><header><div class="row"><a class="logo" href="index.html">'+LOGO+'<div>Carriacou <span>Connect</span><small>Marketplace</small></div></a><nav aria-label="Main"><a class="mktbtn'+(/browse\.html$/.test(location.pathname)||document.body.dataset.page==='browse'?' on" aria-current="page':'')+'" href="browse.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9l1.5-5h15L21 9M3 9h18M3 9v1a3 3 0 006 0 3 3 0 006 0 3 3 0 006 0V9M5 13v7h14v-7"/></svg>Marketplace</a><span id="roleChip" class="rolechip rc-guest">Guest</span><a href="tiers.html">Plans</a><a href="apply.html">Sell</a><a class="cartlink" href="cart.html">Cart<b id="cartCount">0</b></a><span id="authNav">'+out+'</span></nav></div></header>');
+ roleHero();setRole('guest');cartBadge();if(!window.CC_CART_WIRED){window.CC_CART_WIRED=1;addEventListener('storage',e=>{if(!e.key||e.key==='cconnect_cart_v1')cartBadge()});addEventListener('pageshow',cartBadge)}
  const hasBand=document.querySelector('.band');
  document.body.insertAdjacentHTML('beforeend',(hasBand?'':WAVE('#04202c',false).replace('class="wave-sep"','class="wave-sep foot-wave"'))+'<footer><b>Carriacou Connect®</b><br>by Williams’ Tech · Marketplace v1.7 preview<br><a href="apply.html">Sell on Carriacou Connect</a> · <a href="vendor-terms.html">Vendor terms (draft)</a><br>Sea, reef, spice and sail: made on Carriacou.</footer>');
  if(live)authNav();
@@ -154,10 +162,12 @@ function startLive(sb,user){
 async function authNav(){
  const sb=await client();if(!sb)return;
  const render=async user=>{const el=document.getElementById('authNav');if(!el)return;
-  if(!user){el.innerHTML=authLinks();return}
+  if(!user){el.innerHTML=authLinks();setRole('guest');return}
   let role='consumer',team=false;try{const {data}=await sb.from('profiles').select('role').eq('id',user.id).maybeSingle();if(data)role=data.role}catch(e){}
   if(role!=='vendor'&&role!=='admin'){try{const r=await sb.rpc('my_vendor_access');team=!r.error&&Array.isArray(r.data)&&r.data.length>0}catch(e){}}
   suspBanner(sb);
+  let shop='';if(role==='vendor'){try{const v=await sb.from('vendors').select('name').eq('owner_id',user.id).limit(1);if(v.data&&v.data[0])shop=v.data[0].name}catch(e){}}
+  setRole(role==='admin'?'admin':role==='vendor'?'vendor':team?'staff':'customer',shop);
   el.innerHTML=`<span id="ccBell" class="bellslot"></span><a href="${role==='vendor'||team?'dashboard-vendor.html':'dashboard-consumer.html'}">${team?'Work dashboard':'Dashboard'}</a>${team?'<a href="dashboard-consumer.html">My orders</a>':''}${role==='admin'?'<a href="admin.html">Admin</a>':''}<a href="wallet.html">Wallet</a><a href="account.html">Account</a><a class="pill" href="#" id="logoutLink">Log out</a>`;
   document.getElementById('logoutLink').onclick=async e=>{e.preventDefault();await sb.auth.signOut();location.href='index.html'};
   startLive(sb,user)};
@@ -173,7 +183,7 @@ function orderLines(o){
  if(o.fulfilment==='delivery'||Number(o.delivery_fee_xcd)>0)L.push({k:'Delivery fee'+(o.delivery_area?' ('+o.delivery_area+')':''),v:Number(o.delivery_fee_xcd)||0});
  if(o.tax_xcd!=null&&Number(o.tax_rate_pct)>0)L.push({k:(o.tax_inclusive?'Includes VAT':'VAT')+' ('+Number(o.tax_rate_pct)+'%)',v:Number(o.tax_xcd)||0,kind:o.tax_inclusive?'info':''});
  L.push({k:'Total',v:Number(o.total_xcd)||0,kind:'total'});return L}
-window.CC={cartBadge,live,orderLines,acctStatus,PCOLS,PCOLS_BASE,TESTBANNER,cents,toCents,uuid,payPill,noteSummary,newBadge,notesWidget,NOTE_POLL,SLABEL,stPill,fdate,fnice,payText,nextSteps,timeline,safeNext,WAVE,configured,client,esc,getUser,layout,TIER_LABEL,TIER_LIMIT,TIERS,lim,ROLE_LABEL,ROLE_PERMS,
+window.CC={setRole,cartBadge,live,orderLines,acctStatus,PCOLS,PCOLS_BASE,TESTBANNER,cents,toCents,uuid,payPill,noteSummary,newBadge,notesWidget,NOTE_POLL,SLABEL,stPill,fdate,fnice,payText,nextSteps,timeline,safeNext,WAVE,configured,client,esc,getUser,layout,TIER_LABEL,TIER_LIMIT,TIERS,lim,ROLE_LABEL,ROLE_PERMS,
  xcd:n=>'EC$'+Number(n).toFixed(2)};
 layout();
 })();

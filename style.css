@@ -500,3 +500,29 @@ details.notes{margin:.7rem 0;border-top:1px dashed #10252e26;padding-top:.5rem}d
 
 /* v1.7.1 high-contrast count badges (white on #b42318 = 6.6:1, AA) */
 .cartlink b,.bellcount{background:#b42318;color:#fff;font-weight:800;box-shadow:0 0 0 2px #fff,0 0 0 3.5px #04202c;text-shadow:none}
+
+/* v1.8 role identity + Marketplace button */
+body{--ra:#0b7285;--ra2:#17a2a2;--rbg:#e3f6f4}
+body.role-customer{--ra:#0b7285;--ra2:#22b8cf;--rbg:#e3f6f4}
+body.role-vendor,body.role-staff{--ra:#7a2e8e;--ra2:#e8590c;--rbg:#f6e8fb}
+body.role-admin{--ra:#1c2f6b;--ra2:#e0a106;--rbg:#e8ecfa}
+body[class*=role-] header{border-bottom:3px solid var(--ra2)}
+.mktbtn{display:inline-flex!important;align-items:center;gap:.4rem;background:linear-gradient(135deg,#17a2a2,#0b7285);color:#fff!important;padding:.42rem .95rem!important;border-radius:99px;box-shadow:inset 0 0 0 1.5px #9fe3dc88}
+.mktbtn::after{display:none}.mktbtn svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linejoin:round}
+.mktbtn:hover{filter:brightness(1.12)}.mktbtn.on{background:linear-gradient(135deg,#f4b942,#ff8a4a);color:#04202c!important;box-shadow:0 0 0 3px #fff3}
+.rolechip{display:inline-flex;align-items:center;gap:.35rem;font-size:.78rem;font-weight:800;letter-spacing:.04em;padding:.28rem .7rem;border-radius:99px;background:#ffffff1f;color:#fff;border:1.5px solid #ffffff55;white-space:nowrap;max-width:15rem;overflow:hidden;text-overflow:ellipsis}
+.rolechip i{font-style:normal}.rolechip small{font-weight:600;opacity:.9;margin-left:.2rem;padding-left:.4rem;border-left:1px solid #fff6}
+.rc-customer{background:linear-gradient(135deg,#0b7285,#22b8cf);border-color:#9fe3dc}
+.rc-vendor,.rc-staff{background:linear-gradient(135deg,#7a2e8e,#e8590c);border-color:#f8c4a4}
+.rc-admin{background:linear-gradient(135deg,#1c2f6b,#3b5bdb);border-color:#e0a106;color:#ffe9a8}
+.rolehero{display:flex;gap:1.1rem;align-items:center;margin:1.2rem 0 1.4rem;padding:1.3rem 1.5rem;border-radius:26px;color:#fff;position:relative;overflow:hidden;box-shadow:var(--sh);background:linear-gradient(130deg,var(--ra),var(--ra2))}
+.rolehero::after{content:"";position:absolute;right:-60px;top:-60px;width:220px;height:220px;border-radius:50%;background:radial-gradient(circle,#ffffff40,#fff0 70%)}
+.rolehero h1{color:#fff;margin:.1rem 0 .2rem;font-size:clamp(1.6rem,4vw,2.3rem)}.rolehero p{margin:0;opacity:.93}
+.rh-k{font-size:.72rem;font-weight:800;letter-spacing:.2em;text-transform:uppercase;background:#0003;padding:.2rem .6rem;border-radius:99px}
+.rh-ic{font-size:2.2rem;width:4rem;height:4rem;flex:none;display:grid;place-items:center;border-radius:20px;background:#ffffff2a;box-shadow:inset 0 0 0 2px #fff5}
+.rh-consumer{background:linear-gradient(130deg,#0b7285,#22b8cf 60%,#9fe3dc)}
+.rh-vendordash{background:linear-gradient(130deg,#5f1f73,#a33b9a 50%,#e8590c)}
+.rh-admin{background:linear-gradient(130deg,#10204f,#2f4bb0 60%,#e0a106)}
+.rh-shop:not(:empty)::before{content:"· "}
+body[class*=role-] .dtabs button.on{background:var(--ra);color:#fff}
+@media(max-width:640px){.rolehero{padding:1rem;gap:.8rem}.rh-ic{width:3rem;height:3rem;font-size:1.6rem}.rolechip small{display:none}}
