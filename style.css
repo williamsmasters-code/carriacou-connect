@@ -698,3 +698,61 @@ table.fu-fees{display:table;width:100%;border-collapse:collapse;background:var(-
 .gc-toggle{font-weight:600;margin:.4rem 0}.gc-toggle input{width:1.2rem;height:1.2rem}
 .af-gcf{margin-top:1rem;border-top:1px dashed #d9cfb8;padding-top:.8rem}.af-gcrow{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.6rem}
 .af-gcv{border:1px solid #e5dcc7;border-radius:10px;padding:.5rem .8rem;margin:.6rem 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.2rem .8rem}.af-gcv small{display:inline}
+/* ===== v1.16c layout pass: desktop use of space + phone ergonomics ===== */
+.tablewrap{max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.tablewrap>table{display:table;min-width:100%}
+/* Points Store: sidebar (balance, rules, terms) + card grid */
+.ps-layout{display:grid;gap:1.2rem;grid-template-columns:1fr}
+.ps-main .psgrid{margin-top:0;grid-template-columns:repeat(auto-fit,minmax(250px,1fr))}
+.ps-main .psc{max-width:none}
+@media(min-width:1000px){.ps-layout{grid-template-columns:minmax(280px,340px) 1fr;align-items:start}.ps-side{position:sticky;top:1rem}.ps-side .ps-bal{flex-wrap:wrap}.ps-side .lead{margin-top:0}}
+@media(min-width:1000px) and (max-width:1199px){.ps-main .psgrid{grid-template-columns:repeat(auto-fit,minmax(230px,1fr))}}
+/* Platform Funds: bills | history, gift cards | closing side by side */
+.fu-cols{display:grid;gap:1.2rem;grid-template-columns:1fr}
+@media(min-width:1000px){.fu-cols{grid-template-columns:1fr 1fr;align-items:start}.fu-cols>div>h2:first-child{margin-top:.6rem}.fu-cols2{align-items:stretch}}
+/* Order detail: progress | items */
+.od-cols{display:grid;gap:1.2rem;grid-template-columns:1fr}
+.od-items table{display:table;width:100%}.od-cols .obreak{max-width:none}
+@media(min-width:900px){.od-cols{grid-template-columns:minmax(220px,300px) 1fr;align-items:start}}
+/* stacked tables on phones (labels from the header row, set by cc.js) */
+@media(max-width:640px){
+ table.stack,table.stack tbody,table.stack tr,table.stack td{display:block;width:100%}
+ table.stack{background:none;box-shadow:none;min-width:0!important}
+ table.stack thead,table.stack tr:first-child:has(th){display:none}
+ table.stack tr{background:var(--paper);border:1px solid #10252e1a;border-radius:16px;margin:0 0 .7rem;padding:.4rem .2rem;box-shadow:var(--sh)}
+ table.stack td{display:flex;justify-content:space-between;gap:1rem;border:0;padding:.45rem .8rem;text-align:right}
+ table.stack td::before{content:attr(data-l);font-weight:700;color:var(--mut);text-align:left;font-size:.8rem;text-transform:uppercase;letter-spacing:.05em;flex:none}
+ table.stack td:not([data-l])::before,table.stack td[data-l=""]::before{display:none}
+ table.stack td small{display:block}
+ table.stack td.af-acts,table.stack td:has(>.btn){justify-content:flex-end;flex-wrap:wrap}
+}
+/* phone ergonomics */
+@media(max-width:760px){
+ .logo,.mktbtn,.cartlink,.navbtn,#bellBtn,.bellbtn{min-height:44px}
+ .mktbtn,.cartlink,.navbtn{display:inline-flex!important;align-items:center}
+ .btn,.btn.sm,button.btn,a.btn,.chip,.psv,.dtabs button,#admtabs button{min-height:44px}
+ .btn.sm{padding:.55rem 1rem;font-size:.92rem}
+ input:not([type=checkbox]):not([type=radio]):not([type=file]),select,textarea{min-height:44px;font-size:16px}
+ label.chk{min-height:44px;display:flex;align-items:center;gap:.65rem}
+ label.chk input[type=checkbox],label.chk input[type=radio]{width:22px;height:22px;flex:none;margin:0}
+ main form .btn:not(.chip),.wcard>.btn,.fu-exit .btn,.af-gcf .btn{width:100%}
+ main small,main .muted small,.kicker,.badge,.pp,th{font-size:max(12px,.78rem)}
+ .chips{gap:.5rem}.chips .chip{flex:1 1 calc(50% - .5rem)}
+ .walletgrid,.walletgrid.forms{grid-template-columns:1fr}
+ .af-gcv{grid-template-columns:1fr}
+ .ps-side .ps-bal{flex-wrap:wrap}
+ .navmore a{min-height:48px}
+}
+/* one-handed: phone menu opens as a bottom sheet */
+@media(max-width:640px){
+ .navmore{top:auto;bottom:.6rem;max-height:75vh;border-radius:24px 24px 20px 20px}
+ @keyframes navin{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+}
+.od-cols>div,.fu-cols>div,.ps-layout>*{min-width:0}
+@media(min-width:900px) and (max-width:1099px){.tiercards{grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}}
+@media(max-width:760px){
+ .rh-k,.st,.op-sum span,.op-due span{font-size:12px}
+ .ci-qty button,.ci-rm{min-width:44px;min-height:44px}
+ .ci-name,.cs-more,.ps-bal a,.rh-sell{display:inline-flex;align-items:center;min-height:44px}
+ .cs-more{width:100%;justify-content:center}
+}

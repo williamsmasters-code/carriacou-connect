@@ -252,3 +252,12 @@ window.CC={flags,POINTS_NOTE,confirmPay,setRole,cartBadge,live,orderLines,acctSt
  xcd:n=>'EC$'+Number(n).toFixed(2)};
 layout();
 })();
+// v1.16c: phone "stacked card" tables. Copies each column header into data-l on its cells (CSS shows it as a label).
+(function(){
+ const label=t=>{const hr=t.querySelector('thead tr')||t.querySelector('tr');if(!hr)return;const hs=[...hr.children].map(h=>h.textContent.trim());
+  t.querySelectorAll('tr').forEach(tr=>{if(tr===hr)return;let i=0;[...tr.children].forEach(td=>{if(td.tagName==='TD'&&!td.hasAttribute('data-l'))td.setAttribute('data-l',td.colSpan>1?'':(hs[i]||''));i+=td.colSpan||1})})};
+ const scan=()=>document.querySelectorAll('table.stack').forEach(label);
+ const start=()=>{scan();new MutationObserver(()=>scan()).observe(document.body,{childList:true,subtree:true})};
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();
+ if(window.CC)window.CC.stackTables=scan;
+})();
