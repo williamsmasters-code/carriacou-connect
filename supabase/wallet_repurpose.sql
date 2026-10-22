@@ -204,7 +204,7 @@ grant execute on function public.my_points() to authenticated;
 create table if not exists public.vendor_giftcard_settings (
   vendor_id      uuid primary key references public.vendors(id) on delete cascade,
   participating  boolean not null default false,
-  points_per_ec  int check (points_per_ec is null or points_per_ec between 1 and 1000),  -- admin override of the tier price
+  points_per_ec  int check (points_per_ec is null or points_per_ec between 1 and 1000),  -- UNUSED since v1.16b (admin prices each card)
   cap_cents_month int check (cap_cents_month is null or cap_cents_month >= 0),             -- admin override of the cap
   agreed_at      timestamptz,
   agreed_by      uuid,
@@ -252,19 +252,58 @@ revoke all on function public.order_payments_no_gc_void() from public, anon, aut
 drop trigger if exists trg_order_payments_no_gc_void on public.order_payments;
 create trigger trg_order_payments_no_gc_void before update on public.order_payments for each row execute function public.order_payments_no_gc_void();
 
+-- v1.16b: Carriacou Connect gift cards are created and priced ONLY by the platform admin.
+-- Vendors cannot create or price cards; they only opt in / out (vendor_set_giftcards).
+-- (vendor_giftcard_settings.points_per_ec and flags giftcard_points_per_ec / giftcard_values_cents are no longer used.)
+create table if not exists public.cc_gift_card_types (
+  id          uuid primary key default gen_random_uuid(),
+  name        text not null check (length(btrim(name)) between 1 and 80),
+  value_cents int not null check (value_cents > 0 and value_cents <= 100000),
+  points_cost int not null check (points_cost > 0),
+  active      boolean not null default true,
+  all_vendors boolean not null default false,   -- true = every opted-in, eligible shop
+  created_by  uuid,
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now()
+);
+create table if not exists public.cc_gift_card_type_vendors (
+  type_id   uuid not null references public.cc_gift_card_types(id) on delete cascade,
+  vendor_id uuid not null references public.vendors(id) on delete cascade,
+  primary key (type_id, vendor_id)
+);
+alter table public.cc_gift_card_types enable row level security;
+alter table public.cc_gift_card_type_vendors enable row level security;
+drop policy if exists gct_read on public.cc_gift_card_types;
+create policy gct_read on public.cc_gift_card_types for select to authenticated using (public.is_admin());
+drop policy if exists gctv_read on public.cc_gift_card_type_vendors;
+create policy gctv_read on public.cc_gift_card_type_vendors for select to authenticated using (public.is_admin() or public.vendor_perm(vendor_id, 'orders_view'));
+revoke insert, update, delete on public.cc_gift_card_types, public.cc_gift_card_type_vendors from public, anon, authenticated;
+grant select on public.cc_gift_card_types, public.cc_gift_card_type_vendors to authenticated;
+alter table public.gift_cards add column if not exists type_id uuid references public.cc_gift_card_types(id) on delete restrict;
+alter table public.vendor_giftcard_settings add column if not exists opted_out_at timestamptz;
+
+create or replace function public._gc_cards_for(p_vendor uuid) returns jsonb
+language sql stable security definer set search_path = public, pg_temp as $$
+  select coalesce(jsonb_agg(jsonb_build_object('type_id', t.id, 'name', t.name, 'value_cents', t.value_cents, 'points_cost', t.points_cost)
+         order by t.value_cents, t.points_cost), '[]'::jsonb)
+  from public.cc_gift_card_types t
+  where t.active and (t.all_vendors or exists (select 1 from public.cc_gift_card_type_vendors x where x.type_id = t.id and x.vendor_id = p_vendor));
+$$;
+revoke all on function public._gc_cards_for(uuid) from public, anon, authenticated;
+
 create or replace function public._gc_price(p_vendor uuid) returns jsonb
 language plpgsql stable security definer set search_path = public, pg_temp as $$
-declare f public.platform_flags := public._flags(); v record; s record; ppe int; cap int; used int;
+declare f public.platform_flags := public._flags(); v record; s record; cap int; used int; cards jsonb;
 begin
   select id, name, tier, status into v from public.vendors where id = p_vendor;
   select * into s from public.vendor_giftcard_settings where vendor_id = p_vendor;
-  ppe := coalesce(s.points_per_ec, (f.giftcard_points_per_ec->>v.tier)::int);
   cap := coalesce(s.cap_cents_month, f.giftcard_cap_cents_month);
   select coalesce(sum(value_cents), 0) into used from public.gift_cards where vendor_id = p_vendor and issued_at >= date_trunc('month', now() at time zone 'America/Grenada') at time zone 'America/Grenada';
+  cards := public._gc_cards_for(p_vendor);
   return jsonb_build_object('vendor_id', v.id, 'name', v.name, 'tier', v.tier,
-    'qualifies', v.tier = any(f.giftcard_tiers), 'participating', coalesce(s.participating, false),
-    'points_per_ec', ppe, 'cap_cents_month', cap, 'issued_cents_month', used, 'remaining_cents', greatest(cap - used, 0),
-    'open', f.gift_cards_enabled and v.status = 'approved' and v.tier = any(f.giftcard_tiers) and coalesce(s.participating, false) and ppe is not null);
+    'qualifies', v.tier = any(f.giftcard_tiers), 'participating', coalesce(s.participating, false), 'opted_out_at', s.opted_out_at,
+    'cards', cards, 'cap_cents_month', cap, 'issued_cents_month', used, 'remaining_cents', greatest(cap - used, 0),
+    'open', f.gift_cards_enabled and v.status = 'approved' and v.tier = any(f.giftcard_tiers) and coalesce(s.participating, false));
 end $$;
 revoke all on function public._gc_price(uuid) from public, anon, authenticated;
 
@@ -272,10 +311,11 @@ create or replace function public.points_store() returns jsonb
 language plpgsql stable security definer set search_path = public, pg_temp as $$
 declare f public.platform_flags := public._flags();
 begin
-  return jsonb_build_object('enabled', f.gift_cards_enabled and f.rewards_enabled, 'values_cents', to_jsonb(f.giftcard_values_cents),
+  -- only opted-in shops on an eligible tier that have at least one active admin card
+  return jsonb_build_object('enabled', f.gift_cards_enabled and f.rewards_enabled,
     'tiers', to_jsonb(f.giftcard_tiers), 'expiry_days', f.giftcard_expiry_days,
     'shops', coalesce((select jsonb_agg(x order by x->>'name') from (select public._gc_price(s.vendor_id) x from public.vendor_giftcard_settings s where s.participating) q
-                       where (x->>'open')::boolean), '[]'::jsonb));
+                       where (x->>'open')::boolean and jsonb_array_length(x->'cards') > 0), '[]'::jsonb));
 end $$;
 grant execute on function public.points_store() to anon, authenticated;
 
@@ -285,38 +325,88 @@ declare pr jsonb;
 begin
   if not public.vendor_perm(p_vendor, 'refunds') then raise exception 'Only the owner or a sub-admin can change this'; end if;
   pr := public._gc_price(p_vendor);
-  if p_on and not (pr->>'qualifies')::boolean then raise exception 'The Points Store is a perk of higher plans (%). Upgrade to take part.', array_to_string((public._flags()).giftcard_tiers, ', '); end if;
-  insert into public.vendor_giftcard_settings(vendor_id, participating, agreed_at, agreed_by) values (p_vendor, p_on, case when p_on then now() end, case when p_on then auth.uid() end)
-  on conflict (vendor_id) do update set participating = excluded.participating, agreed_at = coalesce(excluded.agreed_at, public.vendor_giftcard_settings.agreed_at),
-    agreed_by = coalesce(excluded.agreed_by, public.vendor_giftcard_settings.agreed_by), updated_at = now();
+  if p_on and not (pr->>'qualifies')::boolean then raise exception 'Carriacou Connect gift cards are a perk of higher plans (%). Upgrade to take part.', array_to_string((public._flags()).giftcard_tiers, ', '); end if;
+  -- opting out stops NEW cards only; cards already issued stay usable (ASSUMPTION, see notes)
+  insert into public.vendor_giftcard_settings(vendor_id, participating, agreed_at, agreed_by, opted_out_at)
+    values (p_vendor, p_on, case when p_on then now() end, case when p_on then auth.uid() end, case when p_on then null else now() end)
+  on conflict (vendor_id) do update set participating = excluded.participating,
+    agreed_at = coalesce(excluded.agreed_at, public.vendor_giftcard_settings.agreed_at),
+    agreed_by = coalesce(excluded.agreed_by, public.vendor_giftcard_settings.agreed_by),
+    opted_out_at = excluded.opted_out_at, updated_at = now();
   return public._gc_price(p_vendor);
 end $$;
 revoke all on function public.vendor_set_giftcards(uuid, boolean) from public, anon;
 grant execute on function public.vendor_set_giftcards(uuid, boolean) to authenticated;
 
-create or replace function public.redeem_points_gift_card(p_vendor uuid, p_value_cents int) returns jsonb
+-- admin: list cards + every shop with eligibility, for the "Gift cards" admin screen
+create or replace function public.admin_gc_types() returns jsonb
+language plpgsql stable security definer set search_path = public, pg_temp as $$
+declare f public.platform_flags := public._flags();
+begin
+  if not public.is_admin() then raise exception 'Admins only'; end if;
+  return jsonb_build_object(
+    'types', coalesce((select jsonb_agg(jsonb_build_object('id', t.id, 'name', t.name, 'value_cents', t.value_cents, 'points_cost', t.points_cost,
+        'active', t.active, 'all_vendors', t.all_vendors, 'updated_at', t.updated_at,
+        'vendor_ids', coalesce((select jsonb_agg(x.vendor_id) from public.cc_gift_card_type_vendors x where x.type_id = t.id), '[]'::jsonb),
+        'issued', (select count(*) from public.gift_cards g where g.type_id = t.id)) order by t.created_at) from public.cc_gift_card_types t), '[]'::jsonb),
+    'vendors', coalesce((select jsonb_agg(jsonb_build_object('vendor_id', v.id, 'name', v.name, 'tier', v.tier, 'status', v.status,
+        'qualifies', v.tier = any(f.giftcard_tiers), 'participating', coalesce(s.participating, false)) order by v.name)
+      from public.vendors v left join public.vendor_giftcard_settings s on s.vendor_id = v.id where v.status = 'approved'), '[]'::jsonb),
+    'tiers', to_jsonb(f.giftcard_tiers));
+end $$;
+revoke all on function public.admin_gc_types() from public, anon;
+grant execute on function public.admin_gc_types() to authenticated;
+
+create or replace function public.admin_gc_type_save(p_id uuid, p_name text, p_value_cents int, p_points_cost int, p_active boolean,
+  p_all_vendors boolean, p_vendors uuid[]) returns jsonb
 language plpgsql security definer set search_path = public, pg_temp as $$
-declare uid uuid := auth.uid(); f public.platform_flags := public._flags(); pr jsonb; cost int; bal int; gid uuid; cd text;
+declare tid uuid := p_id;
+begin
+  if not public.is_admin() then raise exception 'Admins only'; end if;
+  if coalesce(p_value_cents, 0) <= 0 then raise exception 'Enter a gift card value'; end if;
+  if coalesce(p_points_cost, 0) <= 0 then raise exception 'Enter a points price'; end if;
+  if tid is null then
+    insert into public.cc_gift_card_types(name, value_cents, points_cost, active, all_vendors, created_by)
+      values (btrim(coalesce(p_name, '')), p_value_cents, p_points_cost, coalesce(p_active, true), coalesce(p_all_vendors, false), auth.uid()) returning id into tid;
+  else
+    update public.cc_gift_card_types set name = btrim(coalesce(p_name, '')), value_cents = p_value_cents, points_cost = p_points_cost,
+      active = coalesce(p_active, active), all_vendors = coalesce(p_all_vendors, all_vendors), updated_at = now() where id = tid;
+    if not found then raise exception 'Gift card not found'; end if;
+  end if;
+  delete from public.cc_gift_card_type_vendors where type_id = tid;
+  insert into public.cc_gift_card_type_vendors(type_id, vendor_id)
+    select tid, v.id from public.vendors v where v.id = any(coalesce(p_vendors, '{}'::uuid[])) on conflict do nothing;
+  return jsonb_build_object('id', tid);
+end $$;
+revoke all on function public.admin_gc_type_save(uuid, text, int, int, boolean, boolean, uuid[]) from public, anon;
+grant execute on function public.admin_gc_type_save(uuid, text, int, int, boolean, boolean, uuid[]) to authenticated;
+
+drop function if exists public.redeem_points_gift_card(uuid, int);
+create or replace function public.redeem_points_gift_card(p_vendor uuid, p_type uuid) returns jsonb
+language plpgsql security definer set search_path = public, pg_temp as $$
+declare uid uuid := auth.uid(); f public.platform_flags := public._flags(); pr jsonb; t public.cc_gift_card_types; bal int; gid uuid; cd text;
 begin
   if uid is null then raise exception 'Please sign in'; end if;
   if not (f.rewards_enabled and f.gift_cards_enabled) then raise exception 'The Points Store is closed'; end if;
-  if not p_value_cents = any(f.giftcard_values_cents) then raise exception 'Choose one of the gift card values shown'; end if;
   perform pg_advisory_xact_lock(hashtext('gc:' || p_vendor::text));
   perform public._points_expire(uid);
   pr := public._gc_price(p_vendor);
-  if not (pr->>'open')::boolean then raise exception 'This shop is not in the Points Store'; end if;
-  if (pr->>'remaining_cents')::int < p_value_cents then raise exception 'This shop has reached its gift card limit for this month. Try a smaller card or next month.'; end if;
-  cost := ceil(p_value_cents / 100.0 * (pr->>'points_per_ec')::int)::int;
+  -- server-side block: opted-out shop, ineligible tier, unapproved shop
+  if pr->>'vendor_id' is null or not (pr->>'open')::boolean then raise exception 'This shop is not in the Points Store'; end if;
+  select * into t from public.cc_gift_card_types where id = p_type;
+  if not found or not t.active or not (t.all_vendors or exists (select 1 from public.cc_gift_card_type_vendors x where x.type_id = t.id and x.vendor_id = p_vendor))
+    then raise exception 'This gift card is not available at this shop'; end if;
+  if (pr->>'remaining_cents')::int < t.value_cents then raise exception 'This shop has reached its gift card limit for this month. Try a smaller card or next month.'; end if;
   bal := public._points_bal(uid);
-  if bal < cost then raise exception 'You need % CC Points for this card (you have %)', cost, bal; end if;
+  if bal < t.points_cost then raise exception 'You need % CC Points for this card (you have %)', t.points_cost, bal; end if;
   loop cd := public._pay_alphabet_code('GC'); exit when not exists (select 1 from public.gift_cards where code = cd); end loop;
-  insert into public.gift_cards(code, vendor_id, owner_id, value_cents, balance_cents, points_cost, expires_at)
-    values (cd, p_vendor, uid, p_value_cents, p_value_cents, cost, now() + make_interval(days => f.giftcard_expiry_days)) returning id into gid;
-  insert into public.cc_points_ledger(user_id, delta, kind, gift_card_id, note, created_by) values (uid, -cost, 'redeem', gid, 'Gift card ' || cd || ' for ' || (pr->>'name'), uid);
-  return jsonb_build_object('gift_card_id', gid, 'code', cd, 'value_cents', p_value_cents, 'points_cost', cost, 'points_balance', bal - cost, 'vendor', pr->>'name');
+  insert into public.gift_cards(code, vendor_id, owner_id, value_cents, balance_cents, points_cost, expires_at, type_id)
+    values (cd, p_vendor, uid, t.value_cents, t.value_cents, t.points_cost, now() + make_interval(days => f.giftcard_expiry_days), t.id) returning id into gid;
+  insert into public.cc_points_ledger(user_id, delta, kind, gift_card_id, note, created_by) values (uid, -t.points_cost, 'redeem', gid, 'Gift card ' || cd || ' for ' || (pr->>'name'), uid);
+  return jsonb_build_object('gift_card_id', gid, 'code', cd, 'value_cents', t.value_cents, 'points_cost', t.points_cost, 'points_balance', bal - t.points_cost, 'vendor', pr->>'name');
 end $$;
-revoke all on function public.redeem_points_gift_card(uuid, int) from public, anon;
-grant execute on function public.redeem_points_gift_card(uuid, int) to authenticated;
+revoke all on function public.redeem_points_gift_card(uuid, uuid) from public, anon;
+grant execute on function public.redeem_points_gift_card(uuid, uuid) to authenticated;
 
 create or replace function public.my_gift_cards() returns jsonb
 language plpgsql security definer set search_path = public, pg_temp as $$

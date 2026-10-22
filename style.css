@@ -693,3 +693,8 @@ table.fu-fees{display:table;width:100%;border-collapse:collapse;background:var(-
 @media (max-width:560px){.fu-fees th:nth-child(2),.fu-fees td:nth-child(2),.fu-fees th:nth-child(3),.fu-fees td:nth-child(3){display:none}}
 .ps-soon .badge{background:#e7f0f2;color:#0b4f5c;border:1px solid #9cc3cb}
 #admtabs{flex-wrap:wrap;max-width:100%}
+/* v1.16b admin-created Carriacou Connect gift cards + vendor opt-in */
+.gc-state{padding:.5rem .75rem;border-radius:10px;margin:.2rem 0 .6rem}.gc-state.on{background:#e6f6ee;color:#14532d;border:1px solid #9ad3b2}.gc-state.off{background:#f6f1e6;color:#5b4a1e;border:1px solid #e0cf9f}
+.gc-toggle{font-weight:600;margin:.4rem 0}.gc-toggle input{width:1.2rem;height:1.2rem}
+.af-gcf{margin-top:1rem;border-top:1px dashed #d9cfb8;padding-top:.8rem}.af-gcrow{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.6rem}
+.af-gcv{border:1px solid #e5dcc7;border-radius:10px;padding:.5rem .8rem;margin:.6rem 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:.2rem .8rem}.af-gcv small{display:inline}
