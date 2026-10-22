@@ -86,7 +86,7 @@ const body=vids.map((vid,k)=>{const v=vendor(vid);let vs=0;const items=groups[vi
  return `<section class="cgroup" style="--vc:${VC[k%VC.length]}"><div class="cg-head"><span class="cg-dot" aria-hidden="true">${esc((v.name||'?').slice(0,1))}</span><div><a href="vendor.html?id=${esc(vid)}">${esc(v.name)}</a><small>${groups[vid].length} item${groups[vid].length===1?'':'s'} · separate order</small></div><b>${xcd(vs)}</b></div><ul class="cilist">${items}</ul></section>`}).join('');
 R.innerHTML=`<div class="cartlay"><div class="cartitems">${vids.length>1?`<p class="cg-info">Items from <b>${vids.length} businesses</b>: checkout places one order with each.</p>`:''}${body}</div>
 <aside class="cartsum" aria-label="Order summary"><span class="kicker">Order summary</span><div class="cs-row"><span>Items</span><b>${count}</b></div><div class="cs-row"><span>Businesses</span><b>${vids.length}</b></div><div class="cs-row cs-sub"><span>Subtotal</span><b>${xcd(sum)} <small>XCD</small></b></div>
-<p class="cs-note">🚚 Delivery fees and VAT (if the business charges them) are worked out at checkout.</p><p class="cs-note cs-test">🧪 Pay the vendor on pickup or delivery, or use your <b>TEST wallet</b> (play money only). No real payments.</p>
+<p class="cs-note">🚚 Delivery fees and VAT (if the business charges them) are worked out at checkout.</p><p class="cs-note cs-test">💳 You pay the shop directly on pickup or delivery. Carriacou Connect never holds your money.</p><p class="cs-note">⭐ Earn <b>${Math.floor(sum)} CC Points</b> when your order is completed (1 point per EC$1).</p>
 <button class="btn cs-go" id="co">Checkout →</button><a class="cs-more" href="browse.html">← Continue shopping in the Marketplace</a><div id="conote"></div></aside></div>`;
 const set=(id,q)=>{const c=getCart();c[id]=Math.max(1,Math.min(99,q));saveCart(c);draw();const f=document.querySelector(`input[data-id="${id}"]`);if(f)f.focus()};
 R.querySelectorAll('input[data-id]').forEach(e=>e.onchange=()=>set(e.dataset.id,parseInt(e.value)||1));
@@ -97,7 +97,7 @@ $('#co').onclick=()=>{if(DATA.live){location.href='checkout.html'}else $('#conot
 draw();addEventListener('storage',e=>{if(e.key===KEY)draw()})},
 async checkout(){
 const root=$('#co');
-const payNote='<div class="notice"><strong>No real payments.</strong> Choose to pay the vendor yourself on pickup or delivery, or try Carriacou Connect Pay with your <b>test wallet</b> (play money only).</div>';
+const payNote='<div class="notice"><strong>You pay the shop directly</strong> on pickup or delivery (cash, card or bank transfer, as the shop accepts). Carriacou Connect never holds your money. Completed orders earn <b>CC Points</b> (1 point per EC$1): rewards, not money.</div>';
 if(!window.CC.configured||!DATA.live){root.innerHTML='<div class="notice"><strong>Ordering is not switched on in this sample preview.</strong> Accounts and orders need the live Supabase database. <a href="browse.html">Back to browsing</a></div>'+payNote;return}
 const user=await window.CC.getUser();
 if(!user){location.href='login.html?next=checkout.html';return}
@@ -111,7 +111,7 @@ const summary=Object.entries(byV).map(([vid,ls])=>{const sub=ls.reduce((a,l)=>a+
 return `<div class="osum"><h3>${esc(vendor(vid).name)}</h3>${ls.map(l=>`<div class="oline"><span>${l.q} × ${esc(l.p.name)}</span><span>${xcd(l.p.price*l.q)}</span></div>`).join('')}<div class="oline sub"><span>Subtotal</span><span>${xcd(sub)}</span></div></div>`}).join('');
 const nv=Object.keys(byV).length;
 let totalCents=Math.round(total*100),camp=null;
-let wal=null;try{const wr=await sb.rpc('ensure_wallets');if(!wr.error&&Array.isArray(wr.data))wal=wr.data.find(x=>x.kind==='user')||null}catch(e){}
+const FL=await window.CC.flags();let wal=null;if(FL.wallet_mode!=='off'){try{const wr=await sb.rpc('ensure_wallets');if(!wr.error&&Array.isArray(wr.data))wal=wr.data.find(x=>x.kind==='user')||null}catch(e){}}
 const payKey=window.CC.uuid();
 let prof={};try{const r=await sb.from('profiles').select('full_name,phone,address').eq('id',user.id).maybeSingle();prof=r.data||{}}catch(e){}
 // v1.5: per-vendor pickup/delivery + delivery fee + tax, all worked out by the server (checkout_quote). If tax_delivery.sql has not been run, opts stays null and the old single pickup/delivery choice is used.

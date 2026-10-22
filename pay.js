@@ -28,6 +28,10 @@ const rpc=async(sb,n,a)=>{try{const r=await sb.rpc(n,a);return r}catch(e){return
 const pages={
 async wallet(){
  const c=await boot();if(!c)return;const {sb,user}=c;const R=$('#pay');
+ // v1.16: the money wallet is PARKED (wallet_repurpose.sql). The code below is kept for test mode only.
+ const FL=await window.CC.flags();
+ if(FL.wallet_mode==='off'){document.title='Wallet parked – Carriacou Connect';main().querySelector('h1').textContent='Wallet (parked)';
+  R.innerHTML='<div class="notice"><b>The money wallet is switched off.</b> Carriacou Connect does not hold or move customers\' money: you pay each shop directly. Top-ups, transfers between users, payouts and cash-out are parked until the platform is licensed or works with a bank partner.</div><div class="walletgrid"><a class="wcard parklink" href="rewards.html"><span class="kicker">Customers</span><h3>⭐ Rewards</h3><p>Your CC Points and gift cards.</p></a><a class="wcard parklink" href="funds.html"><span class="kicker">Businesses</span><h3>🏦 Platform Funds</h3><p>Prepaid credit for Carriacou Connect services.</p></a></div>';return}
  const q=new URLSearchParams(location.search);
  let wallets=[],cur=null,lim={topup_max_cents:50000,transfer_max_cents:200000};
  const lr=await rpc(sb,'pay_limits',{});if(lr.data)lim=lr.data;

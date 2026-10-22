@@ -189,6 +189,11 @@ function startLive(sb,user){
  const s=document.createElement('script');s.src='realtime.js';s.dataset.ccRt='1';s.onload=go;s.onerror=()=>console.warn('realtime.js did not load; live updates are off');document.head.appendChild(s);
  if(!startLive.susp){startLive.susp=1;live.on(n=>{if(n&&/^account_(suspended|reactivated)$/.test(n.kind||'')){const b=document.getElementById('suspBanner');if(b)b.remove();suspBanner(sb)}})}
 }
+// v1.16 feature flags (wallet_repurpose.sql). Before that file runs, the RPC is missing and the old behaviour stays (legacy: parked wallet in test mode).
+let _fl=null;
+async function flags(){if(_fl)return _fl;const D={legacy:true,wallet_mode:'test',rewards_enabled:false,vendor_credit_enabled:false,gift_cards_enabled:false,fee_card_pct:1,fee_direct_pct:2};
+ try{const sb=await client();if(!sb)return (_fl=D);const r=await sb.rpc('platform_flags_get');_fl=(r&&!r.error&&r.data)?Object.assign({legacy:false},r.data):D}catch(e){_fl=D}return _fl}
+const POINTS_NOTE='CC Points are rewards, not money: free, cannot be bought, transferred or cashed out, and only used in the Points Store.';
 // v1.8.1: role-specific nav. Last role cached (cc_role_v1) and painted at once to avoid a Guest flash, then verified.
 const RKEY='cc_role_v1';
 const DASH={customer:['dashboard-consumer.html','My orders'],vendor:['dashboard-vendor.html','Vendor studio'],staff:['dashboard-vendor.html','Team studio'],admin:['admin.html','Admin']};
@@ -198,7 +203,7 @@ function paintNav(r,shop){const el=document.getElementById('authNav'),rn=documen
  if(rn)rn.innerHTML=r==='vendor'?'<a href="tiers.html">Plans</a>':'';
  const d=DASH[r],here=location.pathname.split('/').pop()===d[0];
  const bw=document.getElementById('bellWrap');if(bw&&!document.getElementById('ccBell'))bw.innerHTML='<span id="ccBell" class="bellslot"></span>';
- el.innerHTML='<a class="dashlink'+(here?' on':'')+'" href="'+d[0]+'">'+d[1]+'</a>'+(r==='admin'||r==='staff'?'<a href="dashboard-consumer.html">My orders</a>':'')+'<a href="wallet.html">Wallet</a><a href="account.html">Account</a><a class="pill" href="#" id="logoutLink">Log out</a>'}
+ el.innerHTML='<a class="dashlink'+(here?' on':'')+'" href="'+d[0]+'">'+d[1]+'</a>'+(r==='admin'||r==='staff'?'<a href="dashboard-consumer.html">My orders</a>':'')+(r==='vendor'?'<a href="funds.html">Platform Funds</a>':'<a href="rewards.html">Rewards</a>'+(r==='admin'||r==='staff'?'':'<a href="store.html">Points Store</a>'))+'<a href="account.html">Account</a><a class="pill" href="#" id="logoutLink">Log out</a>'}
 document.addEventListener('click',async e=>{const a=e.target.closest&&e.target.closest('#logoutLink');if(!a)return;e.preventDefault();try{localStorage.removeItem(RKEY)}catch(x){}const sb=await client();if(sb)await sb.auth.signOut();location.href='index.html'});
 async function authNav(){
  let cached=null;try{cached=JSON.parse(localStorage.getItem(RKEY))}catch(e){}
@@ -243,7 +248,7 @@ function orderLines(o){
  if(ios&&/safari/i.test(navigator.userAgent)&&!/crios|fxios/i.test(navigator.userAgent))(document.readyState==='loading'?document.addEventListener('DOMContentLoaded',add):add());
 })();
 
-window.CC={confirmPay,setRole,cartBadge,live,orderLines,acctStatus,PCOLS,PCOLS_BASE,TESTBANNER,cents,toCents,uuid,payPill,noteSummary,newBadge,notesWidget,NOTE_POLL,SLABEL,stPill,fdate,fnice,payText,nextSteps,timeline,safeNext,WAVE,configured,client,esc,getUser,layout,TIER_LABEL,TIER_LIMIT,TIERS,lim,ROLE_LABEL,ROLE_PERMS,
+window.CC={flags,POINTS_NOTE,confirmPay,setRole,cartBadge,live,orderLines,acctStatus,PCOLS,PCOLS_BASE,TESTBANNER,cents,toCents,uuid,payPill,noteSummary,newBadge,notesWidget,NOTE_POLL,SLABEL,stPill,fdate,fnice,payText,nextSteps,timeline,safeNext,WAVE,configured,client,esc,getUser,layout,TIER_LABEL,TIER_LIMIT,TIERS,lim,ROLE_LABEL,ROLE_PERMS,
  xcd:n=>'EC$'+Number(n).toFixed(2)};
 layout();
 })();

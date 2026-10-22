@@ -647,3 +647,49 @@ body[data-page=cart] main{max-width:1180px}
 .op-pay{display:flex;flex-direction:column;gap:.45rem;align-items:flex-start;margin:.6rem 0}
 .pp-due{background:linear-gradient(135deg,#ff6b4a,#f4b942);color:#2a1300;border:0;font-weight:800}.pp-due.req{box-shadow:0 0 0 3px #ff6b4a33}
 .btn.sm{padding:.35rem .8rem;font-size:.85rem}
+/* ===== v1.16 Rewards (CC Points), Points Store, Platform Funds, admin funds ===== */
+.rw-bal{background:linear-gradient(135deg,#f4b942 0%,#ff6b4a 55%,#b4451d 100%)!important;color:#fff}
+.rw-bal .kicker,.rw-bal small,.rw-bal .rw-exp{color:#fff}.rw-bal .bigbal{color:#fff!important}
+.rw-pts small{font-size:.38em;font-weight:600;letter-spacing:.02em;opacity:.9}
+.rw-exp{margin:.6rem 0 .2rem;font-size:.93rem}.rw-bal .btn.alt{background:#fff;color:var(--spice)}
+.rw-steps{margin:.3rem 0 .6rem;padding-left:1.2rem}.rw-steps li{margin:.25rem 0}
+.rw-terms{margin:1.6rem 0;background:var(--paper);border-radius:16px;padding:.8rem 1.1rem;border:1px dashed #b4451d55}
+.rw-terms summary{cursor:pointer;font-weight:700;color:var(--spice)}.rw-terms li{margin:.35rem 0}
+.gcgrid{display:grid;gap:.9rem;grid-template-columns:repeat(auto-fill,minmax(220px,1fr))}
+.gc{position:relative;display:flex;flex-direction:column;gap:.25rem;padding:1rem 1.1rem;border-radius:18px;color:#fff;background:linear-gradient(135deg,#073b4c,#17a2a2);box-shadow:var(--sh);overflow:hidden}
+.gc:after{content:'🎁';position:absolute;right:.7rem;top:.5rem;font-size:1.6rem;opacity:.35}
+.gc-shop{font-weight:700;letter-spacing:.02em}.gc-val{font-family:var(--disp);font-size:1.8rem}.gc-val small{font-size:.5em;opacity:.8}
+.gc code{background:#ffffff22;border-radius:8px;padding:.15rem .5rem;width:max-content;letter-spacing:.06em}.gc small{opacity:.85}
+.gc-used,.gc-expired{filter:grayscale(.8);opacity:.7}
+.ps-bal{display:flex;align-items:center;gap:.8rem;flex-wrap:wrap;background:var(--abyss);color:#fff;border-radius:16px;padding:.7rem 1rem;margin:1rem 0}
+.ps-bal b{font-family:var(--disp);font-size:1.4rem;color:var(--gold)}.ps-bal a{color:var(--foam);margin-left:auto}
+.psgrid{display:grid;gap:1rem;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));margin:1rem 0}
+.psc{background:var(--paper);border-radius:22px;padding:1rem 1.1rem;box-shadow:var(--sh);border-top:6px solid var(--gold)}
+.psc-h{display:flex;gap:.7rem;align-items:center}
+.psc-h b{display:block;font-family:var(--disp);font-size:1.15rem}
+.psc-ic{width:42px;height:42px;border-radius:14px;display:grid;place-items:center;font-weight:800;color:#fff;background:linear-gradient(135deg,#ff6b4a,#f4b942)}
+.psc-rate{margin:.6rem 0;color:var(--spice);font-weight:700}
+.psc-vals{display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.5rem}
+.psv{flex:1 1 70px;display:flex;flex-direction:column;align-items:center;gap:.1rem;border:2px solid #10252e22;border-radius:14px;background:#fff;padding:.5rem .4rem;cursor:pointer;font:inherit;color:var(--ink)}
+.psv b{font-size:1.05rem}.psv small{color:var(--mut)}.psv.can{border-color:var(--lagoon);background:#e6f7f5}.psv:hover:not(:disabled){transform:translateY(-1px);border-color:var(--coral)}
+.psv:disabled{opacity:.45;cursor:not-allowed}
+.ps-soon{border-top-color:var(--sea);opacity:.85}.ps-soon .psc-ic{background:linear-gradient(135deg,#0b7285,#04202c)}
+.fu-bal{background:linear-gradient(135deg,#04202c,#0b7285 70%,#17a2a2)!important}
+.fu-mini{display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin-top:.8rem}
+.fu-mini>div{background:#ffffff1a;border-radius:14px;padding:.5rem .7rem;display:flex;flex-direction:column}
+.fu-mini span,.fu-mini small{color:#d9f3f0;font-size:.8rem}.fu-mini b{color:#fff;font-size:1.15rem}
+.fu-what{margin:1rem 0}.fu-list{list-style:none;padding:0;margin:.3rem 0}.fu-list li{padding:.3rem 0;border-bottom:1px dashed #10252e1a}
+table.fu-fees{display:table;width:100%;border-collapse:collapse;background:var(--paper);border-radius:16px;overflow:hidden}
+.fu-fees th,.fu-fees td{padding:.55rem .7rem;text-align:left;border-bottom:1px solid #10252e12;font-size:.92rem}
+.fu-fees th{background:var(--abyss);color:#fff;font-weight:600}.fu-fees td small{display:block;color:var(--mut);font-size:.78rem}
+.fu-fees tr.refunded td{color:var(--mut)}.fu-inv{color:var(--coral-d)}
+.fu-gc,.fu-exit{margin:1rem 0}.fu-exit{border-left:6px solid var(--coral)}.fu-gc{border-left:6px solid var(--gold)}
+.op-gc{display:flex;flex-direction:column;gap:.4rem;margin:.8rem 0;padding:.8rem 1rem;border-radius:16px;background:#fff6e0;border:1px solid #f4b94288}
+.op-gc .pd-f{margin:0}.op-gc select{width:100%;padding:.5rem;border-radius:10px;border:1px solid #10252e33;font:inherit}
+.af-q{border-left:6px solid var(--coral);margin:1rem 0}.af-acts{display:flex;gap:.4rem;flex-wrap:wrap}
+.wcard table{display:table;width:100%;border-collapse:collapse}.wcard th,.wcard td{padding:.45rem .5rem;text-align:left;border-bottom:1px solid #10252e12;font-size:.9rem}.wcard td small{display:block;color:var(--mut)}
+.fftiers{border:1px solid #10252e22;border-radius:12px;margin:.6rem 0;padding:.4rem .7rem}.fftiers .chk{display:inline-flex;margin-right:.6rem}
+.parklink{text-decoration:none;color:inherit}.parklink:hover{transform:translateY(-2px)}
+@media (max-width:560px){.fu-fees th:nth-child(2),.fu-fees td:nth-child(2),.fu-fees th:nth-child(3),.fu-fees td:nth-child(3){display:none}}
+.ps-soon .badge{background:#e7f0f2;color:#0b4f5c;border:1px solid #9cc3cb}
+#admtabs{flex-wrap:wrap;max-width:100%}

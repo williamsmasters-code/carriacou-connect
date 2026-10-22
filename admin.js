@@ -11,10 +11,10 @@ async function boot(){
  const tabsEl=$('#admtabs'),PA=$('#admpa');tabsEl.hidden=false;
  let tab='plans';if(CC.applications)CC.applications.pendingCount(sb).then(n=>{const b=tabsEl.querySelector('[data-t=applications]');if(b&&n)b.insertAdjacentHTML('beforeend',' <b class="nbadge" title="Applications waiting">'+n+'</b>')});
  const show=async()=>{tabsEl.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.t===tab));R.hidden=tab!=='plans';PA.hidden=tab==='plans';
-  if(tab==='analytics'){PA.innerHTML='';await CC.platform.mountAnalytics(PA,sb)}else if(tab==='customers'){PA.innerHTML='';await CC.customers.mount(PA,sb)}else if(tab==='vendors'){PA.innerHTML='';await CC.vendors.mount(PA,sb)}else if(tab==='applications'){PA.innerHTML='';await CC.applications.mount(PA,sb)}else if(tab==='settings'){PA.innerHTML='';await CC.platform.mountSettings(PA,sb)}};
+  if(tab==='analytics'){PA.innerHTML='';await CC.platform.mountAnalytics(PA,sb)}else if(tab==='customers'){PA.innerHTML='';await CC.customers.mount(PA,sb)}else if(tab==='vendors'){PA.innerHTML='';await CC.vendors.mount(PA,sb)}else if(tab==='exits'){PA.innerHTML='';await CC.adminFunds.mount(PA,sb)}else if(tab==='applications'){PA.innerHTML='';await CC.applications.mount(PA,sb)}else if(tab==='settings'){PA.innerHTML='';await CC.platform.mountSettings(PA,sb)}};
  const pick=t=>{tab=t;if(location.hash!=='#'+t&&t!=='plans')history.replaceState(null,'','#'+t);else if(t==='plans')history.replaceState(null,'',location.pathname+location.search);show()};
  tabsEl.querySelectorAll('button').forEach(b=>b.onclick=()=>pick(b.dataset.t));
- window.addEventListener('hashchange',()=>{const h=location.hash.slice(1);if(['analytics','applications','vendors','customers','settings'].includes(h)&&h!==tab){tab=h;show()}});
+ window.addEventListener('hashchange',()=>{const h=location.hash.slice(1);if(['analytics','applications','vendors','customers','settings','exits'].includes(h)&&h!==tab){tab=h;show()}});
  let q='',msg='',mok=true;
  const load=async()=>{
   const [v,r]=await Promise.all([sb.rpc('admin_list_vendors'),sb.rpc('admin_list_requests',{p_status:null})]);
@@ -50,7 +50,7 @@ async function boot(){
   if(apps){appBadge();if(tab==='applications'&&CC.applications.refreshList)CC.applications.refreshList()}
   if(reqs&&tab==='plans')load()};
  CC.live.on(onLive);
- {const h=location.hash.slice(1);if(['analytics','applications','vendors','customers','settings'].includes(h)){tab=h;await show()}}
+ {const h=location.hash.slice(1);if(['analytics','applications','vendors','customers','settings','exits'].includes(h)){tab=h;await show()}}
 }
 boot().catch(e=>{console.error(e);R.innerHTML='<div class="notice err">Something went wrong. Please refresh.</div>'});
 })();

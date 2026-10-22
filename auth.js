@@ -64,6 +64,7 @@ async account(){
  $('#lo').onclick=async()=>{await c.sb.auth.signOut();location.href='index.html'};
 },
 async consumer(){
+ const FL=await window.CC.flags();
  if(!configured)return offline();
  const c=await ctx();if(!c)return offline();
  if(!c.user){location.href='login.html?next=dashboard-consumer.html';return}
@@ -84,7 +85,7 @@ async consumer(){
   <div class="obreak">${window.CC.orderLines(o).map(l=>`<div class="oline${l.kind==='total'?' total2':''}${l.kind==='info'?' info':''}"><span>${esc(l.k)}</span><span>${l.v<0?'- ':''}${xcd(Math.abs(l.v))}${l.kind==='total'?' XCD':''}</span></div>`).join('')}${o.vendor_vat_number?`<div class="muted"><small>Vendor VAT number: ${esc(o.vendor_vat_number)}</small></div>`:''}</div>
   <div class="info-grid"><div><b>${fnice(o)}</b><br>${esc(payText(o))} ${window.CC.payPill(o,true)}</div><div><b>Contact</b><br>${esc(o.contact_name||'')} ${esc(o.contact_phone||'')}</div>${o.fulfilment==='delivery'?`<div><b>Deliver to</b><br>${esc(o.delivery_address||'')}</div>`:`<div><b>Collect from</b><br>${esc(o.vendors&&o.vendors.name||'')}${o.vendors&&o.vendors.location?', '+esc(o.vendors.location):''}</div>`}</div>
   <div id="offpay"></div>
-  ${o.payment_status==='unpaid'&&!(Number(o.amount_paid_xcd)>0)&&!(window.CC.offpay&&o.offline_status!=null)&&!['cancelled','completed'].includes(o.status)?`<div class="paybox">${window.CC.TESTBANNER}<p>Pay <b>${window.CC.cents(Math.round(o.total_xcd*100))}</b> now from your test wallet (play money), or pay the vendor on ${o.fulfilment==='delivery'?'delivery':'pickup'}.</p><button class="btn alt" id="opay">Pay with wallet (test)</button> <a class="btn ghost" href="wallet.html">Open wallet</a><div id="opm" class="notice" hidden role="alert"></div></div>`:o.payment_status==='paid'?`<div class="paybox ok">${window.CC.TESTBANNER}<p><b>Paid</b> ${window.CC.cents(Math.round(o.total_xcd*100))} from your test wallet${o.paid_at?' on '+esc(fdate(o.paid_at)):''}. Play money, no real funds.</p></div>`:o.payment_status==='refunded'?`<div class="paybox">${window.CC.TESTBANNER}<p><b>Refunded</b> to your test wallet. Play money, no real funds.</p></div>`:''}
+  ${FL.wallet_mode!=='off'&&o.payment_status==='unpaid'&&!(Number(o.amount_paid_xcd)>0)&&!(window.CC.offpay&&o.offline_status!=null)&&!['cancelled','completed'].includes(o.status)?`<div class="paybox">${window.CC.TESTBANNER}<p>Pay <b>${window.CC.cents(Math.round(o.total_xcd*100))}</b> now from your test wallet (play money), or pay the vendor on ${o.fulfilment==='delivery'?'delivery':'pickup'}.</p><button class="btn alt" id="opay">Pay with wallet (test)</button> <a class="btn ghost" href="wallet.html">Open wallet</a><div id="opm" class="notice" hidden role="alert"></div></div>`:o.payment_status==='paid'?`<div class="paybox ok">${window.CC.TESTBANNER}<p><b>Paid</b> ${window.CC.cents(Math.round(o.total_xcd*100))} from your test wallet${o.paid_at?' on '+esc(fdate(o.paid_at)):''}. Play money, no real funds.</p></div>`:o.payment_status==='refunded'?`<div class="paybox">${window.CC.TESTBANNER}<p><b>Refunded</b> to your test wallet. Play money, no real funds.</p></div>`:''}
   <h3>Notes with ${esc(o.vendors&&o.vendors.name||'the vendor')}</h3><div class="notes-box" id="nbox"></div>
   ${o.status==='placed'?'<p><button class="btn alt" id="ocancel">Cancel this order</button><br><small class="muted">You can cancel until the vendor confirms it.</small></p>':''}<div id="om" class="notice" hidden></div></div>`;
   window.CC.notesWidget($('#nbox'),o,'consumer',{sb,user});
@@ -144,6 +145,7 @@ async consumer(){
  $('#pf').onsubmit=async e=>{e.preventDefault();const u=await sb.from('profiles').update({full_name:$('#fn').value.trim()||null,phone:$('#ph').value.trim()||null,address:$('#ad').value.trim()||null}).eq('id',user.id);say($('#m1'),u.error?u.error.message:'Profile saved.',!u.error)};
 },
 async vendordash(){
+ const FL=await window.CC.flags();
  if(!configured)return offline();
  const c=await ctx();if(!c)return offline();
  if(!c.user){location.href='login.html';return}
@@ -203,7 +205,7 @@ async vendordash(){
   ${acc.length>1?`<p class="vswitch"><label>Business <select id="vsel">${acc.map(a=>`<option value="${esc(a.vendor_id)}"${a.vendor_id===vendor.id?' selected':''}>${esc(a.vendor_name)} (${esc(window.CC.ROLE_LABEL[a.role]||a.role)})</option>`).join('')}</select></label></p>`:''}
   ${vendor.status==='suspended'?`<div class="notice err" role="alert"><b>This business is suspended.</b> Shoppers cannot see it or place new orders. You can still see and finish your existing orders.${vendor.status_reason?' Reason: '+esc(vendor.status_reason):''} Please contact Carriacou Connect support.</div>`:''}
   <p class="muted">${esc(vendor.location||'')} ${vendor.description?'· '+esc(vendor.description):''}</p>
-  <p class="payquick">${isOwner?'<a class="btn alt" href="wallet.html">Business wallet (test)</a> ':''}${can('pos')?`<a class="btn ghost" href="pos.html${acc.length>1?'?v='+encodeURIComponent(vendor.id):''}">POS: charge a customer (test)</a>`:''}${isOwner&&!legacy?' <a class="btn ghost" href="tiers.html">Plans</a>':''}</p>
+  <p class="payquick">${isOwner||can('refunds')?'<a class="btn alt" href="funds.html'+(acc.length>1?'?v='+encodeURIComponent(vendor.id):'')+'">Platform Funds</a> ':''}${can('pos')&&FL.wallet_mode!=='off'?`<a class="btn ghost" href="pos.html${acc.length>1?'?v='+encodeURIComponent(vendor.id):''}">POS: charge a customer (test)</a>`:''}${isOwner&&!legacy?' <a class="btn ghost" href="tiers.html">Plans</a>':''}</p>
   ${!isOwner?`<p class="notice roleinfo">You are signed in as <b>${esc(window.CC.ROLE_LABEL[me.role]||me.role)}</b> for ${esc(vendor.name)}. ${me.role==='staff'?'You can manage orders, take POS payments and write order notes.':'You can also manage products, issue refunds and see analytics.'}</p>`:''}
   ${can('products_view')?`<p id="usedline">${usedHtml()}</p>`:''}
   ${can('products_view')&&photosOn?`<p class="muted phline">Photos per product: up to <b>${maxPh}</b> on your ${esc(TIER_LABEL[tierKey])} plan.${overPh>0?` <span class="err-text">${overPh} product${overPh===1?' has':'s have'} more photos than this plan allows. They are kept, but you can't add more to ${overPh===1?'it':'them'} until you remove some${isOwner&&!legacy?' or <a href="tiers.html">upgrade</a>':''}.</span>`:''}</p>`:''}
