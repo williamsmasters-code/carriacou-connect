@@ -638,3 +638,12 @@ body[data-page=cart] main{max-width:1180px}
 .a2hs:hover{background:#9fe3dc22;color:#fff}
 .a2hs-tip{position:fixed;left:50%;bottom:1rem;transform:translateX(-50%);z-index:300;width:min(360px,calc(100% - 2rem));background:var(--paper);color:var(--ink);border-radius:18px;padding:1rem 1.1rem;box-shadow:0 20px 50px -15px #000a;border-top:5px solid var(--gold)}
 .a2hs-tip p{margin:.4rem 0 .7rem}
+/* v1.15 payment requests */
+.op-req{display:flex;flex-wrap:wrap;gap:.6rem;align-items:flex-start;margin:.6rem 0;padding:.65rem .8rem;border-radius:12px;background:linear-gradient(135deg,#fff4d9,#ffe6dc);border:1px solid #f4b942}
+.op-req>div{display:flex;flex-direction:column;min-width:0;flex:1}.op-req span{font-style:italic;overflow-wrap:anywhere}.op-req small{color:#61757a}
+.op-req-ic{font-size:1.4rem;line-height:1}.op-req-b{display:flex;gap:.6rem;align-items:center;flex:0 0 auto!important;flex-direction:row!important}
+.op-msg{width:100%;color:#0f7a4f;font-weight:700}.op-msg.err{color:#b3261e}
+.op-reqb{background:linear-gradient(135deg,#ff6b4a,#f4b942);border-color:#ff6b4a;color:#2a1300}
+.op-pay{display:flex;flex-direction:column;gap:.45rem;align-items:flex-start;margin:.6rem 0}
+.pp-due{background:linear-gradient(135deg,#ff6b4a,#f4b942);color:#2a1300;border:0;font-weight:800}.pp-due.req{box-shadow:0 0 0 3px #ff6b4a33}
+.btn.sm{padding:.35rem .8rem;font-size:.85rem}
