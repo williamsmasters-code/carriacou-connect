@@ -226,6 +226,23 @@ function orderLines(o){
  if(o.fulfilment==='delivery'||Number(o.delivery_fee_xcd)>0)L.push({k:'Delivery fee'+(o.delivery_area?' ('+o.delivery_area+')':''),v:Number(o.delivery_fee_xcd)||0});
  if(o.tax_xcd!=null&&Number(o.tax_rate_pct)>0)L.push({k:(o.tax_inclusive?'Includes VAT':'VAT')+' ('+Number(o.tax_rate_pct)+'%)',v:Number(o.tax_xcd)||0,kind:o.tax_inclusive?'info':''});
  L.push({k:'Total',v:Number(o.total_xcd)||0,kind:'total'});return L}
+// v1.14 installable app: register the minimal service worker, and offer "Add to home screen" in the menu
+(function(){
+ const sa=matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
+ if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol))window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
+ if(sa)return;let ev=null;
+ const ios=/iphone|ipad|ipod/i.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+ const add=()=>{const m=document.querySelector('.navmore');if(!m||document.getElementById('a2hs'))return;
+  m.insertAdjacentHTML('beforeend','<button type="button" id="a2hs" class="a2hs"><span aria-hidden="true">📲</span> Add to home screen</button>');
+  document.getElementById('a2hs').onclick=async()=>{if(ev){ev.prompt();try{await ev.userChoice}catch(e){}ev=null;const b=document.getElementById('a2hs');if(b)b.remove();return}
+   if(document.body.classList.contains('navopen')){const nb=document.getElementById('navBtn');if(nb)nb.click()}if(document.querySelector('.a2hs-tip'))return;const t=document.createElement('div');t.className='a2hs-tip';t.setAttribute('role','dialog');t.setAttribute('aria-label','Add to home screen');
+   t.innerHTML='<b>Add Carriacou Connect to your home screen</b><p>In Safari, tap <b>Share</b> <span aria-hidden="true">⬆︎</span> then <b>Add to Home Screen</b>.</p><button type="button" class="btn ghost">Got it</button>';
+   document.body.appendChild(t);const btn=t.querySelector('button');btn.onclick=()=>t.remove();btn.focus()}};
+ window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();ev=e;if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',add);else add()});
+ window.addEventListener('appinstalled',()=>{const b=document.getElementById('a2hs');if(b)b.remove()});
+ if(ios&&/safari/i.test(navigator.userAgent)&&!/crios|fxios/i.test(navigator.userAgent))(document.readyState==='loading'?document.addEventListener('DOMContentLoaded',add):add());
+})();
+
 window.CC={confirmPay,setRole,cartBadge,live,orderLines,acctStatus,PCOLS,PCOLS_BASE,TESTBANNER,cents,toCents,uuid,payPill,noteSummary,newBadge,notesWidget,NOTE_POLL,SLABEL,stPill,fdate,fnice,payText,nextSteps,timeline,safeNext,WAVE,configured,client,esc,getUser,layout,TIER_LABEL,TIER_LIMIT,TIERS,lim,ROLE_LABEL,ROLE_PERMS,
  xcd:n=>'EC$'+Number(n).toFixed(2)};
 layout();
