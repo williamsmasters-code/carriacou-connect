@@ -49,7 +49,9 @@ $('#count').textContent=r.length+' product(s)';$('#list').innerHTML=r.map(card).
 vendor(){const v=DATA.vendors.find(x=>x.id===qs.get('id'));if(!v){$('#v').innerHTML='<div class="empty"><h3>This business is not available right now</h3><p>It may not be open yet, or it may have paused its shop. <a href="browse.html">Browse the marketplace</a></p></div>';return}
 document.title=v.name+' – Carriacou Connect';
 const ps=DATA.products.filter(p=>p.vendorId===v.id);
-$('#v').innerHTML=`<span class="kicker">Vendor</span><h1>${esc(v.name)} ${tierBadge(v.tier)}</h1><p>${esc(v.about)}<br><span class="muted">${esc(v.location)}${/,/.test(v.location||'')?'':', Carriacou'} · ${esc(v.tier)} plan · ${ps.length} of ${DATA.tiers[v.tier]??'unlimited'} product slots used</span></p><div class="grid">${ps.map(card).join('')}</div>`},
+const def=()=>{$('#v').innerHTML=`<span class="kicker">Vendor</span><h1>${esc(v.name)} ${tierBadge(v.tier)}</h1><p>${esc(v.about)}<br><span class="muted">${esc(v.location)}${/,/.test(v.location||'')?'':', Carriacou'} · ${esc(v.tier)} plan · ${ps.length} of ${DATA.tiers[v.tier]??'unlimited'} product slots used</span></p><div class="grid">${ps.map(card).join('')}</div>`};
+const ctx={shop:v,products:ps,cart:{get:getCart,add:addCart,count:()=>Object.values(getCart()).reduce((a,b)=>a+b,0),refreshBadge:badge},helpers:{esc,card,xcd,productUrl:id=>'product.html?id='+encodeURIComponent(id)}};
+if(window.CC.shopLayout)window.CC.shopLayout.render($('#v'),ctx,def);else def()},
 async product(){const p=DATA.products.find(x=>x.id===qs.get('id'));if(!p){$('#p').innerHTML='<p>Product not found.</p>';return}
 document.title=p.name+' – Carriacou Connect';const v=vendor(p.vendorId),cat=DATA.categories.find(c=>c.id===p.category)||DATA.categories[0];
 $('#p').innerHTML=`<div class="detail"><div id="gwrap"></div>

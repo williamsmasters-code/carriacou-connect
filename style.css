@@ -756,3 +756,7 @@ table.fu-fees{display:table;width:100%;border-collapse:collapse;background:var(-
  .ci-name,.cs-more,.ps-bal a,.rh-sell{display:inline-flex;align-items:center;min-height:44px}
  .cs-more{width:100%;justify-content:center}
 }
+/* v1.17 admin shop layout switch */
+.vd-layout .vl-mode{border:1px solid #e5dcc7;border-radius:12px;padding:.4rem .8rem;display:flex;gap:.4rem 1.4rem;flex-wrap:wrap;margin:.4rem 0 .8rem}
+.vd-layout .vl-acts{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center}.vd-layout code{background:#f1ebde;padding:.05rem .35rem;border-radius:6px}
+.vd-layout .vl-mode label.chk{display:flex;flex-direction:row;align-items:center;gap:.5rem;min-height:44px}

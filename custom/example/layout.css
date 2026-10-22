@@ -1,0 +1,15 @@
+/* Example custom layout styles. Scope everything under .cl-<key> so it cannot leak into other pages. */
+.cl-example .ex-hero{background:linear-gradient(135deg,#7a1f0e,#d9480f 55%,#f4b942);color:#fff;border-radius:28px;padding:2rem 1.6rem;margin-bottom:1.4rem;box-shadow:0 18px 40px -18px #7a1f0e}
+.cl-example .ex-hero h1{color:#fff;margin:.3rem 0;font-size:clamp(2rem,5vw,3.2rem)}
+.cl-example .ex-kick{font-size:.8rem;font-weight:800;letter-spacing:.14em;text-transform:uppercase;opacity:.9}
+.cl-example .ex-loc{opacity:.9;margin:0}
+.cl-example .ex-menu{display:grid;gap:.8rem;grid-template-columns:1fr}
+.cl-example .ex-menu h2{grid-column:1/-1;margin:.2rem 0}
+@media(min-width:900px){.cl-example .ex-menu{grid-template-columns:1fr 1fr}}
+.cl-example .ex-item{display:flex;justify-content:space-between;gap:1rem;align-items:center;background:#fffaf3;border:1px dashed #d9480f66;border-radius:18px;padding:1rem 1.1rem}
+.cl-example .ex-item h3{margin:0 0 .2rem;font-size:1.1rem}.cl-example .ex-item h3 a{color:inherit}
+.cl-example .ex-item p{margin:0;color:#5b4a3a;font-size:.95rem}
+.cl-example .ex-buy{display:flex;flex-direction:column;align-items:flex-end;gap:.4rem;flex:none}
+.cl-example .ex-add{min-height:44px;min-width:88px;background:#d9480f}
+.cl-example .ex-star{font-size:.8rem;color:#b45309;font-weight:700}
+.cl-example .ex-note{margin-top:1rem;padding:.7rem 1rem;border-radius:14px;background:#e6f6ee}
