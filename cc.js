@@ -164,7 +164,7 @@ function layout(){
  if(!document.querySelector('link[data-cc-fonts]')){const l=document.createElement('link');l.rel='stylesheet';l.dataset.ccFonts='1';l.href='https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,600;0,9..144,800;1,9..144,600&family=Plus+Jakarta+Sans:wght@400;500;700;800&display=swap';document.head.appendChild(l)}
  const m=document.querySelector('main');if(m)m.id='main';
  const home=document.body.dataset.page==='home';
- document.body.insertAdjacentHTML('afterbegin','<a class="skip" href="#main">Skip to content</a><div class="banner">'+msg+'</div><header><div class="row"><a class="logo" href="index.html">'+LOGO+'<div>Carriacou <span>Connect</span><small>Marketplace</small></div></a><span id="roleChip" class="rolechip rc-guest">Guest</span><nav aria-label="Main"><a class="mktbtn'+(/browse\.html$/.test(location.pathname)||document.body.dataset.page==='browse'?' on" aria-current="page':'')+'" href="browse.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9l1.5-5h15L21 9M3 9h18M3 9v1a3 3 0 006 0 3 3 0 006 0 3 3 0 006 0V9M5 13v7h14v-7"/></svg>Marketplace</a><a class="cartlink" href="cart.html">Cart<b id="cartCount">0</b></a><span id="bellWrap"></span><button type="button" class="navbtn" id="navBtn" aria-expanded="false" aria-controls="navMore"><span class="nb-bars" aria-hidden="true"><i></i><i></i><i></i></span><span class="nb-t">Menu</span></button><div id="navMore" class="navmore"><span id="roleNav"><a href="tiers.html">Plans</a><a href="apply.html">Sell</a></span><span id="authNav">'+out+'</span></div></nav><div class="navscrim" id="navScrim" hidden></div></div></header>');
+ document.body.insertAdjacentHTML('afterbegin','<a class="skip" href="#main">Skip to content</a><div class="banner">'+msg+'</div><header><div class="row"><a class="logo" href="index.html">'+LOGO+'<div>Carriacou <span>Connect</span><small class="slogan">Shop the island, Online</small></div></a><span id="roleChip" class="rolechip rc-guest">Guest</span><nav aria-label="Main"><a class="mktbtn'+(/browse\.html$/.test(location.pathname)||document.body.dataset.page==='browse'?' on" aria-current="page':'')+'" href="browse.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9l1.5-5h15L21 9M3 9h18M3 9v1a3 3 0 006 0 3 3 0 006 0 3 3 0 006 0V9M5 13v7h14v-7"/></svg>Marketplace</a><a class="cartlink" href="cart.html">Cart<b id="cartCount">0</b></a><span id="bellWrap"></span><button type="button" class="navbtn" id="navBtn" aria-expanded="false" aria-controls="navMore"><span class="nb-bars" aria-hidden="true"><i></i><i></i><i></i></span><span class="nb-t">Menu</span></button><div id="navMore" class="navmore"><span id="roleNav"><a href="tiers.html">Plans</a><a href="apply.html">Sell</a></span><span id="authNav">'+out+'</span></div></nav><div class="navscrim" id="navScrim" hidden></div></div></header>');
  navMenu();roleHero();setRole('guest');cartBadge();if(!window.CC_CART_WIRED){window.CC_CART_WIRED=1;addEventListener('storage',e=>{if(!e.key||e.key==='cconnect_cart_v1')cartBadge()});addEventListener('pageshow',cartBadge)}
  const hasBand=document.querySelector('.band');
  document.body.insertAdjacentHTML('beforeend',(hasBand?'':WAVE('#04202c',false).replace('class="wave-sep"','class="wave-sep foot-wave"'))+'<footer><b>Carriacou Connect®</b><br>by Williams’ Tech · Marketplace v1.7 preview<br><a href="apply.html">Sell on Carriacou Connect</a> · <a href="vendor-terms.html">Vendor terms (draft)</a><br>Sea, reef, spice and sail: made on Carriacou.</footer>');
@@ -231,21 +231,39 @@ function orderLines(o){
  if(o.fulfilment==='delivery'||Number(o.delivery_fee_xcd)>0)L.push({k:'Delivery fee'+(o.delivery_area?' ('+o.delivery_area+')':''),v:Number(o.delivery_fee_xcd)||0});
  if(o.tax_xcd!=null&&Number(o.tax_rate_pct)>0)L.push({k:(o.tax_inclusive?'Includes VAT':'VAT')+' ('+Number(o.tax_rate_pct)+'%)',v:Number(o.tax_xcd)||0,kind:o.tax_inclusive?'info':''});
  L.push({k:'Total',v:Number(o.total_xcd)||0,kind:'total'});return L}
-// v1.14 installable app: register the minimal service worker, and offer "Add to home screen" in the menu
+// v1.19 installable app (PWA). Registers the versioned service worker (sw.js) and offers "Add to Home Screen":
+//  - Android / desktop Chrome or Edge: uses the beforeinstallprompt event (the button appears only when the browser allows install)
+//  - iOS Safari: a short sheet with the steps (Share, then Add to Home Screen)
+//  - hidden when already installed (display-mode standalone) or dismissed (remembered for 30 days in localStorage cc_a2hs_dismissed)
+//  Places: a header button, the menu, and a small banner on the home page.
 (function(){
- const sa=matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
+ const KEY='cc_a2hs_dismissed',DAYS=30;
+ const sa=()=>matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
  if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol))window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
- if(sa)return;let ev=null;
- const ios=/iphone|ipad|ipod/i.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
- const add=()=>{const m=document.querySelector('.navmore');if(!m||document.getElementById('a2hs'))return;
-  m.insertAdjacentHTML('beforeend','<button type="button" id="a2hs" class="a2hs"><span aria-hidden="true">📲</span> Add to home screen</button>');
-  document.getElementById('a2hs').onclick=async()=>{if(ev){ev.prompt();try{await ev.userChoice}catch(e){}ev=null;const b=document.getElementById('a2hs');if(b)b.remove();return}
-   if(document.body.classList.contains('navopen')){const nb=document.getElementById('navBtn');if(nb)nb.click()}if(document.querySelector('.a2hs-tip'))return;const t=document.createElement('div');t.className='a2hs-tip';t.setAttribute('role','dialog');t.setAttribute('aria-label','Add to home screen');
-   t.innerHTML='<b>Add Carriacou Connect to your home screen</b><p>In Safari, tap <b>Share</b> <span aria-hidden="true">⬆︎</span> then <b>Add to Home Screen</b>.</p><button type="button" class="btn ghost">Got it</button>';
-   document.body.appendChild(t);const btn=t.querySelector('button');btn.onclick=()=>t.remove();btn.focus()}};
- window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();ev=e;if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',add);else add()});
- window.addEventListener('appinstalled',()=>{const b=document.getElementById('a2hs');if(b)b.remove()});
- if(ios&&/safari/i.test(navigator.userAgent)&&!/crios|fxios/i.test(navigator.userAgent))(document.readyState==='loading'?document.addEventListener('DOMContentLoaded',add):add());
+ const dismissed=()=>{const t=+localStorage.getItem(KEY)||0;return t&&Date.now()-t<DAYS*864e5};
+ const ua=navigator.userAgent;
+ const ios=(/iphone|ipad|ipod/i.test(ua)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1))&&/safari/i.test(ua)&&!/crios|fxios|edgios/i.test(ua);
+ let ev=null;
+ const removeAll=()=>document.querySelectorAll('[data-a2hs]').forEach(x=>x.remove());
+ const dismiss=()=>{try{localStorage.setItem(KEY,String(Date.now()))}catch(e){}removeAll()};
+ function sheet(){if(document.querySelector('.a2hs-sheet'))return;if(document.body.classList.contains('navopen')){const nb=document.getElementById('navBtn');if(nb)nb.click()}
+  const back=document.createElement('div');back.className='a2hs-back';back.dataset.a2hs='1';
+  back.innerHTML='<div class="a2hs-sheet" role="dialog" aria-modal="true" aria-labelledby="a2hs-t"><h2 id="a2hs-t">Add Carriacou Connect to your Home Screen</h2><ol><li>Tap the <b>Share</b> button <span class="a2hs-ico" aria-hidden="true">⬆︎</span> in Safari\u2019s toolbar.</li><li>Scroll and tap <b>Add to Home Screen</b> <span class="a2hs-ico" aria-hidden="true">＋</span>.</li><li>Tap <b>Add</b>. The app opens from your Home Screen like any other app.</li></ol><div class="a2hs-btns"><button type="button" class="btn" data-ok>Got it</button><button type="button" class="btn ghost" data-no>Don\u2019t show again</button></div></div>';
+  document.body.appendChild(back);const close=()=>back.remove();
+  back.addEventListener('click',e=>{if(e.target===back)close()});back.querySelector('[data-ok]').onclick=close;back.querySelector('[data-no]').onclick=()=>{close();dismiss()};
+  back.addEventListener('keydown',e=>{if(e.key==='Escape')close()});back.querySelector('[data-ok]').focus()}
+ async function install(){if(ios){sheet();return}if(ev){const e=ev;ev=null;e.prompt();let r=null;try{r=await e.userChoice}catch(x){}if(r&&r.outcome==='accepted')removeAll();else if(r&&r.outcome==='dismissed')dismiss();return}if(ios)sheet()}
+ function add(){if(sa()||dismissed()||(!ev&&!ios))return;
+  const hdr=document.querySelector('header nav');if(hdr&&!document.getElementById('a2hsHead')){const b=document.createElement('button');b.type='button';b.id='a2hsHead';b.className='a2hs-head';b.dataset.a2hs='1';b.setAttribute('aria-label','Install the app: add Carriacou Connect to your home screen');b.innerHTML='<span aria-hidden="true">📲</span><span class="a2hs-lbl">Install app</span>';b.onclick=install;const nb=document.getElementById('navBtn');hdr.insertBefore(b,nb||null)}
+  const m=document.querySelector('.navmore');if(m&&!document.getElementById('a2hs')){m.insertAdjacentHTML('beforeend','<button type="button" id="a2hs" class="a2hs" data-a2hs="1"><span aria-hidden="true">📲</span> Add to Home Screen</button>');document.getElementById('a2hs').onclick=install}
+  if(document.body.dataset.page==='home'&&!document.getElementById('a2hsBan')){const h=document.querySelector('.hero-wrap')||document.querySelector('main');if(h){const d=document.createElement('div');d.id='a2hsBan';d.className='a2hs-ban';d.dataset.a2hs='1';d.setAttribute('role','region');d.setAttribute('aria-label','Install the app');
+   d.innerHTML='<span class="a2hs-banic" aria-hidden="true">📲</span><span class="a2hs-bantx"><b>Get the app</b> Add Carriacou Connect to your Home Screen. Free, no app store needed.</span><button type="button" class="btn" data-go>Add to Home Screen</button><button type="button" class="a2hs-x" data-x aria-label="Dismiss for 30 days">✕</button>';
+   h.after(d);d.querySelector('[data-go]').onclick=install;d.querySelector('[data-x]').onclick=dismiss}}}
+ const ready=f=>document.readyState==='loading'?document.addEventListener('DOMContentLoaded',f):f();
+ window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();ev=e;ready(()=>setTimeout(add,0))});
+ window.addEventListener('appinstalled',removeAll);
+ if(ios)ready(()=>setTimeout(add,0));
+ window.CC_A2HS={add,sheet,dismiss,install,KEY};
 })();
 
 window.CC={flags,POINTS_NOTE,confirmPay,setRole,cartBadge,live,orderLines,acctStatus,PCOLS,PCOLS_BASE,TESTBANNER,cents,toCents,uuid,payPill,noteSummary,newBadge,notesWidget,NOTE_POLL,SLABEL,stPill,fdate,fnice,payText,nextSteps,timeline,safeNext,WAVE,configured,client,esc,getUser,layout,TIER_LABEL,TIER_LIMIT,TIERS,lim,ROLE_LABEL,ROLE_PERMS,

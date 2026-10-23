@@ -776,3 +776,9 @@ New file: supabase/shop_gift_cards.sql   >>> RUN AFTER shop_layouts.sql (idempot
 - Admin > Vendors > open a shop: read-only gift card summary and history.
 - Home page: the hero now shows live counts of approved vendors and active items (public_market_counts RPC, two numbers only, samples excluded). If the fetch fails it shows a dash.
 New / changed files: supabase/shop_gift_cards.sql, shop_giftcards.js; changed auth.js, app.js, vendors.js, index.html, dashboard-vendor.html, admin.html, vendor.html, vendor-terms.html, style.css.
+
+v1.19 (22 Oct 2026)
+- Slogan: "Shop the island, Online" (header, hero, meta/OG tags, manifest).
+- Ratings and reviews: run supabase/reviews.sql AFTER supabase/shop_gift_cards.sql. Idempotent. Text and stars only; the server rejects image markup and image links.
+- Real photos rule: vendors must tick "These are real photos of this product taken by my shop"; the confirmation and time are stored on the server (set_product_photos_confirmed). Customers can report "Photo doesn't match / stock photo"; admins can hide the image, hide the listing or dismiss.
+- PWA: manifest.webmanifest, sw.js (v1.19.0, caches the shell and offline.html only, never Supabase or auth), Add to Home Screen button and iOS steps sheet.

@@ -36,6 +36,8 @@ const promos=async()=>{const pb=$('#promos');if(!pb||!DATA.live||!window.CC.conf
  pb.innerHTML='<div class="sec-head"><div><span class="kicker">On now</span><h2>Promotions</h2></div></div><div class="promos">'+r.data.map(c=>'<a class="promo" href="vendor.html?id='+encodeURIComponent(c.vendor_id)+'"><span class="promo-v">'+esc(c.vendor_name)+'</span><b>'+esc(c.name)+'</b>'+(c.headline?'<span>'+esc(c.headline)+'</span>':'')+'<small>Until '+esc(c.ends_on)+(c.has_discount?' · discount code at checkout':'')+'</small></a>').join('')+'</div>'}catch(e){}};
 $('#cats').innerHTML=DATA.categories.map(c=>`<a class="cat" style="--c:${esc(c.color)}" href="browse.html?cat=${c.id}">${catIcon(c.id)}<span>${esc(c.name)}</span></a>`).join('');
 $('#featured').innerHTML=DATA.products.filter(p=>p.featured).map(card).join('');
+// v1.19 featured ranking: Bayesian average + recency (public_product_scores, see reviews.sql). Keeps the flag order if the RPC is missing.
+if(DATA.live&&window.CC.configured&&window.CC.reviews){(async()=>{try{const sb=await window.CC.client();const fp=DATA.products.filter(p=>p.featured);if(fp.length<2)return;const s=await window.CC.reviews.featuredSort(sb,fp);$('#featured').innerHTML=s.map(card).join('')}catch(e){}})()}
 promos();
 $('#vendors').innerHTML=DATA.vendors.map(v=>`<a class="card vcard" href="vendor.html?id=${v.id}"><div class="body"><h3>${esc(v.name)}</h3>${tierBadge(v.tier)}<div class="muted">${esc(v.location)}</div></div></a>`).join('')},
 browse(){
@@ -54,6 +56,7 @@ const ps=DATA.products.filter(p=>p.vendorId===v.id);
 const def=()=>{$('#v').innerHTML=`<span class="kicker">Vendor</span><h1>${esc(v.name)} ${tierBadge(v.tier)}</h1><p>${esc(v.about)}<br><span class="muted">${esc(v.location)}${/,/.test(v.location||'')?'':', Carriacou'} · ${esc(v.tier)} plan · ${ps.length} of ${DATA.tiers[v.tier]??'unlimited'} product slots used</span></p><div class="grid">${ps.map(card).join('')}</div>`};
 const ctx={shop:v,products:ps,cart:{get:getCart,add:addCart,count:()=>Object.values(getCart()).reduce((a,b)=>a+b,0),refreshBadge:badge},helpers:{esc,card,xcd,productUrl:id=>'product.html?id='+encodeURIComponent(id)}};
 if(window.CC.shopLayout)window.CC.shopLayout.render($('#v'),ctx,def);else def();
+if(DATA.live&&window.CC.configured&&window.CC.reviews){(async()=>{try{const sb=await window.CC.client();let b=document.getElementById('rv-shop');if(!b){b=document.createElement('div');b.id='rv-shop';$('#v').before(b)}await window.CC.reviews.shopMount(b,sb,v.id)}catch(e){}})()}
 if(DATA.live&&window.CC.configured&&window.CC.shopGiftCards){(async()=>{try{const sb=await window.CC.client();let b=document.getElementById('sgc-pub-mount');if(!b){b=document.createElement('div');b.id='sgc-pub-mount';$('#v').after(b)}window.CC.shopGiftCards.maybePublic(b,sb,v.id)}catch(e){}})()}},
 async product(){const p=DATA.products.find(x=>x.id===qs.get('id'));if(!p){$('#p').innerHTML='<p>Product not found.</p>';return}
 document.title=p.name+' – Carriacou Connect';const v=vendor(p.vendorId),cat=DATA.categories.find(c=>c.id===p.category)||DATA.categories[0];
@@ -75,6 +78,7 @@ const gallery=urls=>{const real=urls.length>0,n=real?urls.length:3;
  $('#gprev').onclick=()=>to(cur-1);$('#gnext').onclick=()=>to(cur+1);
  tr.addEventListener('keydown',e=>{if(e.key==='ArrowRight'){e.preventDefault();to(cur+1)}else if(e.key==='ArrowLeft'){e.preventDefault();to(cur-1)}})};
 gallery(p.imageUrl?[p.imageUrl]:[]);
+if(DATA.live&&window.CC.configured&&window.CC.reviews){(async()=>{try{const sb=await window.CC.client();let b=document.getElementById('rv-mount');if(!b){b=document.createElement('div');b.id='rv-mount';$('#p').after(b)}await window.CC.reviews.productMount(b,{sb,productId:p.id,vendorId:p.vendorId})}catch(e){}})()}
 if(DATA.live){try{const sb=await window.CC.client();const r=await sb.from('product_images').select('url,position').eq('product_id',p.id).order('position',{ascending:true});
  if(!r.error&&r.data&&r.data.length){const urls=r.data.map(x=>x.url).filter(u=>/^https?:\/\//i.test(u));if(urls.length&&(urls.length!==1||urls[0]!==p.imageUrl))gallery(urls)}}catch(e){}}
 $('#add').onclick=()=>{const q=Math.max(1,Math.min(99,parseInt($('#qty').value)||1));addCart(p.id,q);$('#msg').innerHTML='Added to cart. <a href="cart.html">View cart</a>'}},

@@ -1,19 +1,37 @@
 {
   "name": "Carriacou Connect",
   "short_name": "C. Connect",
-  "description": "Carriacou's cashless marketplace: shop local vendors, order and pay in one place.",
-  "id": "./index.html",
-  "start_url": "./index.html?source=pwa",
-  "scope": "./",
+  "description": "Shop the island, Online: Carriacou's local marketplace. Shop local vendors, order and pay in one place.",
+  "id": "/carriacou-connect/",
+  "start_url": "/carriacou-connect/index.html?source=pwa",
+  "scope": "/carriacou-connect/",
   "display": "standalone",
   "orientation": "portrait-primary",
   "theme_color": "#04202c",
   "background_color": "#f7ecd6",
   "lang": "en",
-  "categories": ["shopping", "business"],
+  "categories": [
+    "shopping",
+    "business"
+  ],
   "icons": [
-    {"src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
-    {"src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
-    {"src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
   ]
 }
