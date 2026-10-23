@@ -825,3 +825,23 @@ header .logo small.slogan{white-space:nowrap}
 @media (min-width:700px){.a2hs-back{align-items:center}.a2hs-sheet{border-radius:22px}}
 @media (max-width:480px){header .logo{min-width:0;flex:1 1 auto}header .logo small.slogan{white-space:normal;font-size:.62rem;line-height:1.15}header nav{flex-wrap:nowrap;min-width:0}.a2hs-head{padding:0 .5rem}}
 @media (max-width:480px){header:has(#a2hsHead:not([hidden])) .nb-t{display:none}header:has(#a2hsHead:not([hidden])) .navbtn{padding:.45rem .65rem}}
+/* v1.19.1 photo labels: small disclaimer near the bottom of every product photo */
+.card .imgw,.gal-slide,.lbox-fig{position:relative}
+.plabel{position:absolute;left:.4rem;bottom:.4rem;max-width:calc(100% - .8rem);padding:.18rem .5rem;border-radius:6px;font:600 .72rem/1.25 var(--body,system-ui);color:#fff;background:rgba(4,32,44,.82);pointer-events:none;white-space:normal;text-shadow:none;letter-spacing:.01em;z-index:1}
+.plabel.real{background:rgba(20,94,62,.88)}
+@media (max-width:480px){.card .plabel{font-size:.66rem;left:.3rem;bottom:.3rem;max-width:calc(100% - .6rem);padding:.14rem .4rem}}
+.gal-slide .plabel{font-size:.8rem;left:.6rem;bottom:.6rem}
+.gal-zoom{position:absolute;top:.5rem;right:.5rem;min-width:44px;min-height:44px;border-radius:999px;border:0;background:rgba(4,32,44,.7);color:#fff;font-size:1.2rem;cursor:pointer;z-index:2}
+.lbox{border:0;padding:0;background:transparent;max-width:min(96vw,1100px);width:100%}
+.lbox::backdrop{background:rgba(0,0,0,.85)}
+.lbox-in{display:flex;flex-direction:column;gap:.6rem;align-items:center}
+.lbox-fig{margin:0;max-width:100%}.lbox-fig img{display:block;max-width:100%;max-height:78vh;object-fit:contain;border-radius:8px}
+.lbox-fig .plabel{font-size:.85rem;left:.6rem;bottom:.6rem}
+.lbox-bar{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap;justify-content:center;color:#fff}.lbox-bar .btn{min-height:44px}
+.plab{border:1px solid var(--line,#d9d2c3);border-radius:8px;margin:.4rem 0 0;padding:.3rem .5rem .4rem;min-width:0}
+.plab.need{border-color:#c2255c;background:#fff4f6}
+.plab legend{font-size:.78rem;font-weight:700;padding:0 .25rem}.plab .req{color:#c2255c;font-weight:600}
+.plab-o{display:flex;align-items:center;gap:.45rem;min-height:44px;cursor:pointer;font-size:.88rem}
+.plab-o input{width:22px;height:22px;margin:0;flex:0 0 auto}
+.plab-def{display:block;font-size:.72rem;line-height:1.3}
+#upl .ptile,#upl .plab{scroll-margin-top:140px}

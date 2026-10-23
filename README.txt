@@ -782,3 +782,10 @@ v1.19 (22 Oct 2026)
 - Ratings and reviews: run supabase/reviews.sql AFTER supabase/shop_gift_cards.sql. Idempotent. Text and stars only; the server rejects image markup and image links.
 - Real photos rule: vendors must tick "These are real photos of this product taken by my shop"; the confirmation and time are stored on the server (set_product_photos_confirmed). Customers can report "Photo doesn't match / stock photo"; admins can hide the image, hide the listing or dismiss.
 - PWA: manifest.webmanifest, sw.js (v1.19.0, caches the shell and offline.html only, never Supabase or auth), Add to Home Screen button and iOS steps sheet.
+
+v1.19.1 (22 Oct 2026) - photo labels replace the mandatory real-photos tick
+- Run supabase/photo_labels.sql AFTER supabase/reviews.sql (idempotent; not yet run anywhere).
+- Every product photo is labelled "Real photo" or "Stock photo" (vendor must choose for each photo, no default). Label, time and user stored per image.
+- Shoppers see "Real photo" or "Stock photo – actual item may differ" on cards, the product gallery and the photo viewer.
+- CSV-imported and old unconfirmed photos are "Stock photo" until the vendor relabels them; photos confirmed under the old tick become "Real photo".
+- Report reason: "Photo labelled real but isn't / doesn't match". Admin can relabel, hide image, hide listing or dismiss.

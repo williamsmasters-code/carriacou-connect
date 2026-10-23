@@ -175,11 +175,13 @@ async vendordash(){
  const stockCell=p=>{if(p.stock_qty==null)return '<span class="muted">Not tracked</span>';const th=p.low_stock_threshold==null?5:p.low_stock_threshold;return p.stock_qty===0?'<span class="stk out">Out of stock</span>':p.stock_qty<=th?'<span class="stk low">'+p.stock_qty+' left (low)</span>':'<span class="stk">'+p.stock_qty+' in stock</span>'};
  let photosOn=null,prods=[],pTotal=0,pPage=0,pQuery='';const PAGE=50;
  const loadProducts=async()=>{
-  const build=emb=>{let q=sb.from('products').select(emb?window.CC.PCOLS+',product_images(id,url,position)':window.CC.PCOLS_BASE,{count:'exact'}).eq('vendor_id',vendor.id);
+  window.CC_PIC=window.CC_PIC||'id,url,position,photo_label,photo_labeled_at';
+  const build=emb=>{let q=sb.from('products').select(emb?window.CC.PCOLS+',product_images('+window.CC_PIC+')':window.CC.PCOLS_BASE,{count:'exact'}).eq('vendor_id',vendor.id);
    const t=pQuery.replace(/[%_\\,()*"']/g,' ').replace(/\s+/g,' ').trim();
    if(t)q=emb?q.or('name.ilike.%'+t+'%,sku.ilike.%'+t+'%'):q.ilike('name','%'+t+'%');
    return q.order('created_at',{ascending:false}).order('id',{ascending:false}).range(pPage*PAGE,pPage*PAGE+PAGE-1)};
   let r=await build(photosOn!==false);
+  if(r.error&&/photo_label/i.test(r.error.message||'')){window.CC_PIC='id,url,position';r=await build(photosOn!==false)}
   if(r.error&&photosOn!==false&&/product_images|relationship|sku|schema cache|column/i.test(r.error.message||'')){photosOn=false;r=await build(false)}
   else if(!r.error&&photosOn===null)photosOn=true;
   if(!r.error&&!(r.data||[]).length&&pPage>0&&r.count>0){pPage=Math.max(0,Math.ceil(r.count/PAGE)-1);r=await build(photosOn!==false)}
@@ -334,7 +336,7 @@ async vendordash(){
      row.stock_qty=n;row.low_stock_threshold=th}
     else if(editing&&editing.stock_qty!=null)row.stock_qty=null;
     let urls=up.urls();
-    if(photosOn&&up.hasNew()&&!up.confirmed())throw new Error('Tick "These are real photos of this product taken by my shop" to add photos. Stock, AI-generated or borrowed images are not allowed.');
+    if(photosOn&&up.missing())throw new Error('Choose "Real photo" or "Stock photo" for every photo before saving ('+up.missing()+' still to label).');
     const exifFor=()=>up.exif(urls);
     if(up.hasNew()){const c=await up.commit(uploadBlob,async u=>dropOld(u),t=>say(m,t,true));urls=c.urls;uploaded=c.uploaded}
     if(!photosOn)row.image_url=urls[0]||null;
@@ -342,19 +344,21 @@ async vendordash(){
     if(r.error){for(const u of uploaded)await dropOld(u);if(/cost_price/.test(r.error.message||''))throw new Error('Cost prices need supabase/standard_analytics.sql to be run in Supabase first (see README.txt). Clear the cost field to save without it.');if(/stock_qty|low_stock/.test(r.error.message||''))throw new Error('Stock tracking needs supabase/analytics.sql to be run in Supabase first (see README.txt). Clear the stock fields to save without it.');throw r.error}
     const pid=id||(r.data&&r.data.id);
     if(photosOn&&pid&&(up.dirty()||(!id&&urls.length))){
-     let pr=await sb.rpc('set_product_photos_confirmed',{p_product:pid,p_urls:urls,p_confirm:up.confirmed(),p_exif:exifFor()});
-     if(pr.error&&/Could not find|schema cache/i.test(pr.error.message||''))pr=await sb.rpc('set_product_photos',{p_product:pid,p_urls:urls});
+     const miss=e=>e&&/Could not find|schema cache/i.test(e.message||'');
+     let pr=await sb.rpc('set_product_photos_labeled',{p_product:pid,p_photos:up.labels(urls),p_exif:exifFor()});
+     if(miss(pr.error))pr=await sb.rpc('set_product_photos_confirmed',{p_product:pid,p_urls:urls,p_confirm:up.labels(urls).every(x=>x.label==='real'),p_exif:exifFor()});
+     if(miss(pr.error))pr=await sb.rpc('set_product_photos',{p_product:pid,p_urls:urls});
      if(pr.error){for(const u of uploaded)await dropOld(u);await draw();say($('#pm'),'Your product was saved, but its photos were not: '+(pr.error.message||'unknown error')+'. Open it with Edit and try again.');return}}
     for(const u of up.removed())await dropOld(u);
     await draw()}
    catch(err){say(m,(err&&err.message)||'Could not save.');sv.disabled=false}};
   function startEdit(p){editCache[p.id]=p;$('#pid').value=p.id;$('#pn').value=p.name;$('#pd').value=p.description;$('#pp').value=p.price_xcd;$('#pc').value=p.category;$('#ps').value=p.stock_qty==null?'':p.stock_qty;$('#pt').value=p.low_stock_threshold==null?5:p.low_stock_threshold;$('#pcost').value=costMap&&costMap[p.id]!=null?costMap[p.id]:'';
-   up.set(photosOn?(p.product_images||[]).map(i=>i.url):(p.image_url?[p.image_url]:[]));
+   up.set(photosOn?(p.product_images||[]).map(i=>({url:i.url,label:i.photo_label||null,labeled:!!i.photo_labeled_at})):(p.image_url?[p.image_url]:[]));
    $('#pa').checked=p.active;$('#ftitle').textContent='Edit product';$('#psave').textContent='Save changes';$('#psave').disabled=false;$('#pcancel').hidden=false;f.scrollIntoView()}
   const editCache={};
   {const cl=$('#pcostl');if(cl&&!costMap)cl.hidden=true}
   const goEditImpl=async id=>{if(!canEdit)return;showTab('products');let p=prods.find(x=>x.id===id);
-   if(!p){const r=await sb.from('products').select(photosOn?window.CC.PCOLS+',product_images(id,url,position)':window.CC.PCOLS_BASE).eq('id',id).maybeSingle();p=r.data;if(p&&p.product_images)p.product_images.sort((a,b)=>a.position-b.position)}
+   if(!p){const r=await sb.from('products').select(photosOn?window.CC.PCOLS+',product_images('+window.CC_PIC+')':window.CC.PCOLS_BASE).eq('id',id).maybeSingle();p=r.data;if(p&&p.product_images)p.product_images.sort((a,b)=>a.position-b.position)}
    if(p)startEdit(p)};
   goEditRef=goEditImpl;
   // ---- product list: server-side paging + search (works for thousands of products) ----

@@ -2,7 +2,7 @@
 // Caches ONLY the app shell (same-origin HTML/CSS/JS/icons listed below) and an offline page.
 // NEVER caches Supabase, API, auth, realtime, storage or any other cross-origin response, and never any non-GET request:
 // those requests are not intercepted at all, so the browser talks to Supabase directly and live data and sessions stay fresh.
-const VERSION='v1.19.0';
+const VERSION='v1.19.1';
 const C='cc-shell-'+VERSION,OFF='./offline.html';
 const SHELL=['./','./index.html','./offline.html','./style.css','./cc.js','./app.js','./manifest.webmanifest','./icons/icon-192.png','./icons/icon-512.png','./icons/favicon-32.png','./icons/apple-touch-icon.png'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(C).then(c=>Promise.all(SHELL.map(u=>c.add(new Request(u,{cache:'reload'})).catch(()=>{})))));self.skipWaiting()});

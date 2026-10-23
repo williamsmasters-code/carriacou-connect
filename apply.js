@@ -32,7 +32,7 @@ function form(a,edit){
  '<label class="chk"><input type="checkbox" id="f-dl"'+(x.offers_delivery?' checked':'')+'> Delivery</label>'+
  '<h3>Starting plan</h3><label>Plan you would like<select id="f-tier">'+tiers+'</select></label><p class="muted">Plans are in test mode: nothing is billed. Carriacou Connect confirms your starting plan when it approves you, and you can ask to upgrade later.</p>'+
  '<label class="chk"><input type="checkbox" id="f-agree"> I have read and accept the <a href="vendor-terms.html" target="_blank" rel="noopener">Vendor Terms (draft)</a></label>'+
- '<label class="chk"><input type="checkbox" id="f-photos"> I will only use <b>real photos of my own products</b> taken by my shop (no stock, AI-generated or borrowed images; food shows the actual dish as served). <a href="vendor-terms.html#photos" target="_blank" rel="noopener">Photo rule (3a)</a></label>'+
+ '<label class="chk"><input type="checkbox" id="f-photos"> I will <b>label every product photo truthfully</b> as "Real photo" (taken by my shop of the actual item; food shows the actual dish as served) or "Stock photo". I understand that labelling a stock or borrowed image as Real can lead to removal, hiding or suspension. <a href="vendor-terms.html#photos" target="_blank" rel="noopener">Photo labels (3a)</a></label>'+
  '<div id="f-err" class="notice err" role="alert" hidden></div>'+
  '<button class="btn" type="submit">'+(edit?'Save and resubmit':'Submit application')+'</button></form>';
 }
@@ -43,7 +43,7 @@ function wire(box,a,edit,done){
  const vatSync=()=>{box.querySelector('#f-vatl').hidden=!box.querySelector('#f-vat').checked};box.querySelector('#f-vat').onchange=vatSync;vatSync();
  f.onsubmit=async e=>{e.preventDefault();err.hidden=true;
   const g=id=>box.querySelector(id),p={name:g('#f-name').value.trim(),description:g('#f-desc').value.trim(),island:g('#f-isl').value,area:g('#f-area').value.trim(),category:g('#f-cat').value,phone:g('#f-phone').value.trim(),whatsapp:g('#f-wa').value.trim()||null,business_type:g('#f-bt').value,vat_registered:g('#f-vat').checked,vat_number:g('#f-vat').checked?g('#f-vatn').value.trim():null,registration_number:g('#f-reg').value.trim()||null,offers_pickup:g('#f-pu').checked,offers_delivery:g('#f-dl').checked,tier:g('#f-tier').value,agree_terms:g('#f-agree').checked};
-  if(p.agree_terms&&!g('#f-photos').checked){const m=box.querySelector('[role=status],.notice');alert('Please confirm you will only use real photos of your own products (Vendor Terms 3a).');return}
+  if(p.agree_terms&&!g('#f-photos').checked){const m=box.querySelector('[role=status],.notice');alert('Please confirm you will label every photo truthfully as Real photo or Stock photo (Vendor Terms 3a).');return}
   const bad=!p.name?'Enter your business name.':p.description.length<10?'Describe what you sell (at least 10 characters).':!p.area?'Enter your parish or area.':!p.phone?'Enter a contact phone number.':(p.vat_registered&&!p.vat_number)?'Enter your VAT number, or untick VAT registered.':(!p.offers_pickup&&!p.offers_delivery)?'Choose pickup, delivery or both.':!p.agree_terms?'Please accept the Vendor Terms to apply.':'';
   if(bad){err.textContent=bad;err.hidden=false;err.scrollIntoView({block:'nearest'});return}
   f.querySelectorAll('button').forEach(b=>b.disabled=true);

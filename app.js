@@ -26,7 +26,8 @@ const tierBadge=t=>`<span class="badge t-${t.replace('+','')}">${esc(t)}</span>`
 document.addEventListener('error',e=>{const t=e.target;if(t&&t.tagName==='IMG'&&t.dataset.fb&&t.src!==t.dataset.fb)t.src=t.dataset.fb},true);
 const ICON={food:'<path d="M6 40c0-14 10-26 30-30-2 18-14 30-30 30zM6 40 28 18"/>',crafts:'<path d="M24 6a18 18 0 1 0 0 36c4 0 4-5 1-7s-1-7 4-7h6c5 0 7-3 7-7 0-9-8-15-18-15zM15 22h.1M22 15h.1M32 17h.1"/>',fashion:'<path d="M17 6 6 13l5 9 5-3v23h16V19l5 3 5-9-11-7c-1 4-4 6-7 6s-6-2-7-6z"/>',beauty:'<path d="M24 6c3 7 8 10 14 10-4 6-4 12 0 18-6 0-11 3-14 10-3-7-8-10-14-10 4-6 4-12 0-18 6 0 11-3 14-10z"/>',sea:'<path d="M6 30h36l-6 10H12zM24 6v24M24 8l14 20H24M22 12 12 28h10"/>',home:'<path d="M24 42V22M24 28c-8 0-12-6-12-12 8 0 12 5 12 12zM24 24c0-8 5-12 12-12 0 8-4 12-12 12zM14 42h20"/>'};
 const catIcon=id=>`<svg viewBox="0 0 48 48" aria-hidden="true">${ICON[id]||ICON.home}</svg>`;
-const card=p=>`<a class="card" href="product.html?id=${p.id}"><div class="imgw">${img(p)}</div><div class="body"><h3>${esc(p.name)}</h3><div class="muted">${esc(vendor(p.vendorId).name)}</div><div class="price">${xcd(p.price)} XCD</div></div></a>`;
+const plab=l=>l==='real'?'<span class="plabel real">Real photo</span>':l==='stock'?'<span class="plabel stock">Stock photo – actual item may differ</span>':'';
+const card=p=>`<a class="card" href="product.html?id=${p.id}"><div class="imgw">${img(p)}${p.imageUrl?plab(p.imageLabel||'stock'):''}</div><div class="body"><h3>${esc(p.name)}</h3><div class="muted">${esc(vendor(p.vendorId).name)}</div><div class="price">${xcd(p.price)} XCD</div></div></a>`;
 // ---- pages ----
 const pages={
 home(){
@@ -65,11 +66,17 @@ $('#p').innerHTML=`<div class="detail"><div id="gwrap"></div>
 <p class="muted">Category: <a href="browse.html?cat=${cat.id}">${esc(cat.name)}</a><br>Sold by <a href="vendor.html?id=${v.id}">${esc(v.name)}</a> ${tierBadge(v.tier)}</p>
 <label>Qty <input id="qty" type="number" min="1" max="99" value="1" style="width:5rem"></label> <button class="btn" id="add">Add to cart</button><p id="msg" role="status"></p></div></div>`;
 // gallery: real photos (swipe / scroll-snap + thumbnails), else the three placeholder pictures
-const gallery=urls=>{const real=urls.length>0,n=real?urls.length:3;
+const gallery=(urls,labs)=>{const real=urls.length>0,n=real?urls.length:3;labs=labs||[];
+ const lab=i=>real?plab(labs[i]||'stock'):'';
  const src=i=>real?urls[i]:svg(p,i),alt=i=>real?`${p.name}, photo ${i+1} of ${n}`:`${p.name} (placeholder image ${i+1})`;
- $('#gwrap').innerHTML=`<div class="gal"><div class="gal-track" id="gtrack" tabindex="0" role="group" aria-roledescription="carousel" aria-label="Product photos">${Array.from({length:n},(_,i)=>`<div class="gal-slide" role="group" aria-label="Photo ${i+1} of ${n}"><img class="main-img" alt="${esc(alt(i))}" src="${esc(src(i))}" data-fb="${esc(svg(p,i%3))}"${i?' loading="lazy"':''}></div>`).join('')}</div>
+ $('#gwrap').innerHTML=`<div class="gal"><div class="gal-track" id="gtrack" tabindex="0" role="group" aria-roledescription="carousel" aria-label="Product photos">${Array.from({length:n},(_,i)=>`<div class="gal-slide" role="group" aria-label="Photo ${i+1} of ${n}"><img class="main-img" alt="${esc(alt(i))}" src="${esc(src(i))}" data-fb="${esc(svg(p,i%3))}"${i?' loading="lazy"':''}>${lab(i)}${real?`<button type="button" class="gal-zoom" data-i="${i}" aria-label="Open photo ${i+1} full size">⤢</button>`:''}</div>`).join('')}</div>
  ${n>1?`<button type="button" class="gal-nav prev" id="gprev" aria-label="Previous photo">‹</button><button type="button" class="gal-nav next" id="gnext" aria-label="Next photo">›</button><span class="gal-count" id="gcount" aria-live="polite">1 / ${n}</span>`:''}</div>
  ${n>1?`<div class="thumbs" role="group" aria-label="Choose photo">${Array.from({length:n},(_,i)=>`<button type="button" class="thumbbtn${i?'':' on'}" data-i="${i}" aria-label="Show photo ${i+1}"><img alt="" src="${esc(src(i))}" data-fb="${esc(svg(p,i%3))}"></button>`).join('')}</div>`:''}`;
+ document.querySelectorAll('.gal-zoom').forEach(b=>b.onclick=()=>lightbox(+b.dataset.i));
+ function lightbox(i){let d=document.getElementById('lbox');if(!d){d=document.createElement('dialog');d.id='lbox';d.className='lbox';d.setAttribute('aria-label','Photo viewer');document.body.appendChild(d)}
+  const show=k=>{i=(k+n)%n;d.innerHTML=`<div class="lbox-in"><figure class="lbox-fig"><img src="${esc(src(i))}" alt="${esc(alt(i))}">${lab(i)}</figure><div class="lbox-bar">${n>1?'<button type="button" class="btn ghost" data-l="-1" aria-label="Previous photo">‹ Prev</button>':''}<span>${i+1} / ${n}</span>${n>1?'<button type="button" class="btn ghost" data-l="1" aria-label="Next photo">Next ›</button>':''}<button type="button" class="btn" data-l="x">Close</button></div></div>`;
+   d.querySelectorAll('[data-l]').forEach(b=>b.onclick=()=>b.dataset.l==='x'?d.close():show(i+ +b.dataset.l))};
+  show(i);d.onclick=e=>{if(e.target===d)d.close()};if(d.showModal)d.showModal();else d.setAttribute('open','')}
  const tr=$('#gtrack');if(n<2)return;let cur=0;
  const mark=i=>{cur=i;document.querySelectorAll('.thumbbtn').forEach((x,j)=>x.classList.toggle('on',j===i));$('#gcount').textContent=(i+1)+' / '+n};
  const to=i=>{i=Math.max(0,Math.min(n-1,i));tr.scrollTo({left:i*tr.clientWidth,behavior:'smooth'});mark(i)};
@@ -77,10 +84,11 @@ const gallery=urls=>{const real=urls.length>0,n=real?urls.length:3;
  document.querySelectorAll('.thumbbtn').forEach(b=>b.onclick=()=>to(+b.dataset.i));
  $('#gprev').onclick=()=>to(cur-1);$('#gnext').onclick=()=>to(cur+1);
  tr.addEventListener('keydown',e=>{if(e.key==='ArrowRight'){e.preventDefault();to(cur+1)}else if(e.key==='ArrowLeft'){e.preventDefault();to(cur-1)}})};
-gallery(p.imageUrl?[p.imageUrl]:[]);
+gallery(p.imageUrl?[p.imageUrl]:[],[p.imageLabel]);
 if(DATA.live&&window.CC.configured&&window.CC.reviews){(async()=>{try{const sb=await window.CC.client();let b=document.getElementById('rv-mount');if(!b){b=document.createElement('div');b.id='rv-mount';$('#p').after(b)}await window.CC.reviews.productMount(b,{sb,productId:p.id,vendorId:p.vendorId})}catch(e){}})()}
-if(DATA.live){try{const sb=await window.CC.client();const r=await sb.from('product_images').select('url,position').eq('product_id',p.id).order('position',{ascending:true});
- if(!r.error&&r.data&&r.data.length){const urls=r.data.map(x=>x.url).filter(u=>/^https?:\/\//i.test(u));if(urls.length&&(urls.length!==1||urls[0]!==p.imageUrl))gallery(urls)}}catch(e){}}
+if(DATA.live){try{const sb=await window.CC.client();let r=await sb.from('product_images').select('url,position,photo_label').eq('product_id',p.id).order('position',{ascending:true});
+ if(r.error&&/photo_label/.test(r.error.message||''))r=await sb.from('product_images').select('url,position').eq('product_id',p.id).order('position',{ascending:true});
+ if(!r.error&&r.data&&r.data.length){const rows=r.data.filter(x=>/^https?:\/\//i.test(x.url));if(rows.length)gallery(rows.map(x=>x.url),rows.map(x=>x.photo_label))}}catch(e){}}
 $('#add').onclick=()=>{const q=Math.max(1,Math.min(99,parseInt($('#qty').value)||1));addCart(p.id,q);$('#msg').innerHTML='Added to cart. <a href="cart.html">View cart</a>'}},
 cart(){const VC=['#0b7285','#7a2e8e','#e8590c','#2f9e44','#c2255c','#1c7ed6'];
 const draw=()=>{const c=getCart(),ids=Object.keys(c).filter(i=>DATA.products.some(p=>p.id===i));const R=$('#cart');
@@ -230,15 +238,17 @@ const d=await jsonP;
 if(!window.CC.configured)return d;
 try{
 const sb=await window.CC.client();if(!sb)return d;
-const page=async from=>sb.from('products').select('id,vendor_id,name,description,price_xcd,category,image_url,featured,created_at').eq('active',true).order('created_at',{ascending:false}).order('id',{ascending:true}).range(from,from+999);
+let PC='id,vendor_id,name,description,price_xcd,category,image_url,image_label,featured,created_at';
+const page=async from=>sb.from('products').select(PC).eq('active',true).order('created_at',{ascending:false}).order('id',{ascending:true}).range(from,from+999);
 const vr=await sb.from('vendors').select('id,name,description,location,tier').order('name');let pr=await page(0);
+if(pr.error&&/image_label/.test(pr.error.message||'')){PC=PC.replace(',image_label','');pr=await page(0)}
 if(vr.error||pr.error)throw (vr.error||pr.error);
 // Supabase returns at most 1000 rows per request: read further pages (up to 10,000 products)
 for(let from=1000;pr.data.length===from&&from<10000;from+=1000){const nx=await page(from);if(nx.error)break;pr={data:pr.data.concat(nx.data)}}
 const cc=Object.fromEntries(d.categories.map(c=>[c.id,c.color]));
 const L=window.CC.TIER_LABEL;
 d.vendors=vr.data.map(v=>({id:v.id,name:v.name,tier:L[v.tier]||'Lite',location:v.location||'',about:v.description||''}));
-d.products=pr.data.map(p=>({id:p.id,vendorId:p.vendor_id,category:p.category,name:p.name,price:Number(p.price_xcd),currency:'XCD',description:p.description||'',featured:!!p.featured,color:cc[p.category]||'#0e7490',imageUrl:/^https?:\/\//i.test(p.image_url||'')?p.image_url:null}));
+d.products=pr.data.map(p=>({id:p.id,vendorId:p.vendor_id,category:p.category,name:p.name,price:Number(p.price_xcd),currency:'XCD',description:p.description||'',featured:!!p.featured,color:cc[p.category]||'#0e7490',imageUrl:/^https?:\/\//i.test(p.image_url||'')?p.image_url:null,imageLabel:p.image_label==='real'?'real':'stock'}));
 d.live=true;
 }catch(e){console.warn('Supabase unavailable, using sample data:',e&&e.message||e)}
 return d}
