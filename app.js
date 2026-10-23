@@ -30,6 +30,8 @@ const card=p=>`<a class="card" href="product.html?id=${p.id}"><div class="imgw">
 // ---- pages ----
 const pages={
 home(){
+// v1.18 live counts (public_market_counts RPC: two numbers only). A dash stays if the fetch fails.
+(async()=>{const sv=$('#st-v'),si=$('#st-i');if(!sv||!si||!window.CC.configured)return;try{const sb=await window.CC.client();const r=await sb.rpc('public_market_counts');const d=r&&r.data;if(r.error||!d||!Number.isFinite(+d.vendors)||!Number.isFinite(+d.items))return;sv.textContent=(+d.vendors).toLocaleString('en');si.textContent=(+d.items).toLocaleString('en')}catch(e){}})();
 const promos=async()=>{const pb=$('#promos');if(!pb||!DATA.live||!window.CC.configured)return;try{const sb=await window.CC.client();const r=await sb.rpc('public_featured_campaigns');if(r.error||!Array.isArray(r.data)||!r.data.length)return;
  pb.innerHTML='<div class="sec-head"><div><span class="kicker">On now</span><h2>Promotions</h2></div></div><div class="promos">'+r.data.map(c=>'<a class="promo" href="vendor.html?id='+encodeURIComponent(c.vendor_id)+'"><span class="promo-v">'+esc(c.vendor_name)+'</span><b>'+esc(c.name)+'</b>'+(c.headline?'<span>'+esc(c.headline)+'</span>':'')+'<small>Until '+esc(c.ends_on)+(c.has_discount?' · discount code at checkout':'')+'</small></a>').join('')+'</div>'}catch(e){}};
 $('#cats').innerHTML=DATA.categories.map(c=>`<a class="cat" style="--c:${esc(c.color)}" href="browse.html?cat=${c.id}">${catIcon(c.id)}<span>${esc(c.name)}</span></a>`).join('');
@@ -51,7 +53,8 @@ document.title=v.name+' – Carriacou Connect';
 const ps=DATA.products.filter(p=>p.vendorId===v.id);
 const def=()=>{$('#v').innerHTML=`<span class="kicker">Vendor</span><h1>${esc(v.name)} ${tierBadge(v.tier)}</h1><p>${esc(v.about)}<br><span class="muted">${esc(v.location)}${/,/.test(v.location||'')?'':', Carriacou'} · ${esc(v.tier)} plan · ${ps.length} of ${DATA.tiers[v.tier]??'unlimited'} product slots used</span></p><div class="grid">${ps.map(card).join('')}</div>`};
 const ctx={shop:v,products:ps,cart:{get:getCart,add:addCart,count:()=>Object.values(getCart()).reduce((a,b)=>a+b,0),refreshBadge:badge},helpers:{esc,card,xcd,productUrl:id=>'product.html?id='+encodeURIComponent(id)}};
-if(window.CC.shopLayout)window.CC.shopLayout.render($('#v'),ctx,def);else def()},
+if(window.CC.shopLayout)window.CC.shopLayout.render($('#v'),ctx,def);else def();
+if(DATA.live&&window.CC.configured&&window.CC.shopGiftCards){(async()=>{try{const sb=await window.CC.client();let b=document.getElementById('sgc-pub-mount');if(!b){b=document.createElement('div');b.id='sgc-pub-mount';$('#v').after(b)}window.CC.shopGiftCards.maybePublic(b,sb,v.id)}catch(e){}})()}},
 async product(){const p=DATA.products.find(x=>x.id===qs.get('id'));if(!p){$('#p').innerHTML='<p>Product not found.</p>';return}
 document.title=p.name+' – Carriacou Connect';const v=vendor(p.vendorId),cat=DATA.categories.find(c=>c.id===p.category)||DATA.categories[0];
 $('#p').innerHTML=`<div class="detail"><div id="gwrap"></div>

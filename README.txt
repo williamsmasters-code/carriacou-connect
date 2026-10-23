@@ -765,3 +765,14 @@ SUPABASE SETTINGS TO CHECK (one time)
 New / changed files: supabase/realtime.sql, realtime.js (loaded automatically by cc.js after login); changed cc.js (event bus CC.live,
 bell slot, notes widget listens), auth.js (consumer + vendor dashboards live), pay.js (wallet + POS live), admin.js and applications.js
 (live queues), style.css (bell, dropdown, toasts, highlight). Tests: test/pgrt.mjs, test/mock_rt.js, test/rt_flow.js.
+
+v1.18 SHOP GIFT CARD TRACKER + LIVE HOME PAGE COUNTS
+New file: supabase/shop_gift_cards.sql   >>> RUN AFTER shop_layouts.sql (idempotent) <<<
+- Vendor dashboard has a new "Gift cards" tab. Plus+, Pro and Enterprise: issue a card (the code is made by the database and is unique in the shop),
+  look up by code, redeem part or all, correct or void the card (owner and sub-admins), see the history, and export a CSV. Staff can look up and redeem.
+- Lite and Standard see a locked note with an upgrade button. A shop that drops below Plus+ keeps look-up, redeem and void for existing cards, but cannot issue new ones.
+- Record keeping only: the shop sells and is responsible for its cards. Carriacou Connect never holds, sells or pays out money for them (wording in the tab and in Vendor Terms 7c).
+- Optional: the owner can switch on a balance check on the shop page (balance, status and expiry only).
+- Admin > Vendors > open a shop: read-only gift card summary and history.
+- Home page: the hero now shows live counts of approved vendors and active items (public_market_counts RPC, two numbers only, samples excluded). If the fetch fails it shows a dash.
+New / changed files: supabase/shop_gift_cards.sql, shop_giftcards.js; changed auth.js, app.js, vendors.js, index.html, dashboard-vendor.html, admin.html, vendor.html, vendor-terms.html, style.css.

@@ -760,3 +760,23 @@ table.fu-fees{display:table;width:100%;border-collapse:collapse;background:var(-
 .vd-layout .vl-mode{border:1px solid #e5dcc7;border-radius:12px;padding:.4rem .8rem;display:flex;gap:.4rem 1.4rem;flex-wrap:wrap;margin:.4rem 0 .8rem}
 .vd-layout .vl-acts{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center}.vd-layout code{background:#f1ebde;padding:.05rem .35rem;border-radius:6px}
 .vd-layout .vl-mode label.chk{display:flex;flex-direction:row;align-items:center;gap:.5rem;min-height:44px}
+/* v1.18 shop gift card tracker */
+.sgc-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:1rem}
+.sgc-sum{display:flex;flex-wrap:wrap;gap:.6rem}.sgc-sum>div{background:var(--paper);border-radius:14px;padding:.55rem .9rem;box-shadow:var(--sh);min-width:8rem}.sgc-sum b{display:block;font-size:1.2rem}.sgc-sum span{font-size:.8rem;color:var(--mut)}
+.sgc-disc{border-left:4px solid #c98a12}
+.sgc-grid{display:grid;gap:1.2rem;grid-template-columns:1fr}.sgc-grid>*{min-width:0}
+@media (min-width:1024px){.sgc-grid{grid-template-columns:minmax(320px,400px) 1fr;align-items:start}}
+.sgc-col>.formcard{margin-bottom:1rem}
+.sgc-tools{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin-bottom:.6rem}.sgc-tools input{flex:1 1 12rem;min-width:0}.sgc-tools select,.sgc-tools .btn{width:auto}
+.sgc input,.sgc select,.sgc .btn,.sgc-pubbox input,.sgc-pubbox .btn,.sgc summary{min-height:44px}
+.sgc .btn.sm{min-height:44px;min-width:44px}
+.sgc-cardv{margin-top:.8rem;border-top:1px solid #10252e1a;padding-top:.6rem}
+.sgc-code code,.sgc-tab code{font-size:1rem;letter-spacing:.04em;word-break:break-all}
+.sgc-bal{font-size:1.7rem;font-weight:800;margin:.2rem 0}.sgc-bal small{font-size:.9rem;font-weight:400;color:var(--mut)}
+.sgc-row{display:grid;gap:.5rem;grid-template-columns:1fr}.sgc-btns{display:flex;flex-wrap:wrap;gap:.5rem}.sgc-btns .btn{flex:1 1 9rem}
+@media (min-width:700px){.sgc-row{grid-template-columns:1fr 1fr}.sgc-row .sgc-btns,.sgc-pubbox .sgc-row .btn{grid-column:1/-1}}
+.sgc-more{margin-top:.8rem}
+.badge.sgc-active{background:#d8f3e3;color:#0b5a2b}.badge.sgc-used{background:#e6e9ec;color:#3b4a52}.badge.sgc-void{background:#fbe0dd;color:#8a1d12}.badge.sgc-exp{background:#fff1cc;color:#7a5200}
+.sgc-pubbox{margin-top:1.5rem;max-width:640px}
+.small{font-size:.85rem}
+@media (min-width:1024px){.sgc-tab code{white-space:nowrap;word-break:normal}.sgc-tab td{vertical-align:middle}}
