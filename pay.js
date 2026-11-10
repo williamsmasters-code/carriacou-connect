@@ -30,8 +30,9 @@ async wallet(){
  const c=await boot();if(!c)return;const {sb,user}=c;const R=$('#pay');
  // v1.16: the money wallet is PARKED (wallet_repurpose.sql). The code below is kept for test mode only.
  const FL=await window.CC.flags();
- if(FL.wallet_mode==='off'){document.title='Wallet parked – Carriacou Connect';main().querySelector('h1').textContent='Wallet (parked)';
-  R.innerHTML='<div class="notice"><b>The money wallet is switched off.</b> Carriacou Connect does not hold or move customers\' money: you pay each shop directly. Top-ups, transfers between users, payouts and cash-out are parked until the platform is licensed or works with a bank partner.</div><div class="walletgrid"><a class="wcard parklink" href="rewards.html"><span class="kicker">Customers</span><h3>⭐ Rewards</h3><p>Your CC Points and gift cards.</p></a><a class="wcard parklink" href="funds.html"><span class="kicker">Businesses</span><h3>🏦 Platform Funds</h3><p>Prepaid credit for Carriacou Connect services.</p></a></div>';return}
+ if(FL.wallet_mode==='off'){document.title='Wallet retired – Carriacou Connect';main().querySelector('h1').textContent='Wallet (retired)';
+  // v1.20 (financial_v2.sql): the customer wallet is retired. Customers pay shops on pickup or online by card; CC Cash is for businesses only.
+  R.innerHTML='<div class="notice"><b>The customer wallet has been retired.</b> Carriacou Connect does not hold customers\' money and there are no payments between users. To pay a shop, choose <b>pay on pickup</b> or <b>pay online by credit/debit card</b> '+window.CC.cardNote()+' at checkout.</div><div class="walletgrid"><a class="wcard parklink" href="rewards.html"><span class="kicker">Customers</span><h3>⭐ Rewards</h3><p>CC Points are earned on orders paid by card or picked up and completed. They are rewards, not money.</p></a><a class="wcard parklink" href="funds.html"><span class="kicker">Businesses only</span><h3>🏦 CC Cash</h3><p>For vendors only: pays for Carriacou Connect services and goods (plan, fees, ads, custom layout). Customers do not have CC Cash.</p></a></div>';return}
  const q=new URLSearchParams(location.search);
  let wallets=[],cur=null,lim={topup_max_cents:50000,transfer_max_cents:200000};
  const lr=await rpc(sb,'pay_limits',{});if(lr.data)lim=lr.data;
@@ -136,6 +137,8 @@ async pos(){
   if(m){v={id:m.vendor_id,name:m.vendor_name};isOwner=!!m.is_owner}}}catch(e){}
  if(!v){const vr=await sb.from('vendors').select('id,name').eq('owner_id',user.id).order('created_at').limit(1);v=vr.data&&vr.data[0]}
  if(!v){R.innerHTML=TESTBANNER+'<div class="notice">POS is for vendor businesses and their team. <a href="signup.html">Sign up as a vendor</a>, <a href="dashboard-vendor.html">create your business profile</a>, or <a href="accept-invite.html">join a team with an invite code</a>.</div>';return}
+ if((await window.CC.flags()).wallet_mode==='off'){document.title='POS – Carriacou Connect';
+  R.innerHTML='<div class="notice"><b>POS charges are retired.</b> In-person sales are paid to you directly (cash or your own card machine), outside Carriacou Connect. Record them on the order if you like. Customers pay for online orders on pickup or online by card.</div><div class="notice"><b>CC Points:</b> in-person and POS sales do not earn points. Customers earn points only on orders placed on Carriacou Connect: paid online by card, or pay on pickup once you mark the order completed.</div><p><a class="btn" href="dashboard-vendor.html'+(new URLSearchParams(location.search).get('v')?'?v='+encodeURIComponent(v.id):'')+'#orders">Back to orders</a></p>';return}
  const pr=await sb.from('products').select('id,name,price_xcd').eq('vendor_id',v.id).eq('active',true).order('name');
  const prods=pr.data||[];const qty={};let active=null,timer=null,liveTick=null;
  // v1.7 live: a 'pos_paid' notification shows PAID at once (the 3 s check stays as a fallback)

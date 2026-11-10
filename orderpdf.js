@@ -103,7 +103,7 @@ async function buildOrder(o,ex){
  const y3=P.S.y;
  const addr=o.fulfilment==='delivery'?((o.delivery_address||'-')+(o.delivery_area?'\nArea: '+o.delivery_area:'')):('Collect from '+(ex.vendorName||'the vendor')+(ex.vendorLocation?', '+ex.vendorLocation:''));
  h1=P.kv(o.fulfilment==='delivery'?'Delivery address':'Pickup',addr,M,colW);
- h2=P.kv('Payment',CC.payText(o).replace(/ \(TEST, play money\)/,'')+(test?' - TEST MODE (play money)':'')+'\nStatus: '+payStatusLabel(o)+(test&&o.payment_status==='paid'?' (TEST MODE)':'')+(o.paid_at?'\nPaid '+dt(o.paid_at):'')+(isOffP(o)?'\nPaid so far: '+money(o.amount_paid_xcd)+' - Balance due: '+money(dueOf(o)):''),M+CW/2+8,colW);P.S.y=y3+Math.max(h1,h2)+6;
+ h2=P.kv('Payment',CC.payText(o).replace(/ \(TEST, play money\)/,'')+(test?' - TEST MODE (play money)':'')+'\nStatus: '+payStatusLabel(o)+(test&&o.payment_status==='paid'?' (TEST MODE)':'')+(o.paid_at?'\nPaid '+dt(o.paid_at):'')+(isOffP(o)?'\nPaid so far: '+money(o.amount_paid_xcd)+' - Balance due: '+money(dueOf(o)):'')+cardLine(ex),M+CW/2+8,colW);P.S.y=y3+Math.max(h1,h2)+6;
  if(o.notes){P.h2('Order instructions');P.para(o.notes,M,CW,10)}
  // items
  P.h2('Items');
@@ -132,7 +132,7 @@ async function buildOrder(o,ex){
  else (ex.notes||[]).forEach(n=>{
   const who=(n.author_name||(n.author_role==='vendor'?'Vendor':'Customer'))+' ('+(n.author_role==='vendor'?'vendor':'customer')+')';
   P.need(30);P.font(8,'bold',P.NAVY);d.text(clean(who)+'  -  '+dt(n.created_at),M,P.S.y+8);P.S.y+=12;P.para(n.body,M+8,CW-8,10);P.S.y+=4});
- footers(P,ex.sample||test);
+ footers(P,ex.sample||test||(ex.card||[]).some(x=>x.test));
  return {doc:d,filename:fname(on)};
 }
 
@@ -155,7 +155,7 @@ async function buildSummary(list,ex){
  P.font(8,'normal',P.GREY);d.text(clean('Included in prices: '+CC.cents(vIn)+' · added on top: '+CC.cents(vOn)+(live.some(o=>o.tax_xcd==null)?' · orders placed before tax was recorded count as 0':'')),M,P.S.y+8);P.S.y+=12;
  {const off=live.filter(isOffP);if(off.length){const pd=off.reduce((a,o)=>a+Math.round((Number(o.amount_paid_xcd)||0)*100),0),du=off.reduce((a,o)=>a+Math.round(dueOf(o)*100),0);P.font(10,'bold',P.NAVY);d.text('Pay on pickup/delivery: collected / balance due (XCD)',M,P.S.y+10);d.text(CC.cents(pd)+' / '+CC.cents(du),M+CW,P.S.y+10,{align:'right'});P.S.y+=14}}
  P.font(8,'normal',P.GREY);d.text(clean(live.length+' of '+list.length+' orders counted; cancelled orders excluded.'),M,P.S.y+8);
- const test=list.some(isWallet);
+ const test=list.some(o=>isWallet(o)||o.payment_is_test===true);
  footers(P,ex.sample||test);
  return {doc:d,filename:fname('CC-orders-'+new Date().toISOString().slice(0,10))};
 }
@@ -209,8 +209,12 @@ async function buildReport(spec,ex){
 }
 
 // fetch the extra rows the current user is already allowed to read
+// v1.20 card payments: brand, last 4, refunds and TEST MODE on the receipt (never the full card number)
+const cardLine=ex=>{const cp=(ex.card||[]).find(x=>x.status!=='failed');if(!cp)return '';const B=(CC.payments&&CC.payments.BRAND)||{};
+ return '\nCard: '+(B[cp.brand]||'Card')+' ending '+cp.last4+(Number(cp.refunded_cents)?'\nRefunded to card: '+money(cp.refunded_cents/100):'')+(cp.test?'\nTEST MODE - no real money':'')};
 async function extras(sb,o){
  const ex={};
+ if(o.payment_method==='pay_card_online'&&CC.payments){ex.card=await CC.payments.info(sb,o.id)}
  try{const r=await sb.from('order_notes').select('*').eq('order_id',o.id).order('created_at',{ascending:true});if(r.error)ex.notesError=true;else ex.notes=r.data||[]}catch(e){ex.notesError=true}
  if(!o.order_status_history){try{const r=await sb.from('order_status_history').select('*').eq('order_id',o.id);if(!r.error)ex.history=r.data||[]}catch(e){}}
  return ex;

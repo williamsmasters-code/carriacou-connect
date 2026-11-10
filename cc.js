@@ -39,13 +39,13 @@ const SLABEL={placed:'Placed',confirmed:'Confirmed',ready:'Ready',out_for_delive
 const stPill=s=>'<span class="st st-'+esc(s)+'">'+esc(SLABEL[s]||s)+'</span>';
 const fdate=d=>{try{return new Date(d).toLocaleString([], {dateStyle:'medium',timeStyle:'short'})}catch(e){return String(d)}};
 const fnice=(o)=>o.fulfilment==='delivery'?'Delivery':'Pickup';
-const payText=o=>o.payment_method==='pay_with_wallet'?'Pay with wallet (TEST, play money)':o.payment_method==='pay_on_delivery'?'Pay on delivery':'Pay on pickup';
+const payText=o=>o.payment_method==='pay_card_online'?'Paid online by card':o.payment_method==='pay_with_wallet'?'Wallet (retired, old test order)':o.payment_method==='pay_on_delivery'?'Pay on delivery (old order)':'Pay on pickup';
 // ---- Connect Pay (v0.6, TEST MODE: play money only) ----
 const TESTBANNER='<div class="testbanner" role="note"><b>TEST MODE</b> - play money, not real funds</div>';
 const cents=n=>{n=Number(n)||0;const neg=n<0;n=Math.abs(Math.round(n));return (neg?'-':'')+'EC$'+Math.floor(n/100).toLocaleString('en-US')+'.'+String(n%100).padStart(2,'0')};
 const toCents=v=>{const m=String(v==null?'':v).trim().replace(/^EC?\$/i,'').replace(/,/g,'').match(/^(\d{1,7})(?:\.(\d{1,2}))?$/);return m?parseInt(m[1],10)*100+parseInt((m[2]||'0').padEnd(2,'0'),10):null};
 const uuid=()=>(window.crypto&&crypto.randomUUID)?crypto.randomUUID():'k'+Date.now().toString(36)+Math.random().toString(36).slice(2,12);
-const payPill=(o,always)=>!o.payment_status?'':(o.payment_method&&o.payment_method!=='pay_with_wallet'&&o.payment_status==='unpaid'&&o.offline_status)?(o.offline_status==='paid'?'<span class="pp pp-paid">Paid</span>':o.offline_status==='partial'?'<span class="pp pp-part">Partial · '+cents(Math.round((Number(o.total_xcd)-Number(o.amount_paid_xcd))*100))+' due</span>':always?'<span class="pp pp-unpaid">Unpaid · '+cents(Math.round(Number(o.total_xcd)*100))+' due</span>':''):o.payment_status==='paid'?'<span class="pp pp-paid">Paid (test)</span>':o.payment_status==='refunded'?'<span class="pp pp-ref">Refunded (test)</span>':always?'<span class="pp pp-unpaid">Unpaid</span>':'';
+const payPill=(o,always)=>!o.payment_status?'':o.payment_method==='pay_card_online'?(o.payment_status==='paid'?'<span class="pp pp-paid">Paid by card'+(Number(o.card_refunded_xcd)>0?' · part refunded':'')+(o.payment_is_test?' (TEST)':'')+'</span>':o.payment_status==='refunded'?'<span class="pp pp-ref">Refunded to card'+(o.payment_is_test?' (TEST)':'')+'</span>':'<span class="pp pp-unpaid">Awaiting card payment</span>'):(o.payment_method&&o.payment_method!=='pay_with_wallet'&&o.payment_status==='unpaid'&&o.offline_status)?(o.offline_status==='paid'?'<span class="pp pp-paid">Paid</span>':o.offline_status==='partial'?'<span class="pp pp-part">Partial · '+cents(Math.round((Number(o.total_xcd)-Number(o.amount_paid_xcd))*100))+' due</span>':always?'<span class="pp pp-unpaid">Unpaid · '+cents(Math.round(Number(o.total_xcd)*100))+' due</span>':''):o.payment_status==='paid'?'<span class="pp pp-paid">Paid (test)</span>':o.payment_status==='refunded'?'<span class="pp pp-ref">Refunded (test)</span>':always?'<span class="pp pp-unpaid">Unpaid</span>':'';
 // where may a vendor move an order next? (mirrors the database trigger; the database is the real gatekeeper)
 function nextSteps(o){
  const d=o.fulfilment==='delivery';
@@ -157,17 +157,20 @@ function confirmPay(o){if(payDlgOpen)return Promise.resolve(false);payDlgOpen=tr
    let r;try{r=o.onConfirm?await o.onConfirm(w):null}catch(e){r=(e&&e.message)||'The payment did not go through.'}
    busy=false;if(r){er.textContent=r;er.hidden=false;yes.textContent=t;yes.disabled=false;no.disabled=false;yes.focus();return}close(true)};
   (w.querySelector('[data-pd-focus]')||(yes.disabled?no:yes)).focus()})}
+// v1.20: card payment wording follows config.js PAYMENTS_MODE: mock = test mode, live = no note, unset/off = coming soon
+const cardNote=()=>{const m=(window.CCONNECT_CONFIG||{}).PAYMENTS_MODE||'off';return m==='mock'?'(in TEST MODE for now: test cards only, no real money)':m==='live'?'':'(coming soon)'};
 function layout(){
+ document.querySelectorAll('[data-cc-cardnote]').forEach(e=>e.textContent=cardNote());
  const live=configured;
  const out=live?authLinks():'<a href="login.html">Sign in</a>';
- const msg=live?'Preview v1.7 – products labeled SAMPLE are fictional. Wallet payments and plans are TEST MODE only. No real payments or billing.':'Preview v1.1 – all vendors and products are SAMPLE data. Accounts are not switched on yet. No real payments.';
+ const msg=live?('Preview v1.20 – products labeled SAMPLE are fictional. '+((window.CCONNECT_CONFIG||{}).PAYMENTS_MODE==='mock'?'Pay on pickup, or by card in TEST MODE (no real money). ':'Pay on pickup only for now (card payments coming soon). ')+'Delivery coming soon. CC Cash and plans are TEST MODE. No real billing.'):'Preview v1.1 – all vendors and products are SAMPLE data. Accounts are not switched on yet. No real payments.';
  if(!document.querySelector('link[data-cc-fonts]')){const l=document.createElement('link');l.rel='stylesheet';l.dataset.ccFonts='1';l.href='https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,600;0,9..144,800;1,9..144,600&family=Plus+Jakarta+Sans:wght@400;500;700;800&display=swap';document.head.appendChild(l)}
  const m=document.querySelector('main');if(m)m.id='main';
  const home=document.body.dataset.page==='home';
  document.body.insertAdjacentHTML('afterbegin','<a class="skip" href="#main">Skip to content</a><div class="banner">'+msg+'</div><header><div class="row"><a class="logo" href="index.html">'+LOGO+'<div>Carriacou <span>Connect</span><small class="slogan">Shop the island, Online</small></div></a><span id="roleChip" class="rolechip rc-guest">Guest</span><nav aria-label="Main"><a class="mktbtn'+(/browse\.html$/.test(location.pathname)||document.body.dataset.page==='browse'?' on" aria-current="page':'')+'" href="browse.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9l1.5-5h15L21 9M3 9h18M3 9v1a3 3 0 006 0 3 3 0 006 0 3 3 0 006 0V9M5 13v7h14v-7"/></svg>Marketplace</a><a class="cartlink" href="cart.html">Cart<b id="cartCount">0</b></a><span id="bellWrap"></span><button type="button" class="navbtn" id="navBtn" aria-expanded="false" aria-controls="navMore"><span class="nb-bars" aria-hidden="true"><i></i><i></i><i></i></span><span class="nb-t">Menu</span></button><div id="navMore" class="navmore"><span id="roleNav"><a href="tiers.html">Plans</a><a href="apply.html">Sell</a></span><span id="authNav">'+out+'</span></div></nav><div class="navscrim" id="navScrim" hidden></div></div></header>');
  navMenu();roleHero();setRole('guest');cartBadge();if(!window.CC_CART_WIRED){window.CC_CART_WIRED=1;addEventListener('storage',e=>{if(!e.key||e.key==='cconnect_cart_v1')cartBadge()});addEventListener('pageshow',cartBadge)}
  const hasBand=document.querySelector('.band');
- document.body.insertAdjacentHTML('beforeend',(hasBand?'':WAVE('#04202c',false).replace('class="wave-sep"','class="wave-sep foot-wave"'))+'<footer><b>Carriacou Connect®</b><br>by Williams’ Tech · Marketplace v1.7 preview<br><a href="apply.html">Sell on Carriacou Connect</a> · <a href="vendor-terms.html">Vendor terms (draft)</a><br>Sea, reef, spice and sail: made on Carriacou.</footer>');
+ document.body.insertAdjacentHTML('beforeend',(hasBand?'':WAVE('#04202c',false).replace('class="wave-sep"','class="wave-sep foot-wave"'))+'<footer><b>Carriacou Connect®</b><br>by Williams’ Tech · Marketplace v1.20 preview<br><a href="apply.html">Sell on Carriacou Connect</a> · <a href="vendor-terms.html">Vendor terms (draft)</a><br>Sea, reef, spice and sail: made on Carriacou.</footer>');
  if(live)authNav();
  if(!matchMedia('(prefers-reduced-motion: reduce)').matches&&'IntersectionObserver' in window){const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}}),{threshold:.08});window.CC_REVEAL=()=>document.querySelectorAll('.rv:not(.in)').forEach(x=>io.observe(x))}
  else window.CC_REVEAL=()=>document.querySelectorAll('.rv').forEach(x=>x.classList.add('in'));
@@ -191,9 +194,9 @@ function startLive(sb,user){
 }
 // v1.16 feature flags (wallet_repurpose.sql). Before that file runs, the RPC is missing and the old behaviour stays (legacy: parked wallet in test mode).
 let _fl=null;
-async function flags(){if(_fl)return _fl;const D={legacy:true,wallet_mode:'test',rewards_enabled:false,vendor_credit_enabled:false,gift_cards_enabled:false,fee_card_pct:1,fee_direct_pct:2};
- try{const sb=await client();if(!sb)return (_fl=D);const r=await sb.rpc('platform_flags_get');_fl=(r&&!r.error&&r.data)?Object.assign({legacy:false},r.data):D}catch(e){_fl=D}return _fl}
-const POINTS_NOTE='CC Points are rewards, not money: free, cannot be bought, transferred or cashed out, and only used in the Points Store.';
+async function flags(){if(_fl)return _fl;const D={legacy:true,wallet_mode:'off',delivery_enabled:false,card_payments_enabled:false,rewards_enabled:false,vendor_credit_enabled:false,gift_cards_enabled:false,fee_card_pct:1,fee_direct_pct:2};
+ try{const sb=await client();if(!sb)return (_fl=D);const r=await sb.rpc('platform_flags_get');_fl=(r&&!r.error&&r.data)?Object.assign({legacy:false,delivery_enabled:false,card_payments_enabled:false},r.data):D}catch(e){_fl=D}return _fl}
+const POINTS_NOTE='CC Points are rewards, not money. You earn them only on orders placed on Carriacou Connect: paid online by card, or pay-on-pickup orders once the shop marks them collected. They cannot be bought, transferred, cashed out or used to pay shops.';
 // v1.8.1: role-specific nav. Last role cached (cc_role_v1) and painted at once to avoid a Guest flash, then verified.
 const RKEY='cc_role_v1';
 const DASH={customer:['dashboard-consumer.html','My orders'],vendor:['dashboard-vendor.html','Vendor studio'],staff:['dashboard-vendor.html','Team studio'],admin:['admin.html','Admin']};
@@ -203,7 +206,7 @@ function paintNav(r,shop){const el=document.getElementById('authNav'),rn=documen
  if(rn)rn.innerHTML=r==='vendor'?'<a href="tiers.html">Plans</a>':'';
  const d=DASH[r],here=location.pathname.split('/').pop()===d[0];
  const bw=document.getElementById('bellWrap');if(bw&&!document.getElementById('ccBell'))bw.innerHTML='<span id="ccBell" class="bellslot"></span>';
- el.innerHTML='<a class="dashlink'+(here?' on':'')+'" href="'+d[0]+'">'+d[1]+'</a>'+(r==='admin'||r==='staff'?'<a href="dashboard-consumer.html">My orders</a>':'')+(r==='vendor'?'<a href="funds.html">Platform Funds</a>':'<a href="rewards.html">Rewards</a>'+(r==='admin'||r==='staff'?'':'<a href="store.html">Points Store</a>'))+'<a href="account.html">Account</a><a class="pill" href="#" id="logoutLink">Log out</a>'}
+ el.innerHTML='<a class="dashlink'+(here?' on':'')+'" href="'+d[0]+'">'+d[1]+'</a>'+(r==='admin'||r==='staff'?'<a href="dashboard-consumer.html">My orders</a>':'')+(r==='vendor'?'<a href="funds.html">CC Cash</a>':'<a href="rewards.html">Rewards</a>'+(r==='admin'||r==='staff'?'':'<a href="store.html">Points Store</a>'))+'<a href="account.html">Account</a><a class="pill" href="#" id="logoutLink">Log out</a>'}
 document.addEventListener('click',async e=>{const a=e.target.closest&&e.target.closest('#logoutLink');if(!a)return;e.preventDefault();try{localStorage.removeItem(RKEY)}catch(x){}const sb=await client();if(sb)await sb.auth.signOut();location.href='index.html'});
 async function authNav(){
  let cached=null;try{cached=JSON.parse(localStorage.getItem(RKEY))}catch(e){}
@@ -266,7 +269,7 @@ function orderLines(o){
  window.CC_A2HS={add,sheet,dismiss,install,KEY};
 })();
 
-window.CC={flags,POINTS_NOTE,confirmPay,setRole,cartBadge,live,orderLines,acctStatus,PCOLS,PCOLS_BASE,TESTBANNER,cents,toCents,uuid,payPill,noteSummary,newBadge,notesWidget,NOTE_POLL,SLABEL,stPill,fdate,fnice,payText,nextSteps,timeline,safeNext,WAVE,configured,client,esc,getUser,layout,TIER_LABEL,TIER_LIMIT,TIERS,lim,ROLE_LABEL,ROLE_PERMS,
+window.CC={cardNote,flags,POINTS_NOTE,confirmPay,setRole,cartBadge,live,orderLines,acctStatus,PCOLS,PCOLS_BASE,TESTBANNER,cents,toCents,uuid,payPill,noteSummary,newBadge,notesWidget,NOTE_POLL,SLABEL,stPill,fdate,fnice,payText,nextSteps,timeline,safeNext,WAVE,configured,client,esc,getUser,layout,TIER_LABEL,TIER_LIMIT,TIERS,lim,ROLE_LABEL,ROLE_PERMS,
  xcd:n=>'EC$'+Number(n).toFixed(2)};
 layout();
 })();

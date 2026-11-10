@@ -1,11 +1,12 @@
 // v1.13 offline payments (pay on pickup / pay on delivery): vendor records Paid in full / Paid partially; customer sees status.
 (function(){const C=window.CC,esc=C.esc;
 const num=v=>Number(v)||0,c$=x=>C.cents(Math.round(num(x)*100));
-const isOff=o=>o&&o.payment_method!=='pay_with_wallet'&&o.payment_status==='unpaid';
+const isOff=o=>o&&o.payment_method!=='pay_with_wallet'&&o.payment_method!=='pay_card_online'&&o.payment_status==='unpaid';
 const paid=o=>num(o.amount_paid_xcd),bal=o=>Math.max(0,Math.round((num(o.total_xcd)-paid(o))*100)/100);
 const state=o=>!o?'unpaid':o.payment_status==='refunded'?'refunded':o.payment_status==='paid'?'paid':(o.offline_status||'unpaid');
-const METH={cash:'Cash',card:'Card',bank:'Bank transfer',other:'Other',wallet:'Wallet (test)',gift_card:'Gift card (CC Points)'};
-const RMETH={cash:'Cash',card:'Card',bank:'Bank transfer',other:'Other'};
+const METH={cash:'Cash',card:'Card',bank:'Bank transfer (old)',other:'Other',wallet:'Wallet (old test)',gift_card:'Gift card (old)',card_online:'Card (online)'};
+// v1.20: customers pay on pickup (cash, card at the counter or another in-person way). Bank transfer, wallet and gift cards are not accepted.
+const RMETH={cash:'Cash',card:'Card (at the counter)',other:'Other (in person)'};
 const fmt=d=>{try{return new Intl.DateTimeFormat('en-GB',{timeZone:'America/Grenada',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}).format(new Date(d))}catch(e){return d}};
 const missing=e=>e&&/order_payments|schema cache|does not exist|vendor_record_payment/i.test(e.message||'');
 const summary=o=>`<div class="op-sum op-${state(o)}"><div><span>Status</span><b>${state(o)==='paid'?'Paid in full':state(o)==='partial'?'Paid partially':'Unpaid'}</b></div><div><span>Order total</span><b>${c$(o.total_xcd)}</b></div><div><span>Paid so far</span><b>${c$(paid(o))}</b></div><div class="op-due"><span>Balance due</span><b>${c$(bal(o))}</b></div></div>`;
@@ -27,7 +28,7 @@ async function customerBox(el,o,{sb,onPaid}){if(!el||!isOff(o))return;const FL=a
   ${q?`<div class="op-req"><span class="op-req-ic" aria-hidden="true">🔔</span><div><b>${esc(o.vendors&&o.vendors.name||'The vendor')} requested ${c$(q.amount_xcd)}</b>${q.message?`<span>“${esc(q.message)}”</span>`:''}<small>${esc(fmt(q.created_at))}</small></div></div>`:''}
   ${pay?`<div class="op-pay">${C.TESTBANNER}<button type="button" class="btn alt" id="opbal">Pay balance ${c$(amt)}</button>${q&&amt<bal(o)?`<button type="button" class="linkbtn" id="opall">Pay the full balance ${c$(bal(o))} instead</button>`:''}<small class="muted">From your test wallet (play money), or pay the vendor on ${o.fulfilment==='delivery'?'delivery':'pickup'}.</small><div id="opbm" class="notice" hidden role="alert"></div></div>`:''}
   ${cards.length?`<div class="op-gc"><span class="kicker">🎁 Use a gift card</span><label class="pd-f">Gift card for this shop<select id="gcsel">${cards.map(g=>`<option value="${esc(g.code)}">${esc(g.code)} · ${C.cents(g.balance_cents)} left</option>`).join('')}</select></label><button type="button" class="btn alt" id="gcuse">Use gift card</button><small class="muted">Gift cards come from the Points Store (paid with CC Points). The rest of the balance is paid to the shop directly.</small><div id="gcm" class="notice" hidden role="alert"></div></div>`:''}
-  ${L._err?'':hist(L[o.id]||[],false)}<p class="muted"><small>${parked?'You pay the shop directly. The shop records cash, card or bank payments made on '+(o.fulfilment==='delivery'?'delivery':'pickup')+'. Carriacou Connect never holds your money.':'The vendor records cash, card or bank payments made on '+(o.fulfilment==='delivery'?'delivery':'pickup')+'. Wallet payments are recorded automatically.'}</small></p></div>`;
+  ${L._err?'':hist(L[o.id]||[],false)}<p class="muted"><small>${parked?'You pay the shop when you collect your order. The shop records cash or card payments made on '+(o.fulfilment==='delivery'?'delivery':'pickup')+'. Carriacou Connect never holds your money.':'The vendor records cash, card or bank payments made on '+(o.fulfilment==='delivery'?'delivery':'pickup')+'. Wallet payments are recorded automatically.'}</small></p></div>`;
   const gb=el.querySelector('#gcuse');if(gb)gb.onclick=async()=>{const code=el.querySelector('#gcsel').value,g=cards.find(x=>x.code===code);const use=Math.min(g.balance_cents,Math.round(bal(o)*100));
    const res=await C.confirmPay({icon:'🎁',kicker:'Gift card · CC Points',title:'Order '+o.order_number,amountLabel:'Gift card pays',amountCents:use,
     rows:[['Shop',(o.vendors&&o.vendors.name)||'Shop'],['Gift card',code],['Card left after',C.cents(g.balance_cents-use)],['Balance due after',c$(bal(o)-use/100)]],note:'Gift cards are rewards bought with CC Points. They are not money and work only at this shop on Carriacou Connect.',confirmText:'Use gift card',busyText:'Applying…',

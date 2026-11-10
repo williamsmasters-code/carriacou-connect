@@ -6,9 +6,9 @@ const esc=CC.esc;
 const ITEMS={
  profile:['Business profile','Write a description (20+ characters), check your area, and add a logo.'],
  product:['First product with a photo','Add at least one active product that has a photo.'],
- delivery:['Pickup and delivery','Choose pickup, delivery or both, and set your delivery fee.'],
+ delivery:['Pickup','Check your pickup details. Delivery is coming soon: every order is pickup for now.'],
  tax:['VAT and tax','Confirm whether you are VAT registered (and your VAT number).'],
- payment:['Payment information','Tell Carriacou Connect how you take payment (e.g. cash on pickup, Connect Pay wallet in test mode).'],
+ payment:['Payment information','Tell Carriacou Connect how customers pay you on pickup (cash, or card at the counter). Paying online by card is coming soon.'],
  staff:['Invite a helper (optional)','Add a staff member or sub-admin if your plan has team seats.']};
 const nice=m=>{m=(m&&m.message)||String(m||'');return /Could not find the function|schema cache|does not exist/i.test(m)?'Onboarding is not switched on yet (vendor_onboarding.sql has not been run in Supabase).':m};
 function pendingHtml(v,own){

@@ -103,18 +103,18 @@ const body=vids.map((vid,k)=>{const v=vendor(vid);let vs=0;const items=groups[vi
  return `<section class="cgroup" style="--vc:${VC[k%VC.length]}"><div class="cg-head"><span class="cg-dot" aria-hidden="true">${esc((v.name||'?').slice(0,1))}</span><div><a href="vendor.html?id=${esc(vid)}">${esc(v.name)}</a><small>${groups[vid].length} item${groups[vid].length===1?'':'s'} · separate order</small></div><b>${xcd(vs)}</b></div><ul class="cilist">${items}</ul></section>`}).join('');
 R.innerHTML=`<div class="cartlay"><div class="cartitems">${vids.length>1?`<p class="cg-info">Items from <b>${vids.length} businesses</b>: checkout places one order with each.</p>`:''}${body}</div>
 <aside class="cartsum" aria-label="Order summary"><span class="kicker">Order summary</span><div class="cs-row"><span>Items</span><b>${count}</b></div><div class="cs-row"><span>Businesses</span><b>${vids.length}</b></div><div class="cs-row cs-sub"><span>Subtotal</span><b>${xcd(sum)} <small>XCD</small></b></div>
-<p class="cs-note">🚚 Delivery fees and VAT (if the business charges them) are worked out at checkout.</p><p class="cs-note cs-test">💳 You pay the shop directly on pickup or delivery. Carriacou Connect never holds your money.</p><p class="cs-note">⭐ Earn <b>${Math.floor(sum)} CC Points</b> when your order is completed (1 point per EC$1).</p>
+<p class="cs-note">🛍️ Pickup only for now: <b>Delivery coming soon</b>. VAT (if the business charges it) is worked out at checkout.</p><p class="cs-note cs-test">💳 Pay the shop on pickup. Paying online by credit/debit card is coming soon.</p><p class="cs-note">⭐ Earn <b>${Math.floor(sum)} CC Points</b> when the shop marks your order collected (1 point per EC$1).</p>
 <button class="btn cs-go" id="co">Checkout →</button><a class="cs-more" href="browse.html">← Continue shopping in the Marketplace</a><div id="conote"></div></aside></div>`;
 const set=(id,q)=>{const c=getCart();c[id]=Math.max(1,Math.min(99,q));saveCart(c);draw();const f=document.querySelector(`input[data-id="${id}"]`);if(f)f.focus()};
 R.querySelectorAll('input[data-id]').forEach(e=>e.onchange=()=>set(e.dataset.id,parseInt(e.value)||1));
 R.querySelectorAll('[data-inc]').forEach(b=>b.onclick=()=>set(b.dataset.inc,(getCart()[b.dataset.inc]||1)+1));
 R.querySelectorAll('[data-dec]').forEach(b=>b.onclick=()=>set(b.dataset.dec,(getCart()[b.dataset.dec]||1)-1));
 R.querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>{const c=getCart();delete c[b.dataset.rm];saveCart(c);draw()});
-$('#co').onclick=()=>{if(DATA.live){location.href='checkout.html'}else $('#conote').innerHTML='<div class="notice"><strong>Ordering needs accounts, which are not switched on in this preview.</strong><br>In live mode you sign in, choose pickup or delivery and place your order. You pay the vendor on pickup or delivery. Online payment (Carriacou Connect Pay) is coming later.</div>'}};
+$('#co').onclick=()=>{if(DATA.live){location.href='checkout.html'}else $('#conote').innerHTML='<div class="notice"><strong>Ordering needs accounts, which are not switched on in this preview.</strong><br>In live mode you sign in, place your order for pickup and pay the shop when you collect it. Paying online by card and delivery are coming soon.</div>'}};
 draw();addEventListener('storage',e=>{if(e.key===KEY)draw()})},
 async checkout(){
 const root=$('#co');
-const payNote='<div class="notice"><strong>You pay the shop directly</strong> on pickup or delivery (cash, card or bank transfer, as the shop accepts). Carriacou Connect never holds your money. Completed orders earn <b>CC Points</b> (1 point per EC$1): rewards, not money.</div>';
+const payNote='<div class="notice"><strong>Two ways to pay:</strong> pay the shop on pickup, or pay online by credit/debit card (coming soon). <b>Delivery coming soon</b>: every order is pickup for now. Orders placed here earn <b>CC Points</b> (1 point per EC$1) once the shop marks them collected, or when your card payment goes through: rewards, not money.</div>';
 if(!window.CC.configured||!DATA.live){root.innerHTML='<div class="notice"><strong>Ordering is not switched on in this sample preview.</strong> Accounts and orders need the live Supabase database. <a href="browse.html">Back to browsing</a></div>'+payNote;return}
 const user=await window.CC.getUser();
 if(!user){location.href='login.html?next=checkout.html';return}
@@ -128,22 +128,28 @@ const summary=Object.entries(byV).map(([vid,ls])=>{const sub=ls.reduce((a,l)=>a+
 return `<div class="osum"><h3>${esc(vendor(vid).name)}</h3>${ls.map(l=>`<div class="oline"><span>${l.q} × ${esc(l.p.name)}</span><span>${xcd(l.p.price*l.q)}</span></div>`).join('')}<div class="oline sub"><span>Subtotal</span><span>${xcd(sub)}</span></div></div>`}).join('');
 const nv=Object.keys(byV).length;
 let totalCents=Math.round(total*100),camp=null;
-const FL=await window.CC.flags();let wal=null;if(FL.wallet_mode!=='off'){try{const wr=await sb.rpc('ensure_wallets');if(!wr.error&&Array.isArray(wr.data))wal=wr.data.find(x=>x.kind==='user')||null}catch(e){}}
+// v1.20: customers pay shops only on pickup or online by card. The customer wallet is retired (wal stays null) and delivery is paused unless FL.delivery_enabled.
+const FL=await window.CC.flags();const wal=null;const PG=window.CC.payments;const DEL=FL.delivery_enabled===true,CARD=!!PG&&PG.enabled(FL);
 const payKey=window.CC.uuid();
 let prof={};try{const r=await sb.from('profiles').select('full_name,phone,address').eq('id',user.id).maybeSingle();prof=r.data||{}}catch(e){}
 // v1.5: per-vendor pickup/delivery + delivery fee + tax, all worked out by the server (checkout_quote). If tax_delivery.sql has not been run, opts stays null and the old single pickup/delivery choice is used.
 let opts=null;try{const vr=await sb.rpc('vendor_checkout_options',{p_vendor_ids:Object.keys(byV)});if(!vr.error&&Array.isArray(vr.data)&&vr.data.length===Object.keys(byV).length)opts=Object.fromEntries(vr.data.map(x=>[x.vendor_id,x]))}catch(e){}
+if(opts&&!DEL)Object.values(opts).forEach(o=>{o.pickup_enabled=true;o.delivery_enabled=false});
 const plan={};if(opts)Object.keys(byV).forEach(v=>{plan[v]={fulfilment:opts[v].pickup_enabled?'pickup':'delivery',area:''}});
 const feeText=o=>{const z=o.delivery_zones||[];let t=o.delivery_model==='zones'&&z.length?'Fee depends on your area (from '+xcd(Math.min(...z.map(a=>Number(a.fee))))+')':(Number(o.delivery_flat_fee)>0?'Delivery fee '+xcd(o.delivery_flat_fee):'No delivery fee set by the vendor');if(o.free_over_xcd!=null)t+=', free on orders of '+xcd(o.free_over_xcd)+' or more';return t};
 const fulBlock=vid=>{const o=opts[vid],both=o.pickup_enabled&&o.delivery_enabled,zs=o.delivery_model==='zones'?(o.delivery_zones||[]):[];
  return `<div class="vful" data-v="${esc(vid)}"><h3>${esc(vendor(vid).name)}</h3>${both?`<label class="chk opt"><input type="radio" name="ful_${esc(vid)}" value="pickup" checked> <span><b>Pickup</b><small>Collect it yourself. Free. Pay on pickup.</small></span></label>
-<label class="chk opt"><input type="radio" name="ful_${esc(vid)}" value="delivery"> <span><b>Delivery</b><small>${esc(feeText(o))}. Pay on delivery.</small></span></label>`:`<p class="muted">${o.pickup_enabled?'This vendor offers <b>pickup only</b> (free). Pay on pickup.':'This vendor offers <b>delivery only</b>. '+esc(feeText(o))+'. Pay on delivery.'}</p>`}
+<label class="chk opt"><input type="radio" name="ful_${esc(vid)}" value="delivery"> <span><b>Delivery</b><small>${esc(feeText(o))}. Pay on delivery.</small></span></label>`:`<p class="muted">${!DEL?'<b>Pickup</b> (free). Collect it from the shop. <span class="soon">Delivery coming soon.</span>':o.pickup_enabled?'This vendor offers <b>pickup only</b> (free).':'This vendor offers <b>delivery only</b>. '+esc(feeText(o))+'. Pay on delivery.'}</p>`}
 <label class="areal" data-area="${esc(vid)}" hidden>Delivery area *<select id="area_${esc(vid)}"><option value="">Choose your area…</option>${zs.map(z=>`<option value="${esc(z.name)}">${esc(z.name)} (${xcd(z.fee)})</option>`).join('')}</select></label></div>`};
 root.innerHTML=`<div class="co-grid"><form id="cof" class="formcard" novalidate>
 ${opts?Object.keys(byV).map(fulBlock).join(''):`<fieldset><legend>How do you want it?</legend>
-<label class="chk opt"><input type="radio" name="ful" value="pickup" checked> <span><b>Pickup</b><small>Collect from the vendor. Pay on pickup.</small></span></label>
-<label class="chk opt"><input type="radio" name="ful" value="delivery"> <span><b>Delivery</b><small>The vendor brings it to you. Pay on delivery. Any delivery fee is agreed with the vendor.</small></span></label></fieldset>`}
- ${wal?`<fieldset id="payf"><legend>How do you want to pay?</legend>
+<label class="chk opt"><input type="radio" name="ful" value="pickup" checked> <span><b>Pickup</b><small>Collect from the shop.</small></span></label>
+${DEL?`<label class="chk opt"><input type="radio" name="ful" value="delivery"> <span><b>Delivery</b><small>The shop brings it to you. Any delivery fee is agreed with the shop.</small></span></label>`:'<p class="muted soon">Delivery coming soon.</p>'}</fieldset>`}
+<fieldset id="payf"><legend>How do you want to pay?</legend>
+<label class="chk opt"><input type="radio" name="pay" value="pickup" checked> <span><b>Pay on pickup</b><small>Pay the shop when you collect your order (cash or card at the counter, as the shop accepts).</small></span></label>
+<label class="chk opt${CARD?'':' off'}"><input type="radio" name="pay" value="card"${CARD?'':' disabled'}> <span><b>Pay online by credit/debit card</b><small>${CARD?(PG.provider.test?'TEST MODE – no real money. Pay now with a test card.':'Pay securely by card now.'):'Coming soon.'}</small></span></label>
+${CARD?`<div id="cardbox" hidden>${PG.formHtml()}</div>`:''}</fieldset>
+ ${wal?`<fieldset id="payw"><legend>How do you want to pay?</legend>
 <label class="chk opt"><input type="radio" name="pay" value="cash" checked> <span><b>Pay the vendor myself</b><small>Cash or as agreed, when you collect or receive your order.</small></span></label>
 <label class="chk opt"><input type="radio" name="pay" value="wallet"> <span><b>Pay with wallet (test)</b><small>Test balance: <b id="wbal">${window.CC.cents(wal.balance_cents)}</b>. Order total <b id="wtot">${window.CC.cents(totalCents)}</b>.</small></span></label>
 <div id="wnote" class="notice" hidden>${window.CC.TESTBANNER}<span id="wnt"></span></div></fieldset>`:''}
@@ -156,14 +162,16 @@ ${opts?Object.keys(byV).map(fulBlock).join(''):`<fieldset><legend>How do you wan
 <button class="btn" id="cgo">Place order</button></form>
 <aside class="ordsum"><h2>Order summary</h2><div id="sumbox">${summary}</div><div class="oline disc" id="discline" hidden><span id="disclbl">Promo discount</span><span id="discamt"></span></div><div class="oline total"><span>Total</span><span id="totamt">${xcd(total)} XCD</span></div>
 ${nv>1?`<p class="muted">Your cart has items from ${nv} vendors, so it becomes ${nv} separate orders, one per vendor.</p>`:''}
-<p class="muted">${opts?'Delivery fees and tax are worked out by the server and shown above. They are re-checked when you place the order.':'Prices are re-checked by the server when you place the order.'}</p>${payNote}<p><a href="cart.html">Edit cart</a></p></aside></div>`;
+<p class="muted">${opts?'Tax is worked out by the server and shown above. They are re-checked when you place the order.':'Prices are re-checked by the server when you place the order.'}</p>${CARD?payNote.replace('(coming soon)','(TEST MODE – no real money)'):payNote}<p><a href="cart.html">Edit cart</a></p></aside></div>`;
 const f=$('#cof'),m=$('#cm');
 const susp=await window.CC.acctStatus(sb);if(susp.suspended){m.className='notice err';m.textContent=susp.message+' You cannot place orders right now.';m.hidden=false;$('#cgo').disabled=true}
-const cleanErr=t=>String(t||'').replace(/^ACCOUNT_SUSPENDED:\s*/,'').replace(/^VENDOR_UNAVAILABLE:\s*/,'Sorry, one of the businesses in your cart is not taking orders right now. Remove its items and try again. ');
+const cleanErr=t=>String(t||'').replace(/^(DELIVERY_PAUSED|CARD_COMING_SOON|WALLET_RETIRED):\s*/,'').replace(/^ACCOUNT_SUSPENDED:\s*/,'').replace(/^VENDOR_UNAVAILABLE:\s*/,'Sorry, one of the businesses in your cart is not taking orders right now. Remove its items and try again. ');
 const payWallet=()=>!!wal&&f.pay&&f.pay.value==='wallet';
 const planFrom=()=>{if(!opts)return;Object.keys(byV).forEach(v=>{const r=f.querySelector('input[name="ful_'+v+'"]:checked');plan[v].fulfilment=r?r.value:(opts[v].pickup_enabled?'pickup':'delivery');const sel=f.querySelector('#area_'+v);plan[v].area=sel?sel.value:''})};
-const anyDel=()=>opts?Object.values(plan).some(p=>p.fulfilment==='delivery'):f.ful.value==='delivery';
+const anyDel=()=>opts?Object.values(plan).some(p=>p.fulfilment==='delivery'):(f.ful&&f.ful.value==='delivery');
+const payWay=()=>{const r=f.querySelector('input[name="pay"]:checked');return r?r.value:'pickup'};
 const syncUI=()=>{planFrom();$('#adl').hidden=!anyDel();if(opts)Object.keys(byV).forEach(v=>{const a=f.querySelector('[data-area="'+v+'"]');if(a)a.hidden=!(plan[v].fulfilment==='delivery'&&opts[v].delivery_model==='zones'&&(opts[v].delivery_zones||[]).length>0)});
+ if(CARD){const cb=$('#cardbox');if(cb)cb.hidden=payWay()!=='card';$('#cgo').textContent=payWay()==='card'?'Place order and pay by card':'Place order'}
  if(wal){const w=$('#wnote');w.hidden=!payWallet();if(payWallet()){const short=Number(wal.balance_cents)<totalCents;$('#wnt').innerHTML=short?' Your test balance is too low for this order. <a href="wallet.html">Add play money in your wallet</a>, then come back.':' Your order is placed and paid straight away from your test wallet. No real money is used.'}$('#cgo').textContent=payWallet()?'Place order and pay with test wallet':'Place order';const wo=$('#wtot');if(wo)wo.textContent=window.CC.cents(totalCents)}};
 let qseq=0;
 let lastQ=null;const renderSummary=q=>{lastQ=q;totalCents=Math.round(Number(q.grand_total_xcd)*100);
@@ -211,10 +219,15 @@ f.onsubmit=async e=>{e.preventDefault();say('');planFrom();
    vat:vat>0?(qs.every(x=>x.tax_inclusive||!(Number(x.tax_rate_pct)>0))?'Includes VAT: ':'VAT: ')+window.CC.cents(vat):'',
    rows:[['Vendor'+(qs.length>1?'s':''),qs.length?qs.map(x=>x.vendor_name).join(', '):Object.keys(byV).map(id=>(DATA.vendors.find(v=>v.id===id)||{name:'Vendor'}).name).join(', ')],['Order number','Given when the order is placed'],['Paid from','Your test wallet']],confirmText:'Confirm pay'});
   if(!go)return}
+ let tok=null;if(payWay()==='card'){tok=PG.read(f);if(tok.error){say(tok.error);return}}
  const btn=$('#cgo');btn.disabled=true;btn.textContent='Placing order…';
  const oargs={p_cart:cartJson(),p_fulfilment:ful,p_contact_phone:ph,p_delivery_address:ful==='delivery'?ad:null,p_notes:$('#cnote').value.trim()||null,p_contact_name:$('#cn').value.trim()||null};
  const typed=$('#cpc').value.trim();
- const r=opts?await sb.rpc('place_order_plan',{p_cart:oargs.p_cart,p_plan:plan,p_contact_phone:ph,p_delivery_address:ful==='delivery'?ad:null,p_notes:oargs.p_notes,p_contact_name:oargs.p_contact_name,p_campaign_code:typed||null}):typed?await sb.rpc('place_order_with_code',{...oargs,p_campaign_code:typed}):await sb.rpc('place_order',oargs);
+ // v1.20: place_order_v2 (financial_v2.sql) checks pickup/card on the server. Before that file runs, fall back to the old RPCs (pay on pickup only).
+ const vplan=opts?plan:Object.fromEntries(Object.keys(byV).map(v=>[v,{fulfilment:ful,area:''}]));
+ let r=await sb.rpc('place_order_v2',{p_cart:oargs.p_cart,p_plan:vplan,p_contact_phone:ph,p_notes:oargs.p_notes,p_contact_name:oargs.p_contact_name,p_campaign_code:typed||null,p_payment:payWay(),p_delivery_address:ful==='delivery'?ad:null});
+ if(r.error&&/Could not find the function|schema cache/.test(r.error.message||'')&&payWay()==='pickup')r=opts?await sb.rpc('place_order_plan',{p_cart:oargs.p_cart,p_plan:plan,p_contact_phone:ph,p_delivery_address:ful==='delivery'?ad:null,p_notes:oargs.p_notes,p_contact_name:oargs.p_contact_name,p_campaign_code:typed||null}):typed?await sb.rpc('place_order_with_code',{...oargs,p_campaign_code:typed}):await sb.rpc('place_order',oargs);
+ if(r.error&&/Could not find the function|schema cache/.test(r.error.message||'')&&payWay()==='card'){say('Paying online by card is coming soon. Choose pay on pickup for now.');btn.disabled=false;btn.textContent='Place order';return}
  if(r.error){say(typed&&/Could not find the function|schema cache/.test(r.error.message||'')?'Promo codes are not switched on yet. Clear the code to place the order.':cleanErr(r.error.message||'Could not place the order.'));btn.disabled=false;if(/ACCOUNT_SUSPENDED/.test(r.error.message||''))btn.disabled=true;else sync();return}
  if(r.data&&!Array.isArray(r.data)&&r.data.error){say(r.data.error+' Fix or clear the promo code and try again.');btn.disabled=false;sync();return}
  saveCart({});
@@ -223,12 +236,26 @@ f.onsubmit=async e=>{e.preventDefault();say('');planFrom();
  let paidMsg='',payErr='';
  const fl=opts?os.map(o=>o.fulfilment):[ful];const payWhen=fl.every(x=>x==='delivery')?'delivery':fl.every(x=>x==='pickup')?'pickup':'pickup or delivery';
  if(payWallet()){const pr=await sb.rpc('pay_orders',{p_order_ids:os.map(o=>o.id),p_idempotency_key:payKey});if(pr.error)payErr=cleanErr(pr.error.message)||'The payment did not go through.';else paidMsg='Paid from your test wallet.'}
- root.innerHTML=`<div class="confirm"><div class="tick" aria-hidden="true">✓</div><h2>Thank you! Your order${os.length>1?'s are':' is'} placed.</h2>
- ${paidMsg?window.CC.TESTBANNER+'<p><b>'+paidMsg+'</b> This was play money, so no real funds moved.</p>':payErr?'<div class="notice err">Your order was placed but the test payment failed: '+esc(payErr)+'. You can pay it from your order page, or pay the vendor on '+payWhen+'.</div>':'<p>'+(payWhen==='delivery'?'Pay the vendor when your order is delivered.':payWhen==='pickup'?'Pay the vendor when you collect your order.':'Pay each vendor when you collect or receive your order.')+' No online payment is taken.</p>'}
+ const done=cardMsg=>{root.innerHTML=`<div class="confirm"><div class="tick" aria-hidden="true">✓</div><h2>Thank you! Your order${os.length>1?'s are':' is'} placed.</h2>
+ ${cardMsg?cardMsg:paidMsg?window.CC.TESTBANNER+'<p><b>'+paidMsg+'</b> This was play money, so no real funds moved.</p>':payErr?'<div class="notice err">Your order was placed but the test payment failed: '+esc(payErr)+'. You can pay it from your order page, or pay the vendor on '+payWhen+'.</div>':payWay()==='card'?'<p>You chose to pay online by card. You will be asked to complete the card payment before the shop prepares your order. CC Points are added once the card payment goes through.</p>':'<p>'+(payWhen==='delivery'?'Pay the shop when your order is delivered.':payWhen==='pickup'?'Pay the shop when you collect your order.':'Pay each shop when you collect or receive your order.')+' No online payment is taken. You earn CC Points once the shop marks it collected.</p>'}
  <div class="ordnums">${os.map(o=>`<a class="ordnum" href="dashboard-consumer.html?order=${esc(o.id)}"><b>${esc(o.order_number)}</b><span>${esc(o.vendor_name)} · ${xcd(o.total_xcd)}${Number(o.delivery_fee_xcd)>0?' · incl. delivery '+xcd(o.delivery_fee_xcd):''}${o.tax_xcd!=null&&Number(o.tax_xcd)>0?' · VAT '+xcd(o.tax_xcd):''}</span></a>`).join('')}</div>
  <p>The vendor will confirm your order soon. Follow its progress in your dashboard.</p>
- <a class="btn" href="dashboard-consumer.html">View my orders</a> <a class="btn ghost" href="browse.html">Keep shopping</a></div>`;
- window.scrollTo(0,0)};
+ <a class="btn" href="dashboard-consumer.html">View my orders</a> <a class="btn ghost" href="browse.html">Keep shopping</a></div>`;window.scrollTo(0,0)};
+
+ // v1.20 card checkout: the orders exist (unpaid, pay_card_online); now the card gateway takes the payment
+ const cardFlow=async(t,key)=>{const pr=await PG.pay(sb,os.map(o=>o.id),t,key);PG.wipe(root);
+  const res=pr.error?os.map(o=>({order_id:o.id,order_number:o.order_number,status:'failed',message:cleanErr(pr.error.message)})):(pr.data||[]);
+  const bad=res.filter(x=>x.status!=='paid'&&x.status!=='partially_refunded'&&x.status!=='refunded');
+  if(!bad.length){const x=res[0]||{};done((PG.provider.test?'<div class="testbanner paytest" role="note"><b>TEST MODE – no real money.</b></div>':'')+'<p class="cardok"><b>Paid by card: '+esc(PG.BRAND[x.brand]||'Card')+' •••• '+esc(x.last4||'')+'.</b> The shop has your payment. You earn CC Points once the shop marks your order completed.</p>');return}
+  root.innerHTML=`<div class="confirm cardfail"><div class="tick bad" aria-hidden="true">!</div><h2>Your order${os.length>1?'s are':' is'} placed, but the card payment did not go through</h2>
+   <div class="notice err" role="alert" id="cfmsg">${esc(bad[0].message||'The card was declined.')}</div>
+   <div class="ordnums">${os.map(o=>`<span class="ordnum"><b>${esc(o.order_number)}</b><span>${esc(o.vendor_name)} · ${xcd(o.total_xcd)}</span></span>`).join('')}</div>
+   <form id="cfretry" class="formcard" novalidate><h3>Try another card</h3>${PG.formHtml()}<button class="btn" id="cfgo">Pay ${xcd(os.reduce((a,o)=>a+Number(o.total_xcd),0))} by card</button></form>
+   <p>or <button type="button" class="btn ghost" id="cfpick">Pay on pickup instead</button></p></div>`;window.scrollTo(0,0);
+  const rf=$('#cfretry');rf.onsubmit=async e=>{e.preventDefault();const t2=PG.read(rf);if(t2.error){$('#cfmsg').textContent=t2.error;return}$('#cfgo').disabled=true;await cardFlow(t2,window.CC.uuid())};
+  $('#cfpick').onclick=async()=>{const r=await PG.toPickup(sb,bad.map(x=>x.order_id));if(r.error){$('#cfmsg').textContent=cleanErr(r.error.message);return}done('<p>Switched to <b>pay on pickup</b>. Pay the shop when you collect your order. No card payment was taken.</p>')}};
+ if(tok){await cardFlow(tok,payKey);return}
+ done('')};
 }
 };
 badge();
@@ -241,7 +268,8 @@ const sb=await window.CC.client();if(!sb)return d;
 let PC='id,vendor_id,name,description,price_xcd,category,image_url,image_label,featured,created_at';
 const page=async from=>sb.from('products').select(PC).eq('active',true).order('created_at',{ascending:false}).order('id',{ascending:true}).range(from,from+999);
 const vr=await sb.from('vendors').select('id,name,description,location,tier').order('name');let pr=await page(0);
-if(pr.error&&/image_label/.test(pr.error.message||'')){PC=PC.replace(',image_label','');pr=await page(0)}
+// v1.20: a missing column grant gives 42501 "permission denied" (the message may not name the column): retry once without image_label
+if(pr.error&&(/image_label/.test(pr.error.message||'')||pr.error.code==='42501'||/permission denied/i.test(pr.error.message||''))){PC=PC.replace(',image_label','');pr=await page(0)}
 if(vr.error||pr.error)throw (vr.error||pr.error);
 // Supabase returns at most 1000 rows per request: read further pages (up to 10,000 products)
 for(let from=1000;pr.data.length===from&&from<10000;from+=1000){const nx=await page(from);if(nx.error)break;pr={data:pr.data.concat(nx.data)}}
@@ -250,7 +278,10 @@ const L=window.CC.TIER_LABEL;
 d.vendors=vr.data.map(v=>({id:v.id,name:v.name,tier:L[v.tier]||'Lite',location:v.location||'',about:v.description||''}));
 d.products=pr.data.map(p=>({id:p.id,vendorId:p.vendor_id,category:p.category,name:p.name,price:Number(p.price_xcd),currency:'XCD',description:p.description||'',featured:!!p.featured,color:cc[p.category]||'#0e7490',imageUrl:/^https?:\/\//i.test(p.image_url||'')?p.image_url:null,imageLabel:p.image_label==='real'?'real':'stock'}));
 d.live=true;
-}catch(e){console.warn('Supabase unavailable, using sample data:',e&&e.message||e)}
+}catch(e){console.warn('Supabase unavailable:',e&&e.message||e);
+ // v1.20: in live mode never pass the sample catalogue off as real shops. A permission error (or any read error once Supabase is set up) shows a visible error instead.
+ d.live=true;d.loadError=String(e&&e.message||e||'unknown error');d.products=[];d.vendors=[]}
 return d}
-loadData().then(d=>{DATA=d;pages[document.body.dataset.page]();document.querySelectorAll('.grid>.card,.cats>.cat').forEach(x=>x.classList.add('rv'));window.CC_REVEAL&&window.CC_REVEAL()}).catch(e=>{console.error(e);document.querySelector('main').innerHTML='<p>Could not load data.</p>'});
+const loadErr=d=>{const m=document.querySelector('main');if(!m)return;const bx=document.createElement('div');bx.className='notice err loaderr';bx.setAttribute('role','alert');bx.innerHTML='<strong>Could not load products right now.</strong> The marketplace could not read the product list from the server ('+esc(d.loadError)+'). Please try again in a few minutes. Your cart is kept.';m.prepend(bx)};
+loadData().then(d=>{DATA=d;if(d.loadError)loadErr(d);pages[document.body.dataset.page]();document.querySelectorAll('.grid>.card,.cats>.cat').forEach(x=>x.classList.add('rv'));window.CC_REVEAL&&window.CC_REVEAL()}).catch(e=>{console.error(e);document.querySelector('main').innerHTML='<p>Could not load data.</p>'});
 })();

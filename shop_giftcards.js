@@ -30,6 +30,9 @@ function locked(el,o){
 async function mount(el,o){
  const {sb,vendor}=o,tier=(o.plan&&o.plan.tier)||vendor.tier,role=(o.me&&o.me.role)||'staff',manage=role==='admin'||role==='subadmin',owner=role==='admin';
  el.innerHTML='<p class="muted">Loading gift cards…</p>';
+ // v1.20: ask sgc_status first so a locked shop with no cards shows the upgrade panel without a 400 from sgc_list
+ try{const st=await sb.rpc('sgc_status',{p_vendor:vendor.id});if(!st.error&&st.data&&st.data.tier_ok===false&&!st.data.has_cards)return locked(el,o);
+  if(st.error&&!/Could not find the function|schema cache/i.test(st.error.message||'')&&(RANK[tier]||1)<3)return locked(el,o)}catch(e){}
  const r=await sb.rpc('sgc_list',{p_vendor:vendor.id,p_status:null,p_limit:500});
  if(r.error){if((RANK[tier]||1)<3||/Plus\+ plan/.test(r.error.message))return locked(el,o);el.innerHTML='<div class="notice err">'+esc(nice(r.error))+'</div>';return}
  const d=r.data,tierOk=d.tier_ok!==false;let filter='all',q='';

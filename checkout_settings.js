@@ -1,3 +1,4 @@
+// v1.20: shown as "Pickup & tax" while delivery is paused (platform flag delivery_enabled=false): pickup is forced on, delivery fields are hidden and the saved delivery setup is kept for later.
 // Delivery & tax tab (v1.5), owner and sub-admin only. Needs supabase/tax_delivery.sql. Plans are TEST MODE: nothing is billed or paid out.
 // Every value is checked again by the database function vendor_set_checkout_settings; the page only makes it friendly.
 (function(){
@@ -7,7 +8,7 @@ const AREAS=['Hillsborough',"L'Esterie",'Windward','Harvey Vale','Belair','Bogle
 const nice=m=>{m=(m&&m.message)||String(m||'');return /Could not find the function|schema cache|does not exist/i.test(m)?'Delivery and tax settings are not switched on yet (tax_delivery.sql has not been run in Supabase).':m};
 const money=n=>'EC$'+(Math.round((Number(n)||0)*100)/100).toFixed(2);
 function mount(box,o){
- const {sb,vendor}=o;let S=null,zones=[],busy=false;
+ const {sb,vendor}=o;let S=null,zones=[],busy=false;const paused=()=>!S||S.delivery_paused!==false;
  const say=(t,ok)=>{const e=box.querySelector('#cdm');if(!e)return;e.className='notice '+(ok?'ok':'err');e.textContent=t||'';e.hidden=!t;if(t)e.scrollIntoView({block:'nearest'})};
  async function load(){
   box.innerHTML='<p class="muted">Loading settings…</p>';
@@ -28,9 +29,10 @@ function mount(box,o){
  function draw(){
   box.innerHTML=`<div id="cdm" class="notice" hidden role="alert"></div>
   <form id="cdf" class="formcard" novalidate>
-  <h3>Pickup and delivery</h3>
-  <label class="chk"><input type="checkbox" id="cdpick" ${S.pickup_enabled?'checked':''}> Offer <b>pickup</b> (always free)</label>
-  <label class="chk"><input type="checkbox" id="cddel" ${S.delivery_enabled?'checked':''}> Offer <b>delivery</b></label>
+  <h3>${paused()?'Pickup':'Pickup and delivery'}</h3>
+  <label class="chk"><input type="checkbox" id="cdpick" ${S.pickup_enabled||paused()?'checked':''}${paused()?' disabled':''}> Offer <b>pickup</b> (always free)</label>
+  ${paused()?`<div class="notice soon" id="cdpaused"><b>Delivery coming soon.</b> Delivery is switched off across Carriacou Connect for now, so every order is pickup and customers pay you when they collect. ${S.delivery_enabled?'Your saved delivery setup is kept and will come back when delivery opens.':'You can set up delivery when it opens.'}</div>`:''}
+  <label class="chk"${paused()?' hidden':''}><input type="checkbox" id="cddel" ${S.delivery_enabled&&!paused()?'checked':''}${paused()?' disabled':''}> Offer <b>delivery</b></label>
   <div id="cddelbox">
    <h4>Delivery fee</h4>
    <label class="chk"><input type="radio" name="cdm" value="flat" ${S.delivery_model==='flat'?'checked':''}> One flat fee for every delivery</label>
@@ -49,17 +51,17 @@ function mount(box,o){
    <label>VAT number (optional)<input id="cdvn" maxlength="40" value="${esc(S.vat_number||'')}" placeholder="Shown on order PDFs"></label></div>
    <label class="chk"><input type="radio" name="cdi" id="cdincl" value="1" ${S.prices_include_tax?'checked':''}> My prices <b>already include</b> VAT (tax is shown inside the total)</label>
    <label class="chk"><input type="radio" name="cdi" id="cdexcl" value="0" ${S.prices_include_tax?'':'checked'}> My prices <b>exclude</b> VAT (tax is added on top at checkout)</label>
-   <p class="muted"><small>Leave the rate empty to follow the Carriacou Connect default (currently ${esc(Number(S.platform_default_vat_pct))}%). Delivery fees are taxed like your goods. Tax is worked out once per order and rounded to the cent. Each order keeps the rate it was placed with, so changing this later never changes old orders.</small></p>
+   <p class="muted"><small>Leave the rate empty to follow the Carriacou Connect default (currently ${esc(Number(S.platform_default_vat_pct))}%). Tax is worked out once per order and rounded to the cent. Each order keeps the rate it was placed with, so changing this later never changes old orders.</small></p>
   </div>
   <div id="cdex" class="notice" role="note"></div>
   <button class="btn" id="cdsave" type="submit">Save settings</button>
-  <p class="muted"><small>${S.saved?'Settings saved '+esc(CC.fdate(S.updated_at))+'. ':'Nothing saved yet: customers currently see free pickup and free delivery and no tax. '}Changes are signed in your Team activity log. Summary for your records, not tax advice: check rates with the Inland Revenue Division.</small></p>
+  <p class="muted"><small>${S.saved?'Settings saved '+esc(CC.fdate(S.updated_at))+'. ':'Nothing saved yet: customers currently see free pickup and no tax. '}Changes are signed in your Team activity log. Summary for your records, not tax advice: check rates with the Inland Revenue Division.</small></p>
   </form>`;
   wire();sync();
  }
  function readZones(){box.querySelectorAll('[data-zn]').forEach(e=>{zones[+e.dataset.zn].name=e.value});box.querySelectorAll('[data-zf]').forEach(e=>{zones[+e.dataset.zf].fee=e.value})}
  function sync(){const g=id=>box.querySelector(id);
-  g('#cddelbox').hidden=!g('#cddel').checked;g('#cdvat').hidden=!g('#cdreg').checked;
+  g('#cddelbox').hidden=paused()||!g('#cddel').checked;g('#cdvat').hidden=!g('#cdreg').checked;
   const zm=box.querySelector('input[name=cdm]:checked').value==='zones';g('#cdflat').hidden=zm;g('#cdzones').hidden=!zm;example()}
  function wire(){
   const f=box.querySelector('#cdf');
@@ -69,7 +71,7 @@ function mount(box,o){
   wireZ();
   f.onsubmit=async e=>{e.preventDefault();if(busy)return;readZones();say('');
    const g=id=>box.querySelector(id),model=box.querySelector('input[name=cdm]:checked').value;
-   const pick=g('#cdpick').checked,del=g('#cddel').checked;
+   const pick=paused()?true:g('#cdpick').checked,del=paused()?!!S.delivery_enabled:g('#cddel').checked;
    if(!pick&&!del)return say('Turn on pickup, delivery or both.');
    const num=(v,l,min,max)=>{if(v==='')return null;const n=Number(v);if(!isFinite(n)||n<min||n>max||Math.round(n*100)!==n*100)throw new Error(l+' must be between '+min+' and '+max+', with at most two decimals.');return n};
    let st;

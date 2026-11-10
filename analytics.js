@@ -17,7 +17,7 @@ function ranges(today){ // week starts Monday
  return {today:[today,today],week:[addDays(today,-dow),today],month:[today.slice(0,8)+'01',today],last30:[addDays(today,-29),today]};
 }
 const PRESETS=[['today','Today'],['week','This week'],['month','This month'],['last30','Last 30 days'],['custom','Custom range']];
-const METHOD={pay_on_pickup:'Pay on pickup',pay_on_delivery:'Pay on delivery',pay_with_wallet:'Wallet (test)'};
+const METHOD={pay_on_pickup:'Pay on pickup',pay_card_online:'Card (online)',pay_on_delivery:'Pay on delivery (old)',pay_with_wallet:'Wallet (old test)'};
 const WTYPE={order_payment:'Order payment',refund:'Refund',transfer:'Transfer',topup_test:'Test top-up',adjustment:'Adjustment'};
 const SLAB=()=>CC.SLABEL||{};
 
@@ -118,7 +118,8 @@ async function mount(el,o){
   </div>
   <div class="an-grid">
    <div class="an-card"><h4>Payment methods</h4><table><tr><th>Method</th><th>Orders</th><th>Revenue</th><th>Share</th></tr>${methods}</table>
-    <p class="an-refunds"><b>Refunds</b> ${P.refunds.orders} order${P.refunds.orders==1?'':'s'} · ${money(P.refunds.amount_xcd)} returned</p></div>
+    <p class="an-refunds"><b>Refunds</b> ${P.refunds.orders} order${P.refunds.orders==1?'':'s'} · ${money(P.refunds.amount_xcd)} returned</p>
+    ${P.card?`<div class="an-card-pay" id="ancard"><h4>Card payments${P.card.test?' <span class="testtag">TEST MODE – no real money</span>':''}</h4><ul class="an-pend"><li><span>Paid by card (${P.card.payments})</span><b>${money(P.card.captured_xcd)}</b></li><li><span>Refunded to card</span><b>- ${money(P.card.refunded_xcd)}</b></li><li><span>Net card revenue</span><b>${money(P.card.net_xcd)}</b></li><li><span>Awaiting card payment</span><b>${money(P.card.awaiting_xcd)}</b></li><li><span>Declined attempts</span><b>${P.card.declined}</b></li></ul></div>`:''}</div>
    <div class="an-card"><h4>Wallet and money to come</h4>${CC.TESTBANNER}${wl}
     <ul class="an-pend"><li><span>Awaiting payment on pickup or delivery</span><b>${money(W&&W.awaiting_cash_xcd)}</b></li><li><span>Wallet-paid, order still open</span><b>${money(W&&W.open_wallet_paid_xcd)}</b></li></ul>
     <p class="muted">Test wallet only. Payouts to a real bank account do not exist yet.</p></div>

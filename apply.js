@@ -29,8 +29,8 @@ function form(a,edit){
  '<label id="f-vatl">VAT number<input id="f-vatn" maxlength="40" value="'+esc(x.vat_number||'')+'"></label>'+
  '<h3>How customers get their order</h3>'+
  '<label class="chk"><input type="checkbox" id="f-pu"'+(x.offers_pickup===false?'':' checked')+'> Pickup</label>'+
- '<label class="chk"><input type="checkbox" id="f-dl"'+(x.offers_delivery?' checked':'')+'> Delivery</label>'+
- '<h3>Starting plan</h3><label>Plan you would like<select id="f-tier">'+tiers+'</select></label><p class="muted">Plans are in test mode: nothing is billed. Carriacou Connect confirms your starting plan when it approves you, and you can ask to upgrade later.</p>'+
+ '<label class="chk"><input type="checkbox" id="f-dl" disabled> Delivery <small class="muted">(Delivery coming soon: every order is pickup for now)</small></label>'+
+ '<h3>Starting plan</h3><label>Plan you would like<select id="f-tier">'+tiers+'</select></label><p class="muted">Plans are in test mode. Carriacou Connect confirms your starting plan when it approves you. Later you can renew or upgrade with CC Cash (vendor-only credit for Carriacou Connect services).</p>'+
  '<label class="chk"><input type="checkbox" id="f-agree"> I have read and accept the <a href="vendor-terms.html" target="_blank" rel="noopener">Vendor Terms (draft)</a></label>'+
  '<label class="chk"><input type="checkbox" id="f-photos"> I will <b>label every product photo truthfully</b> as "Real photo" (taken by my shop of the actual item; food shows the actual dish as served) or "Stock photo". I understand that labelling a stock or borrowed image as Real can lead to removal, hiding or suspension. <a href="vendor-terms.html#photos" target="_blank" rel="noopener">Photo labels (3a)</a></label>'+
  '<div id="f-err" class="notice err" role="alert" hidden></div>'+

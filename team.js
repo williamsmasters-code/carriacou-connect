@@ -1,4 +1,4 @@
-// Team & plan tab (v0.9, owner only). Needs supabase/staff.sql. Plans are TEST MODE: nothing is billed.
+// Team & plan tab (v0.9, owner only). Needs supabase/staff.sql. Plans can be paid with CC Cash (TEST MODE).
 // Every change goes through a database function that re-checks who you are; hiding a button here is only for friendliness.
 (function(){
 const CC=window.CC;if(!CC)return;
@@ -25,15 +25,15 @@ function mount(box,o){
   const noTeam=L.max_staff===0&&L.max_subadmins===0;
   const pend=P.pending_request;
   box.innerHTML=`<div id="tmsg" class="notice" hidden role="alert"></div>
-  <section class="plancard"><div class="ph"><div><span class="kicker">Your plan</span><h3><span class="badge t-${esc(CC.TIER_LABEL[tk].replace('+',''))}">${esc(CC.TIER_LABEL[tk])}</span></h3></div><span class="testtag">TEST MODE: billing is not live</span></div>
+  <section class="plancard"><div class="ph"><div><span class="kicker">Your plan</span><h3><span class="badge t-${esc(CC.TIER_LABEL[tk].replace('+',''))}">${esc(CC.TIER_LABEL[tk])}</span></h3></div><span class="testtag">TEST MODE: CC Cash is play money</span></div>
    <div class="usegrid"><div><b>Staff</b><span>${U.staff} of ${lbl(L.max_staff)}</span>${meter(U.staff,L.max_staff)}</div>
    ${L.max_subadmins===0?'':`<div><b>Sub-admins</b><span>${U.subadmins} of ${lbl(L.max_subadmins)}</span>${meter(U.subadmins,L.max_subadmins)}</div>`}
    <div><b>Products</b><span>${U.products} of ${lbl(L.max_products)}</span>${meter(U.products,L.max_products)}</div></div>
    ${U.pending_staff+U.pending_subadmins?`<p class="muted">${U.pending_staff+U.pending_subadmins} open invite${U.pending_staff+U.pending_subadmins===1?'':'s'} already reserve${U.pending_staff+U.pending_subadmins===1?'s':''} a seat.</p>`:''}
    ${P.overridden?'<p class="muted">Custom seat limits were set for your business.</p>':''}
    <div class="planact">${pend?`<p class="notice ok">Upgrade to <b>${esc(CC.TIER_LABEL[pend.to_tier])}</b> requested ${esc(fdate(pend.created_at))}. Waiting for approval. <button class="btn ghost sm" id="rqcancel" type="button">Cancel request</button></p>`
-     :next?`<form id="rqf" class="rqform"><label>Request an upgrade <select id="rqt">${CC.TIERS.filter(t=>t.k!==tk&&CC.TIERS.findIndex(x=>x.k===t.k)>CC.TIERS.findIndex(x=>x.k===tk)).map(t=>`<option value="${t.k}">${esc(t.name)}</option>`).join('')}</select></label><label>Note (optional)<input id="rqn" maxlength="300" placeholder="Why you need it"></label><button class="btn" type="submit">Request upgrade</button> <a class="btn ghost" href="tiers.html">Compare plans</a><p class="muted">Test mode: the request goes to the Carriacou Connect team to approve. You are not charged.</p></form>`
-     :'<p class="muted">You are on the top plan. <a href="tiers.html">See all plans</a></p>'}</div></section>
+     :next?`<form id="rqf" class="rqform"><label>Request an upgrade <select id="rqt">${CC.TIERS.filter(t=>t.k!==tk&&CC.TIERS.findIndex(x=>x.k===t.k)>CC.TIERS.findIndex(x=>x.k===tk)).map(t=>`<option value="${t.k}">${esc(t.name)}</option>`).join('')}</select></label><label>Note (optional)<input id="rqn" maxlength="300" placeholder="Why you need it"></label><button class="btn ghost" type="submit">Request upgrade</button> <a class="btn" href="funds.html?v=${encodeURIComponent(vendor.id)}#planpay">Pay with CC Cash</a> <a class="btn ghost" href="tiers.html">Compare plans</a><p class="muted">Pay with CC Cash to renew or upgrade straight away, or send a request for the Carriacou Connect team to approve.</p></form>`
+     :'<p class="muted">You are on the top plan. <a href="funds.html?v='+encodeURIComponent(vendor.id)+'#planpay">Renew with CC Cash</a> · <a href="tiers.html">See all plans</a></p>'}</div></section>
   <section><h3>Team members</h3><div class="members">${data.members.map(m=>memberRow(m)).join('')}</div></section>
   <section><h3>Invite someone</h3>${noTeam?upsell():inviteForm(staffLeft,subLeft)}${newInvite?inviteBox(newInvite):''}</section>
   <section><h3>Open invites</h3><p class="muted">The invite code is shown only once, when you create it, so a lost invite cannot be shown again: revoke it and create a new one.</p>${data.invites.length?'<div class="invites">'+data.invites.map(i=>`<div class="irow${i.expired?' exp':''}"><div><b>${esc(i.email)}</b> <span class="rolebadge r-${esc(i.role)}">${esc(CC.ROLE_LABEL[i.role])}</span><small>${i.expired?'Expired':'Expires'} ${esc(fdate(i.expires_at))} (${esc(inDays(i.expires_at))})</small></div><button class="btn ghost sm" data-rev="${esc(i.id)}" type="button">Revoke</button></div>`).join('')+'</div>':'<p class="muted">No open invites.</p>'}</section>

@@ -1,4 +1,4 @@
-CARRIACOU CONNECT MARKETPLACE v1.7 (static preview + optional Supabase accounts + TEST-MODE wallets + vendor analytics + plans + team accounts + multi-photo products + bulk upload + Standard analytics + platform analytics + advanced/premium analytics + admin customer management + tax and delivery fees + real vendor onboarding + live updates)
+CARRIACOU CONNECT MARKETPLACE v1.20 (static preview + optional Supabase accounts + TEST-MODE wallets + vendor analytics + plans + team accounts + multi-photo products + bulk upload + Standard analytics + platform analytics + advanced/premium analytics + admin customer management + tax and delivery fees + real vendor onboarding + live updates)
 ===================================================
 ALL VENDORS AND PRODUCTS ARE SAMPLE DATA. NO REAL PAYMENTS.
 
@@ -789,3 +789,50 @@ v1.19.1 (22 Oct 2026) - photo labels replace the mandatory real-photos tick
 - Shoppers see "Real photo" or "Stock photo – actual item may differ" on cards, the product gallery and the photo viewer.
 - CSV-imported and old unconfirmed photos are "Stock photo" until the vendor relabels them; photos confirmed under the old tick become "Real photo".
 - Report reason: "Photo labelled real but isn't / doesn't match". Admin can relabel, hide image, hide listing or dismiss.
+
+v1.20 (10 Nov 2026) - financial structure + products grant fix
+- Run supabase/financial_v2.sql LAST (after photo_labels.sql). One file, idempotent (tested twice in a row). Not yet run anywhere.
+  If you ever re-run schema.sql, standard_analytics.sql, tax_delivery.sql or wallet_repurpose.sql, run financial_v2.sql again after them.
+- Grant fix: grant select (image_label) on public.products to anon, authenticated. Without it the live site could not read
+  products (42501) and fell back to the sample products.json. app.js now retries without image_label on 42501/permission
+  errors and, in live mode, shows "Could not load products right now" instead of passing the sample catalogue off as real.
+- Customers pay shops only two ways: pay on pickup (cash / card at the counter / other in person) or pay online by
+  credit/debit card (shown, switched off until a card processor is live: platform_flags.card_payments_enabled).
+  New RPC place_order_v2(..., p_payment 'pickup'|'card'). Customer wallet retired (wallet_mode forced 'off', wallet RPCs
+  revoked, wallet rows refused by triggers). Bank transfer, wallet and gift cards refused as recorded payments.
+- Delivery paused behind platform_flags.delivery_enabled (default false): checkout, checkout_quote, place_order*,
+  vendor settings ("Pickup & tax" tab) and copy. Saved delivery settings are frozen and kept; pickup forced on.
+- CC Points: earned only on platform orders - pay on pickup once the vendor marks the order completed, or card online
+  once paid. Nothing for POS/in-person, transfers, sign-ups, the shop's own team, cancelled or refunded orders (reversed).
+  Points cannot pay shops; Points Store shop gift cards closed (active cards converted back to points); the Carriacou
+  Connect shop for points is "coming soon".
+- CC Cash (was "Platform Funds"): vendors only, spent only on Carriacou Connect services/goods: subscription, fees,
+  featured/ads, setup, custom layout (new kind 'layout'), Carriacou Connect goods (new kind 'cc_goods').
+- Plan payments with CC Cash: vendor_subscription_quote(p_vendor, p_tier) and vendor_pay_subscription(p_vendor, p_tier, p_key).
+  Owner only. Renewal (same plan, +1 month after paid-through) or upgrade (plan changes at once, new month from today).
+  One transaction under the shop's funds lock: balance check, CC Cash debit, settled bill, plan change and
+  vendor_subscriptions row together; too little CC Cash = refused, nothing taken; idempotent by key. UI: CC Cash page
+  "Pay for your plan with CC Cash", links from Team & plan and the Plans page.
+- Gift card tab: sgc_status(p_vendor) is asked first, so a locked shop with no cards no longer gets a 400 from sgc_list.
+- Copy: banner/footer v1.20, home FAQ (#faq), tiers, vendor terms 6/7/7a/7b/7d, rewards, store, wallet, POS, onboarding, apply.
+- Admin flags: Delivery switch; wallet test mode and shop gift cards locked off. Card checkout is switched by Payments mode (below).
+- MOCK CARD PROCESSOR (TEST MODE - no real money): run supabase/payments_mock.sql AFTER financial_v2.sql. Not yet run anywhere.
+  * platform_flags.payments_mode: 'off' (default, pickup only) | 'mock' (test gateway) | 'live' (real processor, not built yet).
+    Card checkout shows only when the server mode equals config.js PAYMENTS_MODE (now "mock") and card_payments_enabled is on.
+    Admin > Funds & exits > Card transactions: mode selector, Test/Real filter, list, "Wipe all TEST card payments"
+    (admin_wipe_test_payments('WIPE TEST PAYMENTS')). 'mock' is refused once any real (non-mock) payment exists, so the
+    mock can never become the live path; when WiPay or a bank gateway is added, implement it behind _pay_provider() and
+    pay_gateway.js (CC.payments provider interface) and switch the mode to 'live'.
+  * Test cards: 4242 4242 4242 4242 approved; 4000 0000 0000 0002 declined; 4000 0000 0000 9995 insufficient funds;
+    4000 0000 0000 0069 expired (any past expiry is also refused). The browser turns the number into a test token;
+    the full number and CVC are never sent or stored (the server refuses them: CARD_DATA). Stored: brand, last 4, expiry.
+  * Server (SECURITY DEFINER): card_pay_orders (authorise + capture + simulated webhook; statuses pending/authorised/paid/
+    failed/refunded/partially_refunded; idempotent; one paid payment per order), card_order_to_pickup (after a decline),
+    vendor_refund_card (owner/sub-admin; full or partial; points reversed in proportion; full refund = order refunded),
+    order_card_payment (receipt), admin_card_payments, admin_set_payments_mode, admin_wipe_test_payments.
+    Every mock row is flagged is_test (card_payments) and orders.payment_is_test. Tables card_payments, card_payment_events.
+  * UI: checkout card form with TEST MODE banner, decline screen (try another card / pay on pickup instead), vendor order
+    card status + "Refund to card", customer order page and order PDF show card brand, last 4, refunds and TEST MODE,
+    vendor analytics "Card (online)" method + Card payments block (captured, refunded, net, awaiting, declined).
+- Tests (outside the repo): test/pgfinancial.mjs (81 checks), test/pgpaymock.mjs (53 checks), test/fin2_flow.js + mock_fin2.js,
+  test/paymock_flow.js + mock_paymock.js (browser customer/vendor/admin card journeys, 390 and 1366).
