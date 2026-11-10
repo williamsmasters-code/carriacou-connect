@@ -117,8 +117,106 @@ function safeNext(){const n=new URLSearchParams(location.search).get('next')||''
 const LOGO='<svg viewBox="0 0 48 48" aria-hidden="true"><defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f4b942"/><stop offset="1" stop-color="#ff6b4a"/></linearGradient></defs><circle cx="24" cy="24" r="23" fill="#0b7285"/><circle cx="33" cy="15" r="6" fill="url(#lg)"/><path d="M24 9 L36 31 H24Z M22 13 L11 31 H22Z" fill="#fff"/><path d="M8 34h32l-4 6H12z" fill="#f4b942"/><path d="M4 41q5-3 10 0t10 0 10 0 10 0" stroke="#9fe3dc" stroke-width="2" fill="none"/></svg>';
 const WAVE=(fill,flip)=>'<svg class="wave-sep" viewBox="0 0 1440 90" preserveAspectRatio="none" aria-hidden="true" style="height:clamp(34px,6vw,80px)'+(flip?';transform:scaleY(-1)':'')+'"><path fill="'+fill+'" d="M0 50 C180 100 320 0 540 40 S900 100 1100 40 1340 10 1440 50 V90 H0Z"/></svg>';
 function authLinks(){return '<a href="login.html">Sign in</a><a class="pill" href="signup.html">Sign up</a>'}
-// v1.7.1: every page's header shows the same cart count (cart lives in localStorage key cconnect_cart_v1, same for guests and logged-in users)
-function cartBadge(){let n=0;try{const c=JSON.parse(localStorage.getItem('cconnect_cart_v1'))||{};n=Object.values(c).reduce((a,b)=>a+(Number(b)||0),0)}catch(e){}const el=document.getElementById('cartCount');if(el){el.textContent=n;el.setAttribute('aria-label',n+' item'+(n===1?'':'s')+' in cart')}}
+// v1.7.1 / v1.21: header cart count. When signed in, the server cart (account_carts, via cart_get / cart_set / cart_merge / cart_replace / cart_remove) is the source of truth and follows the account across devices. localStorage cconnect_cart_v1 is the guest cart and a cache. A guest cart is merged into the account on sign-in, then the guest copy is cleared. Logout always clears the local cache so the next person on the device does not see it. Guest carts start empty after logout.
+// Count only valid lines: skip empty/'undefined'/'null' keys and non-positive or non-numeric quantities. Stale product ids are removed when a catalogue page (cart, browse, home, etc.) successfully loads products (applied to the server cart too when signed in).
+function cartCount(c){let n=0;if(!c||typeof c!=='object'||Array.isArray(c))return 0;for(const[id,q]of Object.entries(c)){if(!id||id==='undefined'||id==='null')continue;const v=Math.floor(Number(q));if(Number.isFinite(v)&&v>0)n+=v}return n}
+function cartBadge(){let n=0;try{n=cartCount(JSON.parse(localStorage.getItem('cconnect_cart_v1'))||{})}catch(e){}const el=document.getElementById('cartCount');if(el){el.textContent=n;el.setAttribute('aria-label',n+' item'+(n===1?'':'s')+' in cart')}return n}
+
+const CART_KEY='cconnect_cart_v1',CART_OWNER='cconnect_cart_owner',CART_DIRTY='cconnect_cart_dirty',CART_SNAP='cconnect_cart_snap',CART_MERGE='cconnect_cart_merge';
+function cartRaw(){try{const c=JSON.parse(localStorage.getItem(CART_KEY));return c&&typeof c==='object'&&!Array.isArray(c)?c:{}}catch(e){return{}}}
+function cartClean(c){const out={};if(!c||typeof c!=='object'||Array.isArray(c))return out;for(const[id,q]of Object.entries(c)){const n=Math.floor(Number(q));if(id&&id!=='undefined'&&id!=='null'&&Number.isFinite(n)&&n>0)out[id]=Math.min(99,n)}return out}
+function cartWrite(c){try{localStorage.setItem(CART_KEY,JSON.stringify(c||{}))}catch(e){}cartBadge();return c||{}}
+function cartAsMap(data){if(!data)return{};if(Array.isArray(data)){const o={};data.forEach(x=>{const id=x&&(x.product_id||x.id),n=Math.floor(Number(x&&(x.qty!=null?x.qty:x.quantity)));if(id&&Number.isFinite(n)&&n>0)o[id]=Math.min(99,n)});return o}if(data.items)return cartAsMap(data.items);return cartClean(data)}
+const cart={
+ KEY:CART_KEY,
+ idOk(id){return !!(id&&id!=='undefined'&&id!=='null')},
+ qtyOf(q){const n=Math.floor(Number(q));return Number.isFinite(n)&&n>0?Math.min(99,n):0},
+ getLocal(){return cartClean(cartRaw())},
+ setLocal(c){return cartWrite(cartClean(c))},
+ _owner(){try{return localStorage.getItem(CART_OWNER)||''}catch(e){return ''}},
+ _setOwner(id){try{if(id)localStorage.setItem(CART_OWNER,id);else localStorage.removeItem(CART_OWNER)}catch(e){}},
+ _dirty(){try{return JSON.parse(localStorage.getItem(CART_DIRTY)||'null')}catch(e){return null}},
+ _markDirty(ids){try{if(ids===true){localStorage.setItem(CART_DIRTY,JSON.stringify({all:true}));return}const d=this._dirty()||{};if(d.all)return;(ids||[]).forEach(id=>{if(id)d[id]=1});localStorage.setItem(CART_DIRTY,JSON.stringify(d))}catch(e){}},
+ _clearDirty(){try{localStorage.removeItem(CART_DIRTY)}catch(e){}},
+ _snap(c){try{localStorage.setItem(CART_SNAP,JSON.stringify(c||{}))}catch(e){}},
+ _wantMerge(){try{return localStorage.getItem(CART_MERGE)==='1'}catch(e){return false}},
+ _setMerge(on){try{if(on)localStorage.setItem(CART_MERGE,'1');else localStorage.removeItem(CART_MERGE)}catch(e){}},
+ _t:null,_flushQ:null,_loginQ:null,
+ schedule(){clearTimeout(this._t);this._t=setTimeout(()=>{this.flush()},400)},
+ async flush(sb){if(this._flushQ)return this._flushQ;this._flushQ=this._flushDo(sb).finally(()=>{this._flushQ=null});return this._flushQ},
+ async _flushDo(sb){
+  clearTimeout(this._t);this._t=null;
+  const dirty=this._dirty();if(!dirty)return this.getLocal();
+  sb=sb||await client();const u=sb&&await getUser();
+  if(!u){this._clearDirty();return this.getLocal()}
+  const local=this.getLocal();let r=null;
+  try{
+   if(this._wantMerge()){r=await sb.rpc('cart_merge',{p_cart:local});if(!r||r.error)return local;this._setMerge(false)}
+   else if(dirty.all){r=await sb.rpc('cart_replace',{p_cart:local})}
+   else{const ids=Object.keys(dirty);if(ids.length>8)r=await sb.rpc('cart_replace',{p_cart:local});
+    else{for(const id of ids){r=await sb.rpc('cart_set',{p_product:id,p_qty:local[id]||0});if(!r||r.error)break}}}
+  }catch(e){r={error:e}}
+  if(!r||r.error)return local;
+  this._clearDirty();const next=cartAsMap(r.data);this.setLocal(next);this._snap(next);this._setOwner(u.id);return next;
+ },
+ async onLogin(sb){if(this._loginQ)return this._loginQ;this._loginQ=this._onLoginDo(sb).finally(()=>{this._loginQ=null});return this._loginQ},
+ async _onLoginDo(sb){
+  sb=sb||await client();const u=sb&&await getUser();if(!u)return this.getLocal();
+  const owner=this._owner();
+  if(owner&&owner!==u.id){this.setLocal({});this._clearDirty();this._setOwner('');this._setMerge(false);try{localStorage.removeItem(CART_SNAP)}catch(e){}}
+  const toMerge=(!owner||owner!==u.id)?this.getLocal():{};
+  if(Object.keys(toMerge).length){
+   let r;try{r=await sb.rpc('cart_merge',{p_cart:toMerge})}catch(e){r={error:e}}
+   if(!r||r.error){this._setOwner(u.id);this._setMerge(true);this._markDirty(true);return this.getLocal()}
+   this._setMerge(false);const next=cartAsMap(r.data);this.setLocal(next);this._clearDirty();this._snap(next);this._setOwner(u.id);return next;
+  }
+  this._setOwner(u.id);return this.sync(sb);
+ },
+ async onLogout(sb){
+  try{clearTimeout(this._t)}catch(e){}
+  try{if(sb)await this.flush(sb)}catch(e){}
+  this.setLocal({});this._clearDirty();this._setOwner('');this._setMerge(false);
+  try{localStorage.removeItem(CART_SNAP)}catch(e){}
+  cartBadge();
+ },
+ async sync(sb,products){
+  sb=sb||await client();const u=sb&&await getUser();
+  if(!u){return products?this.prune(products,false):this.getLocal()}
+  if(this._owner()!==u.id){const c=await this.onLogin(sb);return products?this.prune(products,true):c}
+  if(this._wantMerge()||this._dirty())await this.flush(sb);
+  let r;try{r=await sb.rpc('cart_get')}catch(e){r={error:e}}
+  if(!r||r.error){if(this._dirty()||this._wantMerge());else this._markDirty(true);return products?this.prune(products,false):this.getLocal()}
+  this.setLocal(cartAsMap(r.data));this._snap(cartAsMap(r.data));this._setOwner(u.id);
+  return products?this.prune(products,true):this.getLocal();
+ },
+ prune(products,persist){
+  const list=products||[],ok=new Set(list.map(p=>p&&p.id).filter(id=>this.idOk(id)));
+  const stock={};list.forEach(p=>{if(p&&this.idOk(p.id)&&p.stock_qty!=null&&Number.isFinite(+p.stock_qty))stock[p.id]=Math.max(0,+p.stock_qty)});
+  const raw=this.getLocal(),next={};const dropped=[];
+  for(const[id,q]of Object.entries(raw)){
+   let n=this.qtyOf(q);if(this.idOk(id)&&n&&ok.has(id)){if(id in stock)n=Math.min(n,stock[id]);if(n)next[id]=n;else dropped.push(id)}else dropped.push(id)
+  }
+  const same=Object.keys(raw).length===Object.keys(next).length&&Object.keys(next).every(k=>raw[k]===next[k]);
+  if(!same){this.setLocal(next);if(persist!==false&&this._owner()){this._markDirty(true);this.schedule()}}
+  cartBadge();return next;
+ },
+ add(id,q){if(!this.idOk(id))return this.getLocal();const n=this.qtyOf(q);if(!n)return this.getLocal();const c=this.getLocal();c[id]=Math.min(99,(c[id]||0)+n);this.setLocal(c);if(this._owner()){this._markDirty([id]);this.schedule()}return c},
+ setQty(id,q){if(!this.idOk(id))return this.getLocal();const c=this.getLocal(),n=this.qtyOf(q);if(!n)delete c[id];else c[id]=n;this.setLocal(c);if(this._owner()){this._markDirty([id]);this.schedule()}return c},
+ replace(c){const next=this.setLocal(c);if(this._owner()){this._markDirty(true);this.schedule()}return next},
+ async removeMany(ids){
+  const c=this.getLocal();(ids||[]).forEach(id=>delete c[id]);this.setLocal(c);
+  const sb=await client(),u=sb&&await getUser();
+  if(u&&ids&&ids.length){
+   let r;try{r=await sb.rpc('cart_remove',{p_ids:ids})}catch(e){r={error:e}}
+   if(!r||r.error){try{for(const id of ids){const s=await sb.rpc('cart_set',{p_product:id,p_qty:0});if(s.error)throw s.error}this._clearDirty()}catch(e){this._markDirty(ids);return this.getLocal()}}
+   else{const next=cartAsMap(r.data);this.setLocal(next);this._snap(next)}
+  }
+  cartBadge();return this.getLocal();
+ }
+};
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')cart.flush()});
+window.addEventListener('pagehide',()=>{cart.flush()});
+
 // v1.8: role identity. body.role-* drives accent colours; header chip names the role; dashboards get a role hero.
 const ROLEUI={guest:{t:'Guest',i:'👋'},customer:{t:'Customer',i:'🛍️'},vendor:{t:'Vendor',i:'🏪'},staff:{t:'Vendor team',i:'🧑‍🍳'},admin:{t:'Admin',i:'🛡️'}};
 const HERO={consumer:{k:'Customer space',t:'My dashboard',s:'Your orders, receipts and wallet in one place.',i:'🛍️'},vendordash:{k:'Vendor studio',t:'Vendor dashboard',s:'Run your shop: products, orders, analytics and team.',i:'🏪'},admin:{k:'Platform control',t:'Platform admin',s:'Plans, vendors, customers and platform settings.',i:'🛡️'}};
@@ -163,14 +261,14 @@ function layout(){
  document.querySelectorAll('[data-cc-cardnote]').forEach(e=>e.textContent=cardNote());
  const live=configured;
  const out=live?authLinks():'<a href="login.html">Sign in</a>';
- const msg=live?('Preview v1.20 – products labeled SAMPLE are fictional. '+((window.CCONNECT_CONFIG||{}).PAYMENTS_MODE==='mock'?'Pay on pickup, or by card in TEST MODE (no real money). ':'Pay on pickup only for now (card payments coming soon). ')+'Delivery coming soon. CC Cash and plans are TEST MODE. No real billing.'):'Preview v1.1 – all vendors and products are SAMPLE data. Accounts are not switched on yet. No real payments.';
+ const msg=live?('Preview v1.21 – products labeled SAMPLE are fictional. '+((window.CCONNECT_CONFIG||{}).PAYMENTS_MODE==='mock'?'Pay on pickup, or by card in TEST MODE (no real money). ':'Pay on pickup only for now (card payments coming soon). ')+'Delivery coming soon. CC Cash and plans are TEST MODE. No real billing.'):'Preview v1.1 – all vendors and products are SAMPLE data. Accounts are not switched on yet. No real payments.';
  if(!document.querySelector('link[data-cc-fonts]')){const l=document.createElement('link');l.rel='stylesheet';l.dataset.ccFonts='1';l.href='https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,600;0,9..144,800;1,9..144,600&family=Plus+Jakarta+Sans:wght@400;500;700;800&display=swap';document.head.appendChild(l)}
  const m=document.querySelector('main');if(m)m.id='main';
  const home=document.body.dataset.page==='home';
  document.body.insertAdjacentHTML('afterbegin','<a class="skip" href="#main">Skip to content</a><div class="banner">'+msg+'</div><header><div class="row"><a class="logo" href="index.html">'+LOGO+'<div>Carriacou <span>Connect</span><small class="slogan">Shop the island, Online</small></div></a><span id="roleChip" class="rolechip rc-guest">Guest</span><nav aria-label="Main"><a class="mktbtn'+(/browse\.html$/.test(location.pathname)||document.body.dataset.page==='browse'?' on" aria-current="page':'')+'" href="browse.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9l1.5-5h15L21 9M3 9h18M3 9v1a3 3 0 006 0 3 3 0 006 0 3 3 0 006 0V9M5 13v7h14v-7"/></svg>Marketplace</a><a class="cartlink" href="cart.html">Cart<b id="cartCount">0</b></a><span id="bellWrap"></span><button type="button" class="navbtn" id="navBtn" aria-expanded="false" aria-controls="navMore"><span class="nb-bars" aria-hidden="true"><i></i><i></i><i></i></span><span class="nb-t">Menu</span></button><div id="navMore" class="navmore"><span id="roleNav"><a href="tiers.html">Plans</a><a href="apply.html">Sell</a></span><span id="authNav">'+out+'</span></div></nav><div class="navscrim" id="navScrim" hidden></div></div></header>');
  navMenu();roleHero();setRole('guest');cartBadge();if(!window.CC_CART_WIRED){window.CC_CART_WIRED=1;addEventListener('storage',e=>{if(!e.key||e.key==='cconnect_cart_v1')cartBadge()});addEventListener('pageshow',cartBadge)}
  const hasBand=document.querySelector('.band');
- document.body.insertAdjacentHTML('beforeend',(hasBand?'':WAVE('#04202c',false).replace('class="wave-sep"','class="wave-sep foot-wave"'))+'<footer><b>Carriacou Connect®</b><br>by Williams’ Tech · Marketplace v1.20 preview<br><a href="apply.html">Sell on Carriacou Connect</a> · <a href="vendor-terms.html">Vendor terms (draft)</a><br>Sea, reef, spice and sail: made on Carriacou.</footer>');
+ document.body.insertAdjacentHTML('beforeend',(hasBand?'':WAVE('#04202c',false).replace('class="wave-sep"','class="wave-sep foot-wave"'))+'<footer><b>Carriacou Connect®</b><br>by Williams’ Tech · Marketplace v1.21 preview<br><a href="apply.html">Sell on Carriacou Connect</a> · <a href="vendor-terms.html">Vendor terms (draft)</a><br>Sea, reef, spice and sail: made on Carriacou.</footer>');
  if(live)authNav();
  if(!matchMedia('(prefers-reduced-motion: reduce)').matches&&'IntersectionObserver' in window){const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}}),{threshold:.08});window.CC_REVEAL=()=>document.querySelectorAll('.rv:not(.in)').forEach(x=>io.observe(x))}
  else window.CC_REVEAL=()=>document.querySelectorAll('.rv').forEach(x=>x.classList.add('in'));
@@ -207,13 +305,13 @@ function paintNav(r,shop){const el=document.getElementById('authNav'),rn=documen
  const d=DASH[r],here=location.pathname.split('/').pop()===d[0];
  const bw=document.getElementById('bellWrap');if(bw&&!document.getElementById('ccBell'))bw.innerHTML='<span id="ccBell" class="bellslot"></span>';
  el.innerHTML='<a class="dashlink'+(here?' on':'')+'" href="'+d[0]+'">'+d[1]+'</a>'+(r==='admin'||r==='staff'?'<a href="dashboard-consumer.html">My orders</a>':'')+(r==='vendor'?'<a href="funds.html">CC Cash</a>':'<a href="rewards.html">Rewards</a>'+(r==='admin'||r==='staff'?'':'<a href="store.html">Points Store</a>'))+'<a href="account.html">Account</a><a class="pill" href="#" id="logoutLink">Log out</a>'}
-document.addEventListener('click',async e=>{const a=e.target.closest&&e.target.closest('#logoutLink');if(!a)return;e.preventDefault();try{localStorage.removeItem(RKEY)}catch(x){}const sb=await client();if(sb)await sb.auth.signOut();location.href='index.html'});
+document.addEventListener('click',async e=>{const a=e.target.closest&&e.target.closest('#logoutLink');if(!a)return;e.preventDefault();try{localStorage.removeItem(RKEY)}catch(x){}const sb=await client();try{if(window.CC&&window.CC.cart)await window.CC.cart.onLogout(sb)}catch(x){}if(sb)await sb.auth.signOut();location.href='index.html'});
 async function authNav(){
  let cached=null;try{cached=JSON.parse(localStorage.getItem(RKEY))}catch(e){}
  if(cached&&DASH[cached.r])paintNav(cached.r,cached.shop||'');
  const sb=await client();if(!sb)return;
  const render=async user=>{
-  if(!user){try{localStorage.removeItem(RKEY)}catch(e){}paintNav('guest');return}
+  if(!user){try{localStorage.removeItem(RKEY)}catch(e){}try{if(cart._owner())await cart.onLogout(sb)}catch(e){}paintNav('guest');return}
   let role='consumer',team=false;try{const {data}=await sb.from('profiles').select('role').eq('id',user.id).maybeSingle();if(data)role=data.role}catch(e){}
   if(role!=='vendor'&&role!=='admin'){try{const r=await sb.rpc('my_vendor_access');team=!r.error&&Array.isArray(r.data)&&r.data.length>0}catch(e){}}
   suspBanner(sb);
@@ -221,6 +319,7 @@ async function authNav(){
   const r=role==='admin'?'admin':role==='vendor'?'vendor':team?'staff':'customer';
   if(!cached||cached.uid!==user.id||cached.r!==r||(cached.shop||'')!==shop||!document.getElementById('ccBell'))paintNav(r,shop);
   try{localStorage.setItem(RKEY,JSON.stringify({uid:user.id,r,shop}))}catch(e){}
+  try{await cart.sync(sb)}catch(e){}
   startLive(sb,user)};
  render(await getUser());
  sb.auth.onAuthStateChange((ev)=>{if(ev==='SIGNED_OUT')render(null)});
@@ -269,7 +368,7 @@ function orderLines(o){
  window.CC_A2HS={add,sheet,dismiss,install,KEY};
 })();
 
-window.CC={cardNote,flags,POINTS_NOTE,confirmPay,setRole,cartBadge,live,orderLines,acctStatus,PCOLS,PCOLS_BASE,TESTBANNER,cents,toCents,uuid,payPill,noteSummary,newBadge,notesWidget,NOTE_POLL,SLABEL,stPill,fdate,fnice,payText,nextSteps,timeline,safeNext,WAVE,configured,client,esc,getUser,layout,TIER_LABEL,TIER_LIMIT,TIERS,lim,ROLE_LABEL,ROLE_PERMS,
+window.CC={cardNote,flags,POINTS_NOTE,confirmPay,setRole,cart,cartCount,cartBadge,live,orderLines,acctStatus,PCOLS,PCOLS_BASE,TESTBANNER,cents,toCents,uuid,payPill,noteSummary,newBadge,notesWidget,NOTE_POLL,SLABEL,stPill,fdate,fnice,payText,nextSteps,timeline,safeNext,WAVE,configured,client,esc,getUser,layout,TIER_LABEL,TIER_LIMIT,TIERS,lim,ROLE_LABEL,ROLE_PERMS,
  xcd:n=>'EC$'+Number(n).toFixed(2)};
 layout();
 })();

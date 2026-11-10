@@ -4,12 +4,20 @@ const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'
 const xcd=n=>'EC$'+Number(n).toFixed(2);
 const qs=new URLSearchParams(location.search);
 let DATA;
-// ---- cart (localStorage) ----
+// ---- cart: CC.cart (server cart when signed in; localStorage is the guest cart / cache) ----
 const KEY='cconnect_cart_v1';
-const getCart=()=>{try{return JSON.parse(localStorage.getItem(KEY))||{}}catch(e){return{}}};
-const saveCart=c=>{localStorage.setItem(KEY,JSON.stringify(c));badge()};
-function addCart(id,q){const c=getCart();c[id]=Math.min(99,(c[id]||0)+q);saveCart(c)}
-function badge(){const n=Object.values(getCart()).reduce((a,b)=>a+b,0);const e=$('#cartCount');if(e)e.textContent=n}
+const C=()=>window.CC&&window.CC.cart;
+const qtyOf=q=>C()?C().qtyOf(q):(n=>{const x=Math.floor(Number(n));return Number.isFinite(x)&&x>0?Math.min(99,x):0})(q);
+const idOk=id=>C()?C().idOk(id):!!(id&&id!=='undefined'&&id!=='null');
+const rawCart=()=>{try{const c=JSON.parse(localStorage.getItem(KEY));return c&&typeof c==='object'&&!Array.isArray(c)?c:{}}catch(e){return{}}};
+const getCart=()=>C()?C().getLocal():(raw=>{const out={};let dirty=false;for(const[id,q]of Object.entries(raw)){const n=qtyOf(q);if(idOk(id)&&n){if(n!==q)dirty=true;out[id]=n}else dirty=true}if(dirty)localStorage.setItem(KEY,JSON.stringify(out));return out})(rawCart());
+const saveCart=c=>{if(C())return C().replace(c);localStorage.setItem(KEY,JSON.stringify(c));badge()};
+function addCart(id,q){if(C())return C().add(id,q);if(!idOk(id))return;const n=qtyOf(q);if(!n)return;const c=getCart();c[id]=Math.min(99,(c[id]||0)+n);saveCart(c)}
+function badge(){if(window.CC&&window.CC.cartBadge)return window.CC.cartBadge();const e=$('#cartCount');if(e)e.textContent=window.CC&&window.CC.cartCount?window.CC.cartCount(getCart()):Object.values(getCart()).reduce((a,b)=>a+(Number(b)||0),0)}
+// Drop cart lines whose product is missing, inactive (not in the loaded catalogue) or has an invalid qty, then refresh the badge.
+// Only call after a successful product load — never when loadError left the catalogue empty, or a valid cart would be wiped.
+// When signed in, the same prune is written through to the server cart (debounced).
+function pruneCart(products){if(C())return C().prune(products);const ok=new Set((products||[]).map(p=>p&&p.id).filter(idOk));const raw=rawCart(),next={};for(const[id,q]of Object.entries(raw)){const n=qtyOf(q);if(idOk(id)&&n&&ok.has(id))next[id]=n}const same=Object.keys(raw).length===Object.keys(next).length&&Object.keys(next).every(k=>qtyOf(raw[k])===next[k]);if(!same)localStorage.setItem(KEY,JSON.stringify(next));badge();return next}
 // ---- placeholder SVG images ----
 function shade(hex,p){const n=parseInt(hex.slice(1),16);const f=v=>Math.max(0,Math.min(255,Math.round(v+(p>0?(255-v):v)*p)));return'#'+[n>>16,(n>>8)&255,n&255].map(f).map(v=>v.toString(16).padStart(2,'0')).join('')}
 function svg(p,v){const c=p.color,l=shade(c,.45),d=shade(c,-.3);
@@ -91,7 +99,7 @@ if(DATA.live){try{const sb=await window.CC.client();let r=await sb.from('product
  if(!r.error&&r.data&&r.data.length){const rows=r.data.filter(x=>/^https?:\/\//i.test(x.url));if(rows.length)gallery(rows.map(x=>x.url),rows.map(x=>x.photo_label))}}catch(e){}}
 $('#add').onclick=()=>{const q=Math.max(1,Math.min(99,parseInt($('#qty').value)||1));addCart(p.id,q);$('#msg').innerHTML='Added to cart. <a href="cart.html">View cart</a>'}},
 cart(){const VC=['#0b7285','#7a2e8e','#e8590c','#2f9e44','#c2255c','#1c7ed6'];
-const draw=()=>{const c=getCart(),ids=Object.keys(c).filter(i=>DATA.products.some(p=>p.id===i));const R=$('#cart');
+const draw=()=>{if(DATA&&!DATA.loadError)pruneCart(DATA.products);const c=getCart(),ids=Object.keys(c).filter(i=>DATA.products.some(p=>p.id===i));const R=$('#cart');
 if(!ids.length){R.innerHTML=`<section class="cartempty"><div class="ce-art" aria-hidden="true"><svg viewBox="0 0 120 90"><path d="M8 70q26-14 52 0t52 0" stroke="#9fe3dc" stroke-width="4" fill="none"/><path d="M30 26h66l-8 30H40z" fill="#f4b942"/><path d="M22 18h10l10 40h44" stroke="#04202c" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round"/><circle cx="46" cy="66" r="5" fill="#04202c"/><circle cx="82" cy="66" r="5" fill="#04202c"/></svg></div><h2>Your cart is empty</h2><p class="muted">Spices, crafts, fresh catch and island services are waiting in the Marketplace.</p><a class="btn" href="browse.html">Browse the Marketplace</a></section>`;return}
 const groups={};ids.forEach(i=>{const p=DATA.products.find(x=>x.id===i);(groups[p.vendorId]=groups[p.vendorId]||[]).push(p)});
 let sum=0,count=0;const vids=Object.keys(groups);
@@ -119,6 +127,7 @@ if(!window.CC.configured||!DATA.live){root.innerHTML='<div class="notice"><stron
 const user=await window.CC.getUser();
 if(!user){location.href='login.html?next=checkout.html';return}
 const sb=await window.CC.client();
+if(DATA&&!DATA.loadError)pruneCart(DATA.products);
 const c=getCart(),ids=Object.keys(c).filter(i=>DATA.products.some(p=>p.id===i));
 if(!ids.length){root.innerHTML='<div class="notice">Your cart is empty. <a href="browse.html">Browse products</a></div>';return}
 const lines=ids.map(i=>({p:DATA.products.find(x=>x.id===i),q:c[i]}));
@@ -230,7 +239,7 @@ f.onsubmit=async e=>{e.preventDefault();say('');planFrom();
  if(r.error&&/Could not find the function|schema cache/.test(r.error.message||'')&&payWay()==='card'){say('Paying online by card is coming soon. Choose pay on pickup for now.');btn.disabled=false;btn.textContent='Place order';return}
  if(r.error){say(typed&&/Could not find the function|schema cache/.test(r.error.message||'')?'Promo codes are not switched on yet. Clear the code to place the order.':cleanErr(r.error.message||'Could not place the order.'));btn.disabled=false;if(/ACCOUNT_SUSPENDED/.test(r.error.message||''))btn.disabled=true;else sync();return}
  if(r.data&&!Array.isArray(r.data)&&r.data.error){say(r.data.error+' Fix or clear the promo code and try again.');btn.disabled=false;sync();return}
- saveCart({});
+ const ordered=Object.keys(getCart());if(C())await C().removeMany(ordered);else saveCart({});
  try{const up={};if(!prof.phone)up.phone=ph;if(!prof.full_name&&$('#cn').value.trim())up.full_name=$('#cn').value.trim();if(ful==='delivery'&&!prof.address)up.address=ad;if(Object.keys(up).length)await sb.from('profiles').update(up).eq('id',user.id)}catch(e){}
  const os=r.data||[];
  let paidMsg='',payErr='';
@@ -283,5 +292,5 @@ d.live=true;
  d.live=true;d.loadError=String(e&&e.message||e||'unknown error');d.products=[];d.vendors=[]}
 return d}
 const loadErr=d=>{const m=document.querySelector('main');if(!m)return;const bx=document.createElement('div');bx.className='notice err loaderr';bx.setAttribute('role','alert');bx.innerHTML='<strong>Could not load products right now.</strong> The marketplace could not read the product list from the server ('+esc(d.loadError)+'). Please try again in a few minutes. Your cart is kept.';m.prepend(bx)};
-loadData().then(d=>{DATA=d;if(d.loadError)loadErr(d);pages[document.body.dataset.page]();document.querySelectorAll('.grid>.card,.cats>.cat').forEach(x=>x.classList.add('rv'));window.CC_REVEAL&&window.CC_REVEAL()}).catch(e=>{console.error(e);document.querySelector('main').innerHTML='<p>Could not load data.</p>'});
+loadData().then(async d=>{DATA=d;if(d.loadError)loadErr(d);else{if(C()){try{await C().sync(await window.CC.client(),d.products||[])}catch(e){pruneCart(d.products||[])}}else pruneCart(d.products||[])}pages[document.body.dataset.page]();document.querySelectorAll('.grid>.card,.cats>.cat').forEach(x=>x.classList.add('rv'));window.CC_REVEAL&&window.CC_REVEAL()}).catch(e=>{console.error(e);document.querySelector('main').innerHTML='<p>Could not load data.</p>'});
 })();

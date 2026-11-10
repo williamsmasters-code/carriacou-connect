@@ -1,4 +1,5 @@
 // v1.19 Ratings and reviews (window.CC.reviews). Needs supabase/reviews.sql. Text and stars only: no photos, no uploads.
+// v1.21 also: one shop / buying-experience review per completed order (supabase/order_reviews.sql).
 // Every comment and reply is plain text and is escaped here before display (white-space: pre-line keeps line breaks).
 (function(){
 const CC=window.CC;if(!CC)return;
@@ -72,8 +73,39 @@ async function productMount(el,o){
 }
 
 // ---------- shop page: service rating ----------
-async function shopMount(el,sb,vendorId){try{const r=await sb.rpc('shop_service_rating',{p_vendor:vendorId});if(r.error||!r.data||!r.data.review_count){el.innerHTML='';return}const d=r.data;
- el.innerHTML='<p class="rv-shop">'+(d.service_count?'<span>Shop service '+stars(d.service_avg)+' <b>'+avg(d.service_avg)+'</b> <span class="muted">('+d.service_count+')</span></span>':'')+'<span>Products '+stars(d.product_avg)+' <b>'+avg(d.product_avg)+'</b> <span class="muted">('+d.review_count+' review'+(d.review_count===1?'':'s')+')</span></span></p>'}catch(e){el.innerHTML=''}}
+async function shopMount(el,sb,vendorId){try{const r=await sb.rpc('shop_service_rating',{p_vendor:vendorId});if(r.error||!r.data||!(r.data.review_count||r.data.order_count||r.data.service_count)){el.innerHTML='';return}const d=r.data;
+ el.innerHTML='<p class="rv-shop">'+(d.service_count?'<span>Shop service '+stars(d.service_avg)+' <b>'+avg(d.service_avg)+'</b> <span class="muted">('+d.service_count+')</span></span>':'')+(d.review_count?'<span>Products '+stars(d.product_avg)+' <b>'+avg(d.product_avg)+'</b> <span class="muted">('+d.review_count+' review'+(d.review_count===1?'':'s')+')</span></span>':'')+(d.order_count?'<span>Orders '+stars(d.order_avg)+' <b>'+avg(d.order_avg)+'</b> <span class="muted">('+d.order_count+')</span></span>':'')+'</p>'}catch(e){el.innerHTML=''}}
+
+
+// ---------- customer order receipt / history: one review per completed order ----------
+async function orderMount(el,o){
+ if(!el||!o||!o.order)return;
+ const {sb,order}=o;
+ const draw=async(msg)=>{
+  const r=await sb.rpc('order_review_get',{p_order:order.id});
+  if(r.error){el.innerHTML=/schema cache|does not exist/i.test((r.error&&r.error.message)||'')?'':'<div class="notice err">'+esc(nice(r.error))+'</div>';return}
+  const d=r.data||{},rv=d.review;
+  if(!d.eligible&&!rv){el.innerHTML='';return}
+  const replyH=rv&&rv.reply?'<div class="rv-reply"><b>Reply from the shop</b><p>'+esc(rv.reply.body)+'</p></div>':'';
+  if(rv&&!rv.can_edit){
+   el.innerHTML='<section class="orv" id="review"><h3>Your review</h3>'+(msg?'<p class="notice ok">'+esc(msg)+'</p>':'')+'<p class="orev-done">Reviewed '+stars(rv.rating)+' <b>★'+rv.rating+'</b></p>'+(rv.comment?'<p class="rv-c">'+esc(rv.comment)+'</p>':'')+replyH+'</section>';
+   return}
+  el.innerHTML='<section class="orv" id="review">'+(msg?'<p class="notice ok">'+esc(msg)+'</p>':'')+'<form class="rv-form formcard" id="orv-f" novalidate><h3>'+(rv?'Edit your review':'Leave a review')+'</h3>'+
+   (rv?'<p class="orev-done">Reviewed ★'+rv.rating+'</p>':'')+replyH+
+   '<p class="muted small">This review is for order '+esc(d.order_number||order.order_number||'')+(d.vendor_name?' from '+esc(d.vendor_name):'')+' — the shop and your buying experience. One review per order. You can still review individual products on the product page.</p>'+
+   starInput('orv-r','Your rating',rv&&rv.rating,true)+
+   '<label>Comment <small>(optional)</small><textarea id="orv-c" maxlength="1000" rows="4" placeholder="How was the shop, the pickup or the service? Text only.">'+esc(rv&&rv.comment||'')+'</textarea></label>'+
+   '<p class="muted small">Text and stars only: photos and image links are not allowed. Please follow the <a href="vendor-terms.html#reviews" target="_blank" rel="noopener">review guidelines</a>.'+(rv?' You can edit this review until '+esc(fd(new Date(new Date(rv.created_at).getTime()+30*864e5)))+'.':' You can edit it for 30 days.')+'</p>'+
+   '<button class="btn" type="submit">'+(rv?'Save changes':'Post review')+'</button><p id="orv-m" role="status"></p></form></section>';
+  const f=el.querySelector('#orv-f');
+  f.onsubmit=async e=>{e.preventDefault();const rt=f.querySelector('[name=orv-r]:checked'),c=el.querySelector('#orv-c'),m=el.querySelector('#orv-m');
+   const say=x=>{m.className='notice err';m.textContent=x};if(!rt){say('Choose a rating (1 to 5 stars).');return}
+   const bad=noImg(c.value);if(bad){say(bad);return}
+   const x=await sb.rpc('order_review_submit',{p_order:order.id,p_rating:+rt.value,p_comment:c.value.trim()||null});
+   if(x.error){say(nice(x.error));return}
+   await draw(rv?'Your review was updated.':'Thank you! Your review is posted.')}};
+ await draw();
+}
 
 // ---------- vendor dashboard tab ----------
 async function vendorMount(el,o){
@@ -81,9 +113,15 @@ async function vendorMount(el,o){
  el.innerHTML='<p class="muted">Loading reviews…</p>';
  const r=await sb.rpc('vendor_reviews',{p_vendor:vendor.id});if(r.error){el.innerHTML='<div class="notice err">'+esc(nice(r.error))+'</div>';return}
  const d=r.data,s=d.summary,mx=Math.max(1,...d.trend.map(t=>t.count));
+ let OD=null;try{const or=await sb.rpc('vendor_order_reviews',{p_vendor:vendor.id});if(!or.error)OD=or.data}catch(e){}
+ const os=OD&&OD.summary,olist=OD&&OD.reviews||[];
  const replyF=x=>canReply?'<details class="rv-rd"'+(x.reply?'':' open')+'><summary>'+(x.reply?'Edit your public reply':'Reply publicly')+'</summary><form data-rf="'+esc(x.id)+'" novalidate><label class="sr" for="rf-'+esc(x.id)+'">Reply</label><textarea id="rf-'+esc(x.id)+'" maxlength="1000" rows="3" placeholder="Thank the customer or explain what you will do. Text only.">'+esc(x.reply?x.reply.body:'')+'</textarea><button class="btn" type="submit">'+(x.reply?'Save reply':'Post reply')+'</button><p role="status" class="rfm"></p></form></details>':'';
+ const replyOF=x=>canReply?'<details class="rv-rd"'+(x.reply?'':' open')+'><summary>'+(x.reply?'Edit your public reply':'Reply publicly')+'</summary><form data-orf="'+esc(x.id)+'" novalidate><label class="sr" for="orf-'+esc(x.id)+'">Reply</label><textarea id="orf-'+esc(x.id)+'" maxlength="1000" rows="3" placeholder="Thank the customer or explain what you will do. Text only.">'+esc(x.reply?x.reply.body:'')+'</textarea><button class="btn" type="submit">'+(x.reply?'Save reply':'Post reply')+'</button><p role="status" class="rfm"></p></form></details>':'';
  const draw=()=>{const L=d.reviews.filter(x=>flt==='all'||(flt==='low'&&x.rating<=2)||(flt==='noreply'&&!x.reply));
-  el.innerHTML='<section class="rvv"><div class="rvv-head"><h3>Reviews</h3><div class="sgc-sum"><div><b>'+avg(s.avg)+' ★</b><span>product rating</span></div><div><b>'+avg(s.service_avg)+' ★</b><span>shop service ('+s.service_count+')</span></div><div><b>'+s.count+'</b><span>reviews</span></div><div><b>'+s.unreplied+'</b><span>without a reply</span></div></div></div>'+
+  const orvSec=OD?'<section class="rvv orv-sec" id="orv-sec"><div class="rvv-head"><h3>Order reviews</h3><div class="sgc-sum"><div><b>'+avg(os.avg)+' ★</b><span>shop experience</span></div><div><b>'+(os.count||0)+'</b><span>order review'+(os.count===1?'':'s')+'</span></div><div><b>'+(os.unreplied||0)+'</b><span>without a reply</span></div></div></div>'+
+   '<p class="muted small">One review per completed order, about the shop and the buying experience. You can reply once publicly (and edit your reply). Product reviews are listed below.</p>'+
+   (olist.length?olist.map(x=>reviewHtml({...x,mine:false},{actions:false,reply:replyOF}).replace('<header class="rv-h">','<header class="rv-h"><span class="rv-pn">Order '+esc(x.order_number||'')+'</span> ')).join(''):'<p class="muted">No order reviews yet.</p>')+'</section>':'';
+  el.innerHTML=orvSec+'<section class="rvv"><div class="rvv-head"><h3>Product reviews</h3><div class="sgc-sum"><div><b>'+avg(s.avg)+' ★</b><span>product rating</span></div><div><b>'+avg(s.service_avg)+' ★</b><span>shop service ('+s.service_count+')</span></div><div><b>'+s.count+'</b><span>reviews</span></div><div><b>'+s.unreplied+'</b><span>without a reply</span></div></div></div>'+
   '<p class="muted small">Reviews come only from customers with a completed order. You can reply once publicly to each review (and edit your reply). You cannot delete reviews; if one breaks the guidelines, report it to Carriacou Connect.</p>'+
   (d.alerts.length?'<div class="notice err rvv-alert" role="alert"><b>⚠ '+d.alerts.length+' low rating'+(d.alerts.length===1?'':'s')+' in the last 30 days without a reply</b><ul>'+d.alerts.map(a=>'<li>'+stars(a.rating)+' '+esc(a.product_name)+' · '+esc(fd(a.created_at))+'</li>').join('')+'</ul></div>':'')+
   '<div class="rvv-grid"><aside><div class="formcard"><h4>Star breakdown</h4>'+breakdown(s)+'</div><div class="formcard"><h4>Last 6 months</h4><div class="rv-trend">'+d.trend.map(t=>'<div class="rv-tm"><span class="rv-tb" style="height:'+Math.round(t.count*100/mx)+'%" title="'+t.count+' reviews"></span><b>'+(t.avg==null?'–':avg(t.avg))+'</b><small>'+esc(t.month.slice(5))+'/'+esc(t.month.slice(2,4))+'</small></div>').join('')+'</div><p class="muted small">Bar = number of reviews; number = average stars.</p></div></aside>'+
@@ -94,6 +132,11 @@ async function vendorMount(el,o){
    if(!t){m.textContent='Write a reply first.';return}const bad=noImg(t);if(bad){m.textContent=bad;return}
    const x=await sb.rpc('vendor_review_reply',{p_review:f.dataset.rf,p_body:t});if(x.error){m.textContent=nice(x.error);return}
    const rv=d.reviews.find(z=>z.id===f.dataset.rf);rv.reply={body:x.data.body,at:new Date().toISOString()};d.alerts=d.alerts.filter(a=>a.id!==rv.id);s.unreplied=d.reviews.filter(z=>!z.reply).length;draw();
+   const n=el.querySelector('[data-id="'+CSS.escape(rv.id)+'"]');if(n)n.insertAdjacentHTML('beforeend','<p class="notice ok">Reply posted.</p>')});
+  el.querySelectorAll('[data-orf]').forEach(f=>f.onsubmit=async e=>{e.preventDefault();const t=f.querySelector('textarea').value.trim(),m=f.querySelector('.rfm');m.className='rfm err-text';
+   if(!t){m.textContent='Write a reply first.';return}const bad=noImg(t);if(bad){m.textContent=bad;return}
+   const x=await sb.rpc('vendor_order_review_reply',{p_review:f.dataset.orf,p_body:t});if(x.error){m.textContent=nice(x.error);return}
+   const rv=olist.find(z=>z.id===f.dataset.orf);rv.reply={body:x.data.body,at:new Date().toISOString()};os.unreplied=olist.filter(z=>!z.reply).length;draw();
    const n=el.querySelector('[data-id="'+CSS.escape(rv.id)+'"]');if(n)n.insertAdjacentHTML('beforeend','<p class="notice ok">Reply posted.</p>')})};
  draw();
 }
@@ -142,5 +185,5 @@ async function adminMount(el,sb){let view='reviews',rf='reported',lf='open';
 // ---------- featured ranking (see formula in reviews.sql) ----------
 async function featuredSort(sb,products){try{const r=await sb.rpc('public_product_scores',{p_ids:products.map(p=>p.id)});if(r.error||!Array.isArray(r.data))return products;
  const rank=new Map(r.data.map((x,i)=>[x.id,i]));return products.slice().sort((a,b)=>(rank.has(a.id)?rank.get(a.id):1e9)-(rank.has(b.id)?rank.get(b.id):1e9))}catch(e){return products}}
-CC.reviews={productMount,shopMount,vendorMount,noticesMount,adminMount,featuredSort,stars,noImg};
+CC.reviews={productMount,shopMount,orderMount,vendorMount,noticesMount,adminMount,featuredSort,stars,noImg};
 })();

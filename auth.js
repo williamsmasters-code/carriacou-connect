@@ -14,7 +14,24 @@ async function ctx(){ // {sb,user,profile}
  return {sb,user,profile};
 }
 const NX=()=>window.CC.safeNext();
-const home=p=>p&&p.role==='vendor'?'dashboard-vendor.html':'dashboard-consumer.html';
+// v1.21 default landing after login (only used when there is no safe ?next= target):
+//   platform admin (takes priority if the person also has a vendor or customer role) -> Admin Panel
+//   vendor account, or vendor staff with shop access -> Vendor Dashboard / Studio
+//   ordinary customer -> Marketplace (browse.html)
+async function defaultLanding(p,sb){
+  const role=p&&p.role;
+  if(role==='admin')return 'admin.html';
+  if(role==='vendor')return 'dashboard-vendor.html';
+  if(sb){try{const r=await sb.rpc('my_vendor_access');if(!r.error&&Array.isArray(r.data)&&r.data.length)return 'dashboard-vendor.html'}catch(e){}}
+  return 'browse.html';
+}
+async function goLand(p,sb){if(sb&&window.CC.cart){try{await window.CC.cart.onLogin(sb)}catch(e){}}location.href=NX()||await defaultLanding(p,sb)}
+async function profileAfterLogin(c){
+  let out=c;
+  if(!out.profile){for(let i=0;i<4&&!out.profile;i++){await new Promise(r=>setTimeout(r,200));out=await ctx()}}
+  if(!out.profile&&out.user&&out.user.user_metadata&&out.user.user_metadata.role)out={...out,profile:{role:out.user.user_metadata.role}};
+  return out;
+}
 async function createVendor(sb,user,v){
  return sb.from('vendors').insert({owner_id:user.id,name:v.name,description:v.description||'',location:v.location||''}).select().single();
 }
@@ -24,20 +41,20 @@ const pages={
 async signup(){
  if(!configured)return offline();
  const c=await ctx();if(!c)return offline();
- if(c.user){location.href=NX()||home(c.profile);return}
+ if(c.user){await goLand(c.profile,c.sb);return}
  const f=$('#f'),msg=$('#msg'),vf=$('#vfields');vf.innerHTML=vendorFields;
  const sync=()=>{const v=f.role.value==='vendor';vf.hidden=!v};f.addEventListener('change',sync);sync();
  f.onsubmit=async e=>{e.preventDefault();say(msg,'');const btn=f.querySelector('button');btn.disabled=true;
   const role=f.role.value;
   const {data,error}=await c.sb.auth.signUp({email:f.email.value.trim(),password:f.password.value,options:{data:{role,full_name:f.fullname.value.trim()},emailRedirectTo:location.origin+location.pathname.replace(/[^/]*$/,'')+'login.html'+(role==='vendor'&&!NX()?'?next=apply.html':NX()?'?next='+encodeURIComponent(NX()):'')}});
   if(error){say(msg,error.message);btn.disabled=false;return}
-  if(data.session){location.href=NX()||(role==='vendor'?'apply.html':home({role}))}
+  if(data.session){if(window.CC.cart){try{await window.CC.cart.onLogin(c.sb)}catch(e){}}location.href=NX()||(role==='vendor'?'apply.html':await defaultLanding({role},c.sb))}
   else{f.hidden=true;say(msg,'Almost done! Check your email and click the confirmation link, then sign in. '+(role==='vendor'?'After you sign in you will fill in the Sell application.':''),true);msg.insertAdjacentHTML('beforeend',' <a href="login.html'+(NX()?'?next='+encodeURIComponent(NX()):role==='vendor'?'?next=apply.html':'')+'">Go to login</a>')}}
 },
 async login(){
  if(!configured)return offline();
  const c=await ctx();if(!c)return offline();
- if(c.user){location.href=NX()||home(c.profile);return}
+ if(c.user){await goLand(c.profile,c.sb);return}
  const f=$('#f'),msg=$('#msg');
  if(NX()){const sl=document.querySelector('a[href="signup.html"]');if(sl)sl.href='signup.html?next='+encodeURIComponent(NX())}
  f.onsubmit=async e=>{e.preventDefault();say(msg,'');const btn=f.querySelector('button');btn.disabled=true;
@@ -45,7 +62,7 @@ async login(){
   if(error){say(msg,error.message);btn.disabled=false;return}
   const st=await window.CC.acctStatus(c.sb);
   if(st.suspended){say(msg,st.message+' You are signed in, so you can still browse and manage your profile.');const go=document.createElement('a');go.className='btn alt';go.id='suspgo';go.textContent='Continue';go.href=NX()||'browse.html';msg.insertAdjacentElement('afterend',go);return}
-  const c2=await ctx();location.href=NX()||home(c2.profile)};
+  const c2=await profileAfterLogin(await ctx());await goLand(c2.profile,c2.sb)};
  $('#forgot').onclick=async e=>{e.preventDefault();const em=f.email.value.trim();if(!em){say(msg,'Type your email above first.');return}
   const {error}=await c.sb.auth.resetPasswordForEmail(em,{redirectTo:location.origin+location.pathname.replace(/[^/]*$/,'')+'account.html'});
   say(msg,error?error.message:'Password reset email sent (if that address has an account).',!error)};
@@ -55,13 +72,15 @@ async account(){
  const c=await ctx();if(!c)return offline();
  if(!c.user){location.href='login.html';return}
  const p=c.profile||{role:'consumer'};
- $('#acct').innerHTML=`<p><strong>Email:</strong> ${esc(c.user.email)}<br><strong>Account type:</strong> ${esc(p.role)}<br><a href="${home(p)}">Go to my dashboard</a></p>
+ const land=await defaultLanding(p,c.sb);
+ const landLabel=p.role==='admin'?'Go to the admin panel':p.role==='vendor'||land==='dashboard-vendor.html'?'Go to my vendor dashboard':land==='browse.html'?'Go to the marketplace':'Go to my dashboard';
+ $('#acct').innerHTML=`<p><strong>Email:</strong> ${esc(c.user.email)}<br><strong>Account type:</strong> ${esc(p.role)}<br><a href="${land}">${landLabel}</a></p>
  <h2>Profile</h2><form id="pf"><label>Full name<input id="fn" value="${esc(p.full_name||'')}" maxlength="80"></label><label>Phone<input id="ph" value="${esc(p.phone||'')}" maxlength="30"></label><label>Delivery address<textarea id="ad" rows="2" maxlength="300">${esc(p.address||'')}</textarea></label><button class="btn">Save profile</button></form><div id="m1" class="notice" hidden></div>
  <h2>Change password</h2><form id="pw"><label>New password (min 8 characters)<input id="np" type="password" minlength="8" autocomplete="new-password" required></label><button class="btn alt">Update password</button></form><div id="m2" class="notice" hidden></div>
  <p><button class="btn alt" id="lo">Log out</button></p>`;
  $('#pf').onsubmit=async e=>{e.preventDefault();const {error}=await c.sb.from('profiles').update({full_name:$('#fn').value.trim()||null,phone:$('#ph').value.trim()||null,address:$('#ad').value.trim()||null}).eq('id',c.user.id);say($('#m1'),error?error.message:'Saved.',!error)};
  $('#pw').onsubmit=async e=>{e.preventDefault();const {error}=await c.sb.auth.updateUser({password:$('#np').value});say($('#m2'),error?error.message:'Password updated.',!error);if(!error)$('#np').value=''};
- $('#lo').onclick=async()=>{await c.sb.auth.signOut();location.href='index.html'};
+ $('#lo').onclick=async()=>{try{if(window.CC.cart)await window.CC.cart.onLogout(c.sb)}catch(e){}await c.sb.auth.signOut();location.href='index.html'};
 },
 async consumer(){
  const FL=await window.CC.flags();
@@ -86,9 +105,12 @@ async consumer(){
   <div id="offpay"></div>
   ${FL.wallet_mode!=='off'&&o.payment_status==='unpaid'&&!(Number(o.amount_paid_xcd)>0)&&!(window.CC.offpay&&o.offline_status!=null)&&!['cancelled','completed'].includes(o.status)?`<div class="paybox">${window.CC.TESTBANNER}<p>Pay <b>${window.CC.cents(Math.round(o.total_xcd*100))}</b> now from your test wallet (play money), or pay the vendor on ${o.fulfilment==='delivery'?'delivery':'pickup'}.</p><button class="btn alt" id="opay">Pay with wallet (test)</button> <a class="btn ghost" href="wallet.html">Open wallet</a><div id="opm" class="notice" hidden role="alert"></div></div>`:o.payment_status==='paid'?`<div class="paybox ok">${window.CC.TESTBANNER}<p><b>Paid</b> ${window.CC.cents(Math.round(o.total_xcd*100))} from your test wallet${o.paid_at?' on '+esc(fdate(o.paid_at)):''}. Play money, no real funds.</p></div>`:o.payment_status==='refunded'?`<div class="paybox">${window.CC.TESTBANNER}<p><b>Refunded</b> to your test wallet. Play money, no real funds.</p></div>`:''}
   <h3>Notes with ${esc(o.vendors&&o.vendors.name||'the vendor')}</h3><div class="notes-box" id="nbox"></div>
+  <div id="orev"></div>
   ${o.status==='placed'?'<p><button class="btn alt" id="ocancel">Cancel this order</button><br><small class="muted">You can cancel until the vendor confirms it.</small></p>':''}<div id="om" class="notice" hidden></div></div>`;
   window.CC.notesWidget($('#nbox'),o,'consumer',{sb,user});
   if(window.CC.offpay)window.CC.offpay.customerBox($('#offpay'),o,{sb,onPaid:()=>detail(o.id)});
+  // v1.21: one review per completed order (shop / buying experience)
+  if(window.CC.reviews&&window.CC.reviews.orderMount){await window.CC.reviews.orderMount($('#orev'),{sb,order:o});if(location.hash==='#review'){const el=$('#orev');if(el)el.scrollIntoView({block:'start'})}}
   // v1.20 card payment receipt line (brand, last 4, status; TEST MODE flagged)
   if(window.CC.payments&&o.payment_method==='pay_card_online'){const box=$('#offpay');if(box){const L=await window.CC.payments.info(sb,o.id);const h=window.CC.payments.html(L);
    box.insertAdjacentHTML('beforebegin','<div class="cardpay cust">'+(h||'<div class="cardpay-sum"><b>Awaiting card payment.</b> '+(L.length?'Your card was declined. ':'')+'You can also pay the shop on pickup.</div>')+'</div>')}}
@@ -124,7 +146,10 @@ async consumer(){
  let ns=await window.CC.noteSummary(sb);
  const act=rows.filter(o=>!['completed','cancelled'].includes(o.status)).length;
  const actOf=l=>l.filter(o=>!['completed','cancelled'].includes(o.status)).length;
- const card=o=>`<a class="ocard" data-oid="${esc(o.id)}" href="dashboard-consumer.html?order=${esc(o.id)}"><div><b>${esc(o.order_number)}</b> ${stPill(o.status)} ${window.CC.payPill(o)}<span class="pbx" data-pb="${esc(o.id)}"></span><span class="nbx">${window.CC.newBadge(ns[o.id]&&ns[o.id].unread||0)}</span><div class="muted">${esc(o.vendors&&o.vendors.name||'')} · ${esc(fdate(o.created_at))} · ${fnice(o)}</div><div class="muted">${esc((o.order_items||[]).map(i=>i.quantity+' × '+i.product_name).join(', '))}</div></div><div class="price">${xcd(o.total_xcd)}</div></a>`;
+ let revs={};const loadRevs=async ids=>{revs={};if(!ids.length)return;try{const rr=await sb.rpc('order_reviews_for_orders',{p_ids:ids});if(!rr.error&&Array.isArray(rr.data))rr.data.forEach(x=>revs[x.order_id]=x)}catch(e){}};
+ await loadRevs(rows.map(o=>o.id));
+ const revAct=o=>{if(o.status!=='completed')return '';const x=revs[o.id],rv=x&&x.review;if(rv)return `<div class="orev-act"><span class="orev-done">Reviewed ★${rv.rating}</span>${rv.can_edit?` <a class="btn ghost sm" href="dashboard-consumer.html?order=${esc(o.id)}#review">Edit review</a>`:''}</div>`;return `<div class="orev-act"><a class="btn sm" href="dashboard-consumer.html?order=${esc(o.id)}#review">Leave a review</a></div>`};
+ const card=o=>`<article class="owrap"><a class="ocard" data-oid="${esc(o.id)}" href="dashboard-consumer.html?order=${esc(o.id)}"><div><b>${esc(o.order_number)}</b> ${stPill(o.status)} ${window.CC.payPill(o)}<span class="pbx" data-pb="${esc(o.id)}"></span><span class="nbx">${window.CC.newBadge(ns[o.id]&&ns[o.id].unread||0)}</span><div class="muted">${esc(o.vendors&&o.vendors.name||'')} · ${esc(fdate(o.created_at))} · ${fnice(o)}</div><div class="muted">${esc((o.order_items||[]).map(i=>i.quantity+' × '+i.product_name).join(', '))}</div></div><div class="price">${xcd(o.total_xcd)}</div></a>${revAct(o)}</article>`;
  D.innerHTML=`<div class="dtabs" role="tablist"><button class="on" data-t="orders" role="tab">Orders${act?` <b class="nbadge">${act}</b>`:''}</button><button data-t="profile" role="tab">Profile</button></div>
  <section id="t-orders"><h2>Order history</h2>${r.error?'<div class="notice err">Could not load orders: '+esc(r.error.message)+'. Has orders.sql been run in Supabase?</div>':rows.length?`<div class="olist">${rows.map(card).join('')}</div>`:'<div class="empty"><div class="empty-ic" aria-hidden="true">🧺</div><h3>No orders yet</h3><p>When you place an order it shows up here, with live progress.</p><a class="btn" href="browse.html">Browse products</a></div>'}</section>
  <section id="t-profile" hidden><h2>My profile</h2><p class="muted">${esc(user.email)} · <a href="account.html">Change password</a></p>
@@ -140,6 +165,7 @@ async consumer(){
   if(/^pay_request/.test(n.kind||'')&&window.CC.offpay){window.CC.offpay.listBadges(T,rows,{sb});const c0=T.querySelector('.ocard[data-oid="'+(window.CSS&&CSS.escape?CSS.escape(n.ref_id):n.ref_id)+'"]');if(c0)c0.classList.add('flash')}
   const r2=await sb.from('orders').select(window.CC._lsel||LSEL0).eq('consumer_id',user.id).order('created_at',{ascending:false});
   if(r2.error||lsig(r2.data||[])===lastSig)return;lastSig=lsig(r2.data||[]);rows=r2.data||[];
+  await loadRevs(rows.map(o=>o.id));
   const box=T.querySelector('.olist');if(box){box.innerHTML=rows.map(card).join('');if(window.CC.offpay)window.CC.offpay.listBadges(T,rows,{sb})}
   const tb=document.querySelector('.dtabs button[data-t=orders]');if(tb){const a=actOf(rows);tb.innerHTML='Orders'+(a?` <b class="nbadge">${a}</b>`:'')}
   const c=n.ref_id&&T.querySelector('.ocard[data-oid="'+(window.CSS&&CSS.escape?CSS.escape(n.ref_id):n.ref_id)+'"]');if(c)c.classList.add('flash')});

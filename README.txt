@@ -1,4 +1,4 @@
-CARRIACOU CONNECT MARKETPLACE v1.20 (static preview + optional Supabase accounts + TEST-MODE wallets + vendor analytics + plans + team accounts + multi-photo products + bulk upload + Standard analytics + platform analytics + advanced/premium analytics + admin customer management + tax and delivery fees + real vendor onboarding + live updates)
+CARRIACOU CONNECT MARKETPLACE v1.21 (static preview + optional Supabase accounts + TEST-MODE wallets + vendor analytics + plans + team accounts + multi-photo products + bulk upload + Standard analytics + platform analytics + advanced/premium analytics + admin customer management + tax and delivery fees + real vendor onboarding + live updates)
 ===================================================
 ALL VENDORS AND PRODUCTS ARE SAMPLE DATA. NO REAL PAYMENTS.
 
@@ -836,3 +836,60 @@ v1.20 (10 Nov 2026) - financial structure + products grant fix
     vendor analytics "Card (online)" method + Card payments block (captured, refunded, net, awaiting, declined).
 - Tests (outside the repo): test/pgfinancial.mjs (81 checks), test/pgpaymock.mjs (53 checks), test/fin2_flow.js + mock_fin2.js,
   test/paymock_flow.js + mock_paymock.js (browser customer/vendor/admin card journeys, 390 and 1366).
+
+v1.21 (10 Nov 2026) - login landing by role, one review per completed order, account cart
+- Default landing after sign-in (email login, already signed in on the login page, and after
+  signup-confirm / session restore). A safe ?next= target (CC.safeNext) still wins when present.
+    * platform admin -> Admin Panel (admin.html). Admin takes priority if the person also has a
+      vendor or customer role.
+    * vendor account, and vendor staff with shop access (my_vendor_access) -> Vendor Dashboard
+      / Studio (dashboard-vendor.html).
+    * ordinary customer -> Marketplace (browse.html).
+  New vendor sign-up still goes to apply.html until the Sell application is filled in.
+- One shop / buying-experience review per completed order. Run supabase/order_reviews.sql AFTER
+  reviews.sql (and after payments_mock.sql on a v1.20 database). Idempotent. Not yet run anywhere.
+    * Only the customer who owns the order can review, and only when status is 'completed'
+      (pickup marked collected, or a paid card order marked completed). Exactly one review per
+      order (unique on order_id). Editable for 30 days. Text and stars only; photos and image
+      links are rejected by the same server rule as product reviews (_rv_noimg).
+    * Vendor owner or sub-admin can post one public reply (and edit it). Vendors cannot delete
+      reviews. Rate limits are shared with product reviews (10 new/hour, 30 edits/day).
+    * Product reviews stay as they are: one per order item, on the product page. An order review
+      does not create product reviews, and product reviews do not count as the order review.
+      shop_service_rating now includes order-review stars in service_avg / service_count;
+      product_avg and review_count still come only from product reviews. New fields: order_avg,
+      order_count.
+    * Customer order history and the order receipt show "Leave a review" for completed unreviewed
+      orders, and "Reviewed ★n" (with Edit for 30 days) after. Vendor Reviews tab has an
+      "Order reviews" section above product reviews.
+    * RPCs (SECURITY DEFINER, RLS on the new tables, no direct writes): order_review_get,
+      order_reviews_for_orders, order_review_submit, vendor_order_reviews, vendor_order_review_reply.
+- Cart badge fix: the header count was including stale or unloadable lines (deleted or inactive
+  products, leftover sample ids, keys like "undefined"/"null", invalid quantities) that the cart
+  page skipped, so the badge could read 1 when the cart said empty. After a successful product
+  load (cart, checkout, home, browse, product, shop), those lines are removed and the badge is
+  refreshed. The badge itself also ignores junk keys and non-positive quantities. A product-list
+  load error does not wipe the cart.
+- Account cart: the signed-in cart follows the account across devices. Run
+  supabase/account_cart.sql AFTER order_reviews.sql. Idempotent. Not yet run anywhere.
+    * Table account_carts (user_id, product_id, qty 1-99, updated_at). RLS: a user can SELECT
+      only their own rows. No direct inserts, updates or deletes. Clients use SECURITY DEFINER
+      RPCs: cart_get(), cart_set(product_id, qty) (qty 0 removes the line), cart_replace(jsonb),
+      cart_merge(jsonb) (sums with the existing cart; used on sign-in), cart_remove(ids) (after
+      a successful order). Qty is clamped to 99 and to stock_qty when that column is present
+      and not null. Missing or inactive products are ignored, and cart_get prunes them.
+    * When signed in, the server cart is the source of truth. localStorage cconnect_cart_v1 is
+      the guest cart and a cache. On sign-in, the guest cart is merged into the account (quantities
+      are summed, then clamped) and the guest copy is replaced with the server result. On logout,
+      the local cache is always cleared so the next person on the device does not see it; the
+      guest cart then starts empty. The header badge, cart page, checkout and add-to-cart all
+      go through CC.cart. After a successful order, the purchased product ids are removed from
+      the server cart (other lines stay). Stale-product pruning also writes through to the server
+      cart when signed in. Writes are debounced (400ms). If a write is offline or the RPC fails,
+      the local cart is kept and retried on the next load (as a replace or set, not a second
+      merge, so quantities are not doubled).
+- Version label v1.21 in the banner, footer and service worker.
+- Tests (outside the repo): test/pgorderreview.mjs, test/pgaccountcart.mjs, test/orderreview_flow.js,
+  test/cart_prune_flow.js, test/cart_account_flow.js, plus test/cart_flow.js regression.
+  mock_reviews.js has the order-review RPCs; mock.js has the cart RPCs and sign-in looks up the
+  profile by email.

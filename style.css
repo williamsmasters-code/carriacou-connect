@@ -858,3 +858,12 @@ header .logo small.slogan{white-space:nowrap}
 .af-card .af-acts{display:flex;flex-wrap:wrap;gap:.6rem;align-items:end}.an-card-pay{margin-top:.8rem;border-top:1px dashed #10252e26;padding-top:.6rem}
 .paytest{display:block}.paytest b{display:inline-block;white-space:nowrap;margin:0 .35rem .2rem 0}
 .confirm .formcard,.confirm .cardform,.confirm .cardok{text-align:left}
+
+/* v1.21 order reviews + history actions */
+.owrap{display:grid;gap:.35rem}
+.owrap .ocard{margin:0}
+.orev-act{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem;padding:0 .2rem .15rem}
+.orev-done{font-weight:700;color:var(--sea,#0e7490)}
+.orv{margin:1.2rem 0}
+.orv-sec{margin-bottom:1.4rem;padding-bottom:1rem;border-bottom:1px dashed #10252e26}
+@media(max-width:520px){.orev-act .btn{min-height:44px}}
