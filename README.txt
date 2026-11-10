@@ -1,4 +1,4 @@
-CARRIACOU CONNECT MARKETPLACE v1.21 (static preview + optional Supabase accounts + TEST-MODE wallets + vendor analytics + plans + team accounts + multi-photo products + bulk upload + Standard analytics + platform analytics + advanced/premium analytics + admin customer management + tax and delivery fees + real vendor onboarding + live updates)
+CARRIACOU CONNECT MARKETPLACE v1.21.1 (static preview + optional Supabase accounts + TEST-MODE wallets + vendor analytics + plans + team accounts + multi-photo products + bulk upload + Standard analytics + platform analytics + advanced/premium analytics + admin customer management + tax and delivery fees + real vendor onboarding + live updates)
 ===================================================
 ALL VENDORS AND PRODUCTS ARE SAMPLE DATA. NO REAL PAYMENTS.
 
@@ -850,7 +850,7 @@ v1.21 (10 Nov 2026) - login landing by role, one review per completed order, acc
   reviews.sql (and after payments_mock.sql on a v1.20 database). Idempotent. Not yet run anywhere.
     * Only the customer who owns the order can review, and only when status is 'completed'
       (pickup marked collected, or a paid card order marked completed). Exactly one review per
-      order (unique on order_id). Editable for 30 days. Text and stars only; photos and image
+      order (unique on order_id). Editable for 24 hours from the original posting. Text and stars only; photos and image
       links are rejected by the same server rule as product reviews (_rv_noimg).
     * Vendor owner or sub-admin can post one public reply (and edit it). Vendors cannot delete
       reviews. Rate limits are shared with product reviews (10 new/hour, 30 edits/day).
@@ -860,7 +860,7 @@ v1.21 (10 Nov 2026) - login landing by role, one review per completed order, acc
       product_avg and review_count still come only from product reviews. New fields: order_avg,
       order_count.
     * Customer order history and the order receipt show "Leave a review" for completed unreviewed
-      orders, and "Reviewed ★n" (with Edit for 30 days) after. Vendor Reviews tab has an
+      orders, and "Reviewed ★n" (with Edit for 24 hours from posting) after. Vendor Reviews tab has an
       "Order reviews" section above product reviews.
     * RPCs (SECURITY DEFINER, RLS on the new tables, no direct writes): order_review_get,
       order_reviews_for_orders, order_review_submit, vendor_order_reviews, vendor_order_review_reply.
@@ -888,8 +888,29 @@ v1.21 (10 Nov 2026) - login landing by role, one review per completed order, acc
       cart when signed in. Writes are debounced (400ms). If a write is offline or the RPC fails,
       the local cart is kept and retried on the next load (as a replace or set, not a second
       merge, so quantities are not doubled).
-- Version label v1.21 in the banner, footer and service worker.
+- Version label v1.21 in the banner, footer and service worker (superseded by v1.21.1 below).
 - Tests (outside the repo): test/pgorderreview.mjs, test/pgaccountcart.mjs, test/orderreview_flow.js,
   test/cart_prune_flow.js, test/cart_account_flow.js, plus test/cart_flow.js regression.
   mock_reviews.js has the order-review RPCs; mock.js has the cart RPCs and sign-in looks up the
   profile by email.
+
+v1.21.1 (10 Nov 2026) - card expiry auto-slash, card number grouping
+- On the mock card checkout form (and any other form that uses CC.payments.formHtml, including
+  the "try another card" retry form), the Expiry Date field auto-inserts a slash after the month
+  as you type (1228 becomes 12/28). Digits only, maxlength 5, inputmode=numeric, placeholder
+  MM/YY. A first digit of 2-9 is padded to 0X/. Backspace over the slash drops it and does not
+  immediately put it back. Paste of 1228, 12/28 or 12 / 2028 normalises to 12/28. Validation
+  still rejects month 00 and 13+ in the browser ("Enter the expiry as MM/YY."); a past expiry
+  is still declined by the gateway as expired. tokenize() / pay_gateway.js still receive a
+  valid MM/YY (spaces are stripped from the card number). The card number field groups digits
+  in 4s as you type or paste.
+- Version label v1.21.1 in the banner, footer and service worker (cache bumped).
+- Review edit window is 24 hours from the original created_at (not the last edit), for both order
+  reviews and product reviews. Run supabase/review_edit_window.sql AFTER order_reviews.sql
+  (idempotent, not run on live in this commit). order_reviews.sql and reviews.sql also use the
+  24-hour rule so a fresh database is correct before that file is applied. The RPCs reject a late
+  edit with "Reviews can only be edited within 24 hours of posting". The UI hides the Edit control
+  after 24 hours and shows "Editable until <time AST>" while the window is open. Vendor reply rules
+  are unchanged.
+- Tests (outside the repo): test/card_expiry_flow.js (390px), plus a re-run of test/paymock_flow.js;
+  test/pgorderreview.mjs and test/orderreview_flow.js (23h allowed / 25h rejected).

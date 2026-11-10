@@ -1,6 +1,6 @@
 -- v1.19 RATINGS AND REVIEWS. Run AFTER shop_gift_cards.sql. Idempotent; ends with notify pgrst.
 -- Verified buyers only: the reviewer must own a COMPLETED order (delivery orders end as 'completed' once delivered) containing the product.
--- One review per order item, editable by its author for 30 days. Product rating 1-5 (required), shop service rating 1-5 (optional),
+-- One review per order item, editable by its author for 24 hours from the original posting (created_at, not the last edit). Product rating 1-5 (required), shop service rating 1-5 (optional),
 -- comment (optional, plain text, max 1000 characters, control characters removed; the browser always escapes it).
 -- One public vendor reply per review (owner or sub-admin). Helpful votes: one per user, not on your own review.
 -- Anyone signed in can report. The platform admin hides or restores (moderation queue). Vendors cannot delete or hide reviews.
@@ -113,6 +113,16 @@ begin
 end $$;
 revoke all on function public._rv_noimg(text) from public, anon, authenticated;
 
+-- Edit window: 24 hours from the original created_at (not edited_at). Used by product and order reviews.
+create or replace function public._rv_edit_open(p_created timestamptz)
+returns boolean
+language sql stable
+as $$
+  select p_created is not null and p_created >= now() - interval '24 hours';
+$$;
+revoke all on function public._rv_edit_open(timestamptz) from public, anon, authenticated;
+
+
 create or replace function public._rv_json(r public.product_reviews, p_me uuid) returns jsonb
 language sql stable security definer set search_path = public, pg_temp as $$
   select jsonb_build_object('id', r.id, 'product_id', r.product_id, 'vendor_id', r.vendor_id, 'rating', r.rating, 'service_rating', r.service_rating,
@@ -120,7 +130,7 @@ language sql stable security definer set search_path = public, pg_temp as $$
     'author', coalesce(nullif(split_part(btrim(coalesce(pf.full_name,'')), ' ', 1), ''), 'Customer')
               || coalesce(' ' || nullif(left(split_part(btrim(coalesce(pf.full_name,'')), ' ', 2), 1), '') || '.', ''),
     'verified', true, 'mine', r.user_id = p_me,
-    'can_edit', r.user_id = p_me and r.created_at > now() - interval '30 days',
+    'can_edit', r.user_id = p_me and public._rv_edit_open(r.created_at),
     'voted', exists(select 1 from public.review_helpful h where h.review_id = r.id and h.user_id = p_me),
     'reply', (select jsonb_build_object('body', x.body, 'at', x.updated_at) from public.review_replies x where x.review_id = r.id))
   from (select 1) s left join public.profiles pf on pf.id = r.user_id;
@@ -152,7 +162,7 @@ begin
   if it.product_id is null then raise exception 'This product is no longer available to review'; end if;
   select * into r from public.product_reviews where order_item_id = p_order_item for update;
   if found then
-    if r.created_at < now() - interval '30 days' then raise exception 'Reviews can only be edited for 30 days'; end if;
+    if not public._rv_edit_open(r.created_at) then raise exception 'Reviews can only be edited within 24 hours of posting'; end if;
     if (select count(*) from public.product_reviews where user_id = u and edited_at > now() - interval '1 day') >= 30 then raise exception 'Too many edits today. Please try again tomorrow.'; end if;
     update public.product_reviews set rating = p_rating, service_rating = p_service_rating, comment = c, updated_at = now(), edited_at = now()
       where id = r.id returning * into r;

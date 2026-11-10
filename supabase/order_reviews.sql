@@ -1,7 +1,7 @@
 -- v1.21 ORDER REVIEWS. Run AFTER reviews.sql (and after payments_mock.sql on a v1.20 database). Idempotent; ends with notify pgrst.
 -- One review per completed order: the customer who owns the order may leave a single shop / buying-experience
 -- review (stars 1-5, optional text, no photos) once the order status is 'completed' (pickup marked collected
--- by the vendor, or a card order marked completed). Editable by the author for 30 days. One public vendor
+-- by the vendor, or a card order marked completed). Editable by the author for 24 hours from the original posting (created_at, not the last edit). One public vendor
 -- reply per order review (owner or sub-admin), editable. Vendors cannot delete or hide reviews.
 --
 -- RELATION TO PRODUCT REVIEWS (kept as they are):
@@ -63,7 +63,7 @@ language sql stable security definer set search_path = public, pg_temp as $$
     'author', coalesce(nullif(split_part(btrim(coalesce(pf.full_name,'')), ' ', 1), ''), 'Customer')
               || coalesce(' ' || nullif(left(split_part(btrim(coalesce(pf.full_name,'')), ' ', 2), 1), '') || '.', ''),
     'verified', true, 'mine', r.user_id = p_me,
-    'can_edit', r.user_id = p_me and r.created_at > now() - interval '30 days',
+    'can_edit', r.user_id = p_me and public._rv_edit_open(r.created_at),
     'reply', (select jsonb_build_object('body', x.body, 'at', x.updated_at) from public.order_review_replies x where x.review_id = r.id))
   from (select 1) s left join public.profiles pf on pf.id = r.user_id;
 $$;
@@ -119,7 +119,7 @@ begin
   select * into r from public.order_reviews where order_id = p_order for update;
   if found then
     if r.user_id <> u then raise exception 'Only the customer who placed this order can review it'; end if;
-    if r.created_at < now() - interval '30 days' then raise exception 'Reviews can only be edited for 30 days'; end if;
+    if not public._rv_edit_open(r.created_at) then raise exception 'Reviews can only be edited within 24 hours of posting'; end if;
     if (select count(*) from (
           select edited_at from public.product_reviews where user_id = u and edited_at > now() - interval '1 day'
           union all

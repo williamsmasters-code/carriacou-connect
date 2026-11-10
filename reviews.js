@@ -5,6 +5,9 @@
 const CC=window.CC;if(!CC)return;
 const esc=CC.esc;
 const fd=d=>{try{return new Date(d).toLocaleDateString('en-GB',{timeZone:'America/Grenada',day:'numeric',month:'short',year:'numeric'})}catch(e){return ''}};
+// Edit window is 24 hours from the original created_at (America/Grenada). Used in "Editable until <time AST>".
+const editUntil=d=>{try{const t=new Date(new Date(d).getTime()+24*3600*1000);const f=new Intl.DateTimeFormat('en-GB',{timeZone:'America/Grenada',day:'numeric',month:'short',year:'numeric',hour:'numeric',minute:'2-digit',hour12:true});const p=f.formatToParts(t),g=k=>(p.find(x=>x.type===k)||{}).value||'';const ap=(g('dayPeriod')||'').toUpperCase();return g('day')+' '+g('month')+' '+g('year')+', '+g('hour')+':'+g('minute')+' '+ap+' AST'}catch(e){return ''}};
+const editUntilLine=r=>r?' Editable until '+esc(editUntil(r.created_at))+'.':' You can edit it for 24 hours after posting.';
 const nice=e=>{const m=(e&&e.message)||String(e||'');if(/Could not find|schema cache|does not exist/i.test(m))return 'Reviews are not switched on yet (reviews.sql has not been run in Supabase).';return m};
 const starsTxt=n=>'★★★★★'.slice(0,Math.round(n||0))+'☆☆☆☆☆'.slice(0,5-Math.round(n||0));
 const stars=(n,label)=>'<span class="stars" role="img" aria-label="'+esc(label||((n?(+n).toFixed(1):'0')+' out of 5 stars'))+'"><span aria-hidden="true">'+starsTxt(n)+'</span></span>';
@@ -47,7 +50,7 @@ async function productMount(el,o){
   if(!user)W.innerHTML='<p class="muted">Only verified buyers can review. <a href="login.html?next='+encodeURIComponent(location.pathname.split('/').pop()+location.search)+'">Sign in</a> to review a product you bought.</p>';
   else if(!el2.length)W.innerHTML='<p class="muted">You can review this product after an order with it is completed or delivered.</p>';
   else{const it=el2.find(x=>!x.review)||el2.find(x=>x.review&&x.review.can_edit);
-   if(!it)W.innerHTML='<p class="muted">Thanks, you have reviewed this product. Reviews can be edited for 30 days.</p>';
+   if(!it)W.innerHTML='<p class="muted">Thanks, you have reviewed this product. The 24-hour edit window has ended.</p>';
    else writeForm(W,it)}
   const so=B.querySelector('#rv-sort');if(so)so.onchange=()=>{sort=so.value;load()};
   B.querySelectorAll('[data-help]').forEach(b=>b.onclick=async()=>{b.disabled=true;const x=await sb.rpc('review_helpful_toggle',{p_review:b.dataset.help});b.disabled=false;if(x.error){alert(nice(x.error));return}
@@ -60,7 +63,7 @@ async function productMount(el,o){
   W.innerHTML='<form class="rv-form formcard" id="rv-f" novalidate><h3>'+(r?'Edit your review':'Write a review')+'</h3><p class="muted small">Verified purchase: order '+esc(it.order_number||'')+' · '+esc(fd(it.ordered_at))+'</p>'+
    starInput('rv-r','Product rating',r&&r.rating,true)+starInput('rv-s','Shop service (delivery, communication)',r&&r.service_rating,false)+
    '<label>Comment <small>(optional, text only, up to 1000 characters)</small><textarea id="rv-c" maxlength="1000" rows="4" placeholder="What was it like?">'+esc(r&&r.comment||'')+'</textarea></label><p class="muted small" id="rv-cc"></p>'+
-   '<p class="muted small">Text and stars only: photos and image links are not allowed. Please follow the <a href="vendor-terms.html#reviews" target="_blank" rel="noopener">review guidelines</a>.'+(r?' You can edit this review until '+esc(fd(new Date(new Date(r.created_at).getTime()+30*864e5)))+'.':' You can edit it for 30 days.')+'</p>'+
+   '<p class="muted small">Text and stars only: photos and image links are not allowed. Please follow the <a href="vendor-terms.html#reviews" target="_blank" rel="noopener">review guidelines</a>.'+editUntilLine(r)+'</p>'+
    '<button class="btn" type="submit">'+(r?'Save changes':'Post review')+'</button><p id="rv-m" role="status"></p></form>';
   const f=W.querySelector('#rv-f'),c=f.querySelector('#rv-c'),cc=f.querySelector('#rv-cc'),m=f.querySelector('#rv-m');
   const cnt=()=>{cc.textContent=c.value.length+' / 1000'};c.oninput=cnt;cnt();
@@ -88,14 +91,14 @@ async function orderMount(el,o){
   if(!d.eligible&&!rv){el.innerHTML='';return}
   const replyH=rv&&rv.reply?'<div class="rv-reply"><b>Reply from the shop</b><p>'+esc(rv.reply.body)+'</p></div>':'';
   if(rv&&!rv.can_edit){
-   el.innerHTML='<section class="orv" id="review"><h3>Your review</h3>'+(msg?'<p class="notice ok">'+esc(msg)+'</p>':'')+'<p class="orev-done">Reviewed '+stars(rv.rating)+' <b>★'+rv.rating+'</b></p>'+(rv.comment?'<p class="rv-c">'+esc(rv.comment)+'</p>':'')+replyH+'</section>';
+   el.innerHTML='<section class="orv" id="review"><h3>Your review</h3>'+(msg?'<p class="notice ok">'+esc(msg)+'</p>':'')+'<p class="orev-done">Reviewed ★'+rv.rating+' '+stars(rv.rating)+'</p>'+(rv.comment?'<p class="rv-c">'+esc(rv.comment)+'</p>':'')+replyH+'</section>';
    return}
   el.innerHTML='<section class="orv" id="review">'+(msg?'<p class="notice ok">'+esc(msg)+'</p>':'')+'<form class="rv-form formcard" id="orv-f" novalidate><h3>'+(rv?'Edit your review':'Leave a review')+'</h3>'+
    (rv?'<p class="orev-done">Reviewed ★'+rv.rating+'</p>':'')+replyH+
    '<p class="muted small">This review is for order '+esc(d.order_number||order.order_number||'')+(d.vendor_name?' from '+esc(d.vendor_name):'')+' — the shop and your buying experience. One review per order. You can still review individual products on the product page.</p>'+
    starInput('orv-r','Your rating',rv&&rv.rating,true)+
    '<label>Comment <small>(optional)</small><textarea id="orv-c" maxlength="1000" rows="4" placeholder="How was the shop, the pickup or the service? Text only.">'+esc(rv&&rv.comment||'')+'</textarea></label>'+
-   '<p class="muted small">Text and stars only: photos and image links are not allowed. Please follow the <a href="vendor-terms.html#reviews" target="_blank" rel="noopener">review guidelines</a>.'+(rv?' You can edit this review until '+esc(fd(new Date(new Date(rv.created_at).getTime()+30*864e5)))+'.':' You can edit it for 30 days.')+'</p>'+
+   '<p class="muted small">Text and stars only: photos and image links are not allowed. Please follow the <a href="vendor-terms.html#reviews" target="_blank" rel="noopener">review guidelines</a>.'+editUntilLine(rv)+'</p>'+
    '<button class="btn" type="submit">'+(rv?'Save changes':'Post review')+'</button><p id="orv-m" role="status"></p></form></section>';
   const f=el.querySelector('#orv-f');
   f.onsubmit=async e=>{e.preventDefault();const rt=f.querySelector('[name=orv-r]:checked'),c=el.querySelector('#orv-c'),m=el.querySelector('#orv-m');
@@ -185,5 +188,5 @@ async function adminMount(el,sb){let view='reviews',rf='reported',lf='open';
 // ---------- featured ranking (see formula in reviews.sql) ----------
 async function featuredSort(sb,products){try{const r=await sb.rpc('public_product_scores',{p_ids:products.map(p=>p.id)});if(r.error||!Array.isArray(r.data))return products;
  const rank=new Map(r.data.map((x,i)=>[x.id,i]));return products.slice().sort((a,b)=>(rank.has(a.id)?rank.get(a.id):1e9)-(rank.has(b.id)?rank.get(b.id):1e9))}catch(e){return products}}
-CC.reviews={productMount,shopMount,orderMount,vendorMount,noticesMount,adminMount,featuredSort,stars,noImg};
+CC.reviews={productMount,shopMount,orderMount,vendorMount,noticesMount,adminMount,featuredSort,stars,noImg,editUntil};
 })();

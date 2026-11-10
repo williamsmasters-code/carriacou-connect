@@ -180,7 +180,7 @@ const planFrom=()=>{if(!opts)return;Object.keys(byV).forEach(v=>{const r=f.query
 const anyDel=()=>opts?Object.values(plan).some(p=>p.fulfilment==='delivery'):(f.ful&&f.ful.value==='delivery');
 const payWay=()=>{const r=f.querySelector('input[name="pay"]:checked');return r?r.value:'pickup'};
 const syncUI=()=>{planFrom();$('#adl').hidden=!anyDel();if(opts)Object.keys(byV).forEach(v=>{const a=f.querySelector('[data-area="'+v+'"]');if(a)a.hidden=!(plan[v].fulfilment==='delivery'&&opts[v].delivery_model==='zones'&&(opts[v].delivery_zones||[]).length>0)});
- if(CARD){const cb=$('#cardbox');if(cb)cb.hidden=payWay()!=='card';$('#cgo').textContent=payWay()==='card'?'Place order and pay by card':'Place order'}
+ if(CARD){const cb=$('#cardbox');if(cb){cb.hidden=payWay()!=='card';if(PG.bind)PG.bind(cb)}$('#cgo').textContent=payWay()==='card'?'Place order and pay by card':'Place order'}
  if(wal){const w=$('#wnote');w.hidden=!payWallet();if(payWallet()){const short=Number(wal.balance_cents)<totalCents;$('#wnt').innerHTML=short?' Your test balance is too low for this order. <a href="wallet.html">Add play money in your wallet</a>, then come back.':' Your order is placed and paid straight away from your test wallet. No real money is used.'}$('#cgo').textContent=payWallet()?'Place order and pay with test wallet':'Place order';const wo=$('#wtot');if(wo)wo.textContent=window.CC.cents(totalCents)}};
 let qseq=0;
 let lastQ=null;const renderSummary=q=>{lastQ=q;totalCents=Math.round(Number(q.grand_total_xcd)*100);
@@ -261,7 +261,7 @@ f.onsubmit=async e=>{e.preventDefault();say('');planFrom();
    <div class="ordnums">${os.map(o=>`<span class="ordnum"><b>${esc(o.order_number)}</b><span>${esc(o.vendor_name)} · ${xcd(o.total_xcd)}</span></span>`).join('')}</div>
    <form id="cfretry" class="formcard" novalidate><h3>Try another card</h3>${PG.formHtml()}<button class="btn" id="cfgo">Pay ${xcd(os.reduce((a,o)=>a+Number(o.total_xcd),0))} by card</button></form>
    <p>or <button type="button" class="btn ghost" id="cfpick">Pay on pickup instead</button></p></div>`;window.scrollTo(0,0);
-  const rf=$('#cfretry');rf.onsubmit=async e=>{e.preventDefault();const t2=PG.read(rf);if(t2.error){$('#cfmsg').textContent=t2.error;return}$('#cfgo').disabled=true;await cardFlow(t2,window.CC.uuid())};
+  const rf=$('#cfretry');if(PG.bind)PG.bind(rf);rf.onsubmit=async e=>{e.preventDefault();const t2=PG.read(rf);if(t2.error){$('#cfmsg').textContent=t2.error;return}$('#cfgo').disabled=true;await cardFlow(t2,window.CC.uuid())};
   $('#cfpick').onclick=async()=>{const r=await PG.toPickup(sb,bad.map(x=>x.order_id));if(r.error){$('#cfmsg').textContent=cleanErr(r.error.message);return}done('<p>Switched to <b>pay on pickup</b>. Pay the shop when you collect your order. No card payment was taken.</p>')}};
  if(tok){await cardFlow(tok,payKey);return}
  done('')};
